@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { Settings as SettingsIcon, Eye, EyeOff, Save, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
