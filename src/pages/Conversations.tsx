@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { Settings, Send, MessageCircle, Check, CheckCheck, User } from "lucide-react";
+import { Settings, Send, MessageCircle, Check, CheckCheck, User, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
