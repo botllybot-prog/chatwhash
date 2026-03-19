@@ -35,6 +35,12 @@ const SETTINGS_KEYS = [
   },
 ];
 
+interface AppSetting {
+  id: string;
+  key: string;
+  value: string;
+}
+
 const Settings = () => {
   const navigate = useNavigate();
   const [values, setValues] = useState<Record<string, string>>({});
@@ -48,10 +54,10 @@ const Settings = () => {
 
   const loadSettings = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("app_settings").select("key, value");
+    const { data, error } = await (supabase as any).from("app_settings").select("key, value");
     if (data) {
       const map: Record<string, string> = {};
-      for (const row of data) {
+      for (const row of data as AppSetting[]) {
         map[row.key] = row.value;
       }
       setValues(map);
@@ -67,19 +73,19 @@ const Settings = () => {
         const val = values[setting.key] || "";
         if (!val.trim()) continue;
 
-        const { data: existing } = await supabase
+        const { data: existing } = await (supabase as any)
           .from("app_settings")
           .select("id")
           .eq("key", setting.key)
           .maybeSingle();
 
         if (existing) {
-          await supabase
+          await (supabase as any)
             .from("app_settings")
             .update({ value: val.trim(), updated_at: new Date().toISOString() })
             .eq("key", setting.key);
         } else {
-          await supabase
+          await (supabase as any)
             .from("app_settings")
             .insert({ key: setting.key, value: val.trim() });
         }
