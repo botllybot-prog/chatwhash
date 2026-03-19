@@ -140,14 +140,15 @@ const Settings = () => {
                     <Label htmlFor={setting.key} className="text-sm font-medium">
                       {setting.label}
                     </Label>
-                    <div className="relative">
+                    <div className="relative flex gap-2">
                       <Input
                         id={setting.key}
                         type={setting.sensitive && !showValues[setting.key] ? "password" : "text"}
                         value={values[setting.key] || ""}
-                        onChange={(e) => setValues({ ...values, [setting.key]: e.target.value })}
+                        onChange={(e) => !setting.readOnly && setValues({ ...values, [setting.key]: e.target.value })}
                         placeholder={setting.description}
-                        className="pl-10"
+                        className={cn("pl-10", setting.readOnly && "bg-muted")}
+                        readOnly={setting.readOnly}
                       />
                       {setting.sensitive && (
                         <button
@@ -159,6 +160,18 @@ const Settings = () => {
                         >
                           {showValues[setting.key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
+                      )}
+                      {setting.readOnly && values[setting.key] && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(values[setting.key]);
+                            toast({ title: "تم النسخ" });
+                          }}
+                        >
+                          نسخ
+                        </Button>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">{setting.description}</p>
