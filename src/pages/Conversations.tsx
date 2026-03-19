@@ -120,9 +120,14 @@ const Conversations = () => {
             <MessageCircle className="h-5 w-5 text-primary" />
             <h2 className="font-bold text-foreground">المحادثات</h2>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
-            <Settings className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
+              <Settings className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => supabase.auth.signOut()}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
