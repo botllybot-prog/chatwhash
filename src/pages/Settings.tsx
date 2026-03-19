@@ -23,9 +23,10 @@ const SETTINGS_KEYS = [
   },
   {
     key: "WHATSAPP_VERIFY_TOKEN",
-    label: "Verify Token",
-    description: "رمز تحقق تختاره أنت لتأكيد الـ Webhook",
+    label: "Verify Token (تم إنشاؤه تلقائياً)",
+    description: "رمز التحقق - انسخه وأضفه في إعدادات Webhook بـ Meta",
     sensitive: false,
+    readOnly: true,
   },
   {
     key: "WHATSAPP_APP_SECRET",
