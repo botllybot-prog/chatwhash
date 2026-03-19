@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { Settings as SettingsIcon, Eye, EyeOff, Save, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -23,9 +24,10 @@ const SETTINGS_KEYS = [
   },
   {
     key: "WHATSAPP_VERIFY_TOKEN",
-    label: "Verify Token",
-    description: "رمز تحقق تختاره أنت لتأكيد الـ Webhook",
+    label: "Verify Token (تم إنشاؤه تلقائياً)",
+    description: "رمز التحقق - انسخه وأضفه في إعدادات Webhook بـ Meta",
     sensitive: false,
+    readOnly: true,
   },
   {
     key: "WHATSAPP_APP_SECRET",
@@ -34,6 +36,14 @@ const SETTINGS_KEYS = [
     sensitive: true,
   },
 ];
+
+interface SettingConfig {
+  key: string;
+  label: string;
+  description: string;
+  sensitive: boolean;
+  readOnly?: boolean;
+}
 
 interface AppSetting {
   id: string;
@@ -131,14 +141,15 @@ const Settings = () => {
                     <Label htmlFor={setting.key} className="text-sm font-medium">
                       {setting.label}
                     </Label>
-                    <div className="relative">
+                    <div className="relative flex gap-2">
                       <Input
                         id={setting.key}
                         type={setting.sensitive && !showValues[setting.key] ? "password" : "text"}
                         value={values[setting.key] || ""}
-                        onChange={(e) => setValues({ ...values, [setting.key]: e.target.value })}
+                        onChange={(e) => !setting.readOnly && setValues({ ...values, [setting.key]: e.target.value })}
                         placeholder={setting.description}
-                        className="pl-10"
+                        className={cn("pl-10", setting.readOnly && "bg-muted")}
+                        readOnly={setting.readOnly}
                       />
                       {setting.sensitive && (
                         <button
@@ -150,6 +161,18 @@ const Settings = () => {
                         >
                           {showValues[setting.key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
+                      )}
+                      {setting.readOnly && values[setting.key] && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(values[setting.key]);
+                            toast({ title: "تم النسخ" });
+                          }}
+                        >
+                          نسخ
+                        </Button>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">{setting.description}</p>
