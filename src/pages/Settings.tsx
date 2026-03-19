@@ -36,6 +36,14 @@ const SETTINGS_KEYS = [
   },
 ];
 
+interface SettingConfig {
+  key: string;
+  label: string;
+  description: string;
+  sensitive: boolean;
+  readOnly?: boolean;
+}
+
 interface AppSetting {
   id: string;
   key: string;
