@@ -335,14 +335,52 @@ const StationsMap = () => {
     <div className="h-screen w-full relative" dir="rtl">
       {/* Back button */}
       <div className="absolute top-4 right-4 z-[1000]">
-        <Button
-          variant="secondary"
-          className="shadow-lg gap-1"
-          onClick={() => window.history.back()}
-        >
+        <Button variant="secondary" className="shadow-lg gap-1" onClick={() => window.history.back()}>
           <ChevronLeft className="h-4 w-4" />
           رجوع
         </Button>
+      </div>
+
+      {/* Search bar */}
+      <div ref={searchRef} className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-sm">
+        <div className="relative">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="ابحث عن محطة بالاسم أو العنوان..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+            onFocus={() => setSearchOpen(true)}
+            className="pr-9 pl-9 bg-background shadow-lg border-border"
+          />
+          {searchQuery && (
+            <button onClick={() => { setSearchQuery(""); setSearchOpen(false); }} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {searchOpen && searchQuery.trim() && (
+          <Card className="mt-1 shadow-xl overflow-hidden">
+            <CardContent className="p-0">
+              {searchResults.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">لا توجد نتائج</p>
+              ) : (
+                searchResults.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleSearchSelect(s)}
+                    className="w-full text-right px-4 py-3 hover:bg-accent transition-colors border-b border-border last:border-0 flex items-start gap-2"
+                  >
+                    <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{s.name}</p>
+                      {s.address && <p className="text-xs text-muted-foreground">{s.address}</p>}
+                    </div>
+                  </button>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Station count badge */}
