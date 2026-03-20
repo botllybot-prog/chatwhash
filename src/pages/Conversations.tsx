@@ -22,7 +22,7 @@ const StatusIcon = ({ status }: { status: string }) => {
 
 const formatTime = (dateStr: string) => {
   const d = new Date(dateStr);
-  return d.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("ar-IQ", { calendar: "gregory", hour: "2-digit", minute: "2-digit" });
 };
 
 const Conversations = () => {

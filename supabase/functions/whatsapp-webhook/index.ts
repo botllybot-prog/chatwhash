@@ -386,7 +386,7 @@ async function handleBotLogic(
         for (let i = 0; i < 7; i++) {
           const d = new Date();
           d.setDate(d.getDate() + i);
-          const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { weekday: "long", month: "short", day: "numeric" });
+          const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", month: "short", day: "numeric" });
           days.push({ label });
         }
         let msg = `اختر اليوم الجديد للحجز #${bookingNum}:\n\n`;
@@ -491,7 +491,7 @@ async function handleBotLogic(
     const newDate = days[idx];
     await supabase.from("bookings").update({ booking_date: newDate }).eq("booking_number", bookingNum).eq("customer_phone", phone);
 
-    const dateLabel = new Date(newDate).toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const dateLabel = new Date(newDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const msg = `✅ تم تعديل الحجز #${bookingNum}\n📅 التاريخ الجديد: ${dateLabel}\n\nأرسل أي رسالة للمتابعة.`;
     const waId = await sendWhatsAppMessage(phone, msg, settings);
     await saveBotMessage(supabase, convId, msg, waId);
@@ -653,7 +653,7 @@ async function handleBotLogic(
       for (let i = 0; i < 7; i++) {
         const d = new Date();
         d.setDate(d.getDate() + i);
-        const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { weekday: "long", month: "short", day: "numeric" });
+        const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", month: "short", day: "numeric" });
         days.push({ date: d.toISOString().split("T")[0], label });
       }
 
@@ -741,7 +741,7 @@ async function handleBotLogic(
       .select("booking_number")
       .single();
 
-    const dateLabel = new Date(selectedDate).toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const dateLabel = new Date(selectedDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station?.name}\n🧽 الخدمة: ${service?.name}\n💰 السعر: ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
     const waId = await sendWhatsAppMessage(phone, msg, settings);
     await saveBotMessage(supabase, convId, msg, waId);
@@ -798,7 +798,7 @@ async function handleBotLogic(
       .select("booking_number")
       .single();
 
-    const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station.name}\n🧽 الخدمة: ${service?.name}\n💰 السعر: ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${selectedTime}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
     const waId = await sendWhatsAppMessage(phone, msg, settings);
     await saveBotMessage(supabase, convId, msg, waId);
