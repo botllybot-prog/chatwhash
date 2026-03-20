@@ -74,6 +74,16 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
 
   if (!session) return <Login />;
 
+  if (!role) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4" dir="rtl">
+        <p className="text-muted-foreground text-lg">حسابك غير مفعّل أو لم يتم تعيين دور لك.</p>
+        <p className="text-muted-foreground text-sm">تواصل مع الإدارة لتفعيل حسابك.</p>
+        <button onClick={() => supabase.auth.signOut()} className="text-primary underline text-sm">تسجيل الخروج</button>
+      </div>
+    );
+  }
+
   return <>{children}</>;
 };
 
