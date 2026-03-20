@@ -1,28 +1,43 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AuthGuard from "@/components/AuthGuard";
 import LandingPage from "./pages/LandingPage";
-import Index from "./pages/Index";
 import Conversations from "./pages/Conversations";
-import Settings from "./pages/Settings";
-import BotAdmin from "./pages/BotAdmin";
 import StationPortal from "./pages/StationPortal";
 import StationsMap from "./pages/StationsMap";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminStations from "./pages/admin/AdminStations";
+import AdminServices from "./pages/admin/AdminServices";
+import AdminBookings from "./pages/admin/AdminBookings";
+import AdminOwners from "./pages/admin/AdminOwners";
+import AdminEditRequests from "./pages/admin/AdminEditRequests";
+import AdminSubscriptions from "./pages/admin/AdminSubscriptions";
+import AdminReports from "./pages/admin/AdminReports";
+import AdminSettings from "./pages/admin/AdminSettings";
 
 const queryClient = new QueryClient();
 
 const ProtectedRoutes = () => (
   <AuthGuard>
     <Routes>
-      <Route path="/" element={<Index />} />
+      <Route path="/" element={<Navigate to="/app/admin/stations" replace />} />
       <Route path="/conversations" element={<Conversations />} />
-      <Route path="/settings" element={<Settings />} />
-      <Route path="/bot-admin" element={<BotAdmin />} />
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route index element={<Navigate to="stations" replace />} />
+        <Route path="stations" element={<AdminStations />} />
+        <Route path="services" element={<AdminServices />} />
+        <Route path="bookings" element={<AdminBookings />} />
+        <Route path="owners" element={<AdminOwners />} />
+        <Route path="edit-requests" element={<AdminEditRequests />} />
+        <Route path="subscriptions" element={<AdminSubscriptions />} />
+        <Route path="reports" element={<AdminReports />} />
+        <Route path="settings" element={<AdminSettings />} />
+      </Route>
       <Route path="/station-portal" element={<StationPortal />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
