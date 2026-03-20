@@ -642,19 +642,23 @@ async function handleBotLogic(
     if (station.scheduling_type === "instant") {
       const today = new Date().toISOString().split("T")[0];
       const nowTime = new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
+      const customerName = await getCustomerName(supabase, convId);
 
       const { data: booking } = await supabase
         .from("bookings")
         .insert({
           customer_phone: phone,
+          customer_name: customerName,
           station_id: stationId,
           service_id: service.id,
           booking_date: today,
           booking_time: nowTime,
           status: "confirmed",
         })
-        .select("booking_number")
+        .select("id, booking_number")
         .single();
+
+      if (booking) await notifyStationOwner(supabase, booking.id, stationId);
 
       const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station.name}\n🧽 الخدمة: ${service.name}\n💰 السعر: ${service.price} د.ع\n📅 التاريخ: اليوم\n⏰ الوقت: الآن\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
       const waId = await sendWhatsAppMessage(phone, msg, settings);
