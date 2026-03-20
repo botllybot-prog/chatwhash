@@ -326,7 +326,7 @@ const StationBookingsTab = ({ stationId }: { stationId: string }) => {
           {bookings.map((b) => (
             <TableRow key={b.id}>
               <TableCell>#{b.booking_number}</TableCell>
-              <TableCell>{b.customer_phone}</TableCell>
+              <TableCell>{b.customer_name || b.customer_phone}</TableCell>
               <TableCell>{(b as any).services?.name} - {(b as any).services?.price} د.ع</TableCell>
               <TableCell>{b.booking_date}</TableCell>
               <TableCell>{b.booking_time?.substring(0, 5) || "-"}</TableCell>
