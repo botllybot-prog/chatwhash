@@ -491,7 +491,7 @@ async function handleBotLogic(
     const newDate = days[idx];
     await supabase.from("bookings").update({ booking_date: newDate }).eq("booking_number", bookingNum).eq("customer_phone", phone);
 
-    const dateLabel = new Date(newDate).toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const dateLabel = new Date(newDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const msg = `✅ تم تعديل الحجز #${bookingNum}\n📅 التاريخ الجديد: ${dateLabel}\n\nأرسل أي رسالة للمتابعة.`;
     const waId = await sendWhatsAppMessage(phone, msg, settings);
     await saveBotMessage(supabase, convId, msg, waId);
