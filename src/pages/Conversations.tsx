@@ -3,9 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { Settings, Send, MessageCircle, Check, CheckCheck, User, LogOut } from "lucide-react";
+import { Settings, Send, MessageCircle, Check, CheckCheck, User, LogOut, Volume2, VolumeX } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useNotificationSound } from "@/hooks/use-notification-sound";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Conversation = Tables<"conversations">;
@@ -25,6 +26,8 @@ const formatTime = (dateStr: string) => {
 
 const Conversations = () => {
   const navigate = useNavigate();
+  const playNotification = useNotificationSound();
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -32,6 +35,7 @@ const Conversations = () => {
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const soundEnabledRef = useRef(true);
 
   const loadConversations = useCallback(async () => {
     const { data } = await supabase
@@ -40,6 +44,11 @@ const Conversations = () => {
       .order("last_message_at", { ascending: false });
     if (data) setConversations(data);
   }, []);
+
+  // Keep ref in sync with state for use in realtime callbacks
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
 
   // Load conversations + realtime
   useEffect(() => {
@@ -56,6 +65,27 @@ const Conversations = () => {
       supabase.removeChannel(channel);
     };
   }, [loadConversations]);
+
+  // Global listener for inbound message notifications
+  useEffect(() => {
+    const channel = supabase
+      .channel("inbound-notifications")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const msg = payload.new as Message;
+          if (msg.direction === "inbound" && soundEnabledRef.current) {
+            playNotification();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [playNotification]);
 
   // Load messages for selected conversation + realtime
   useEffect(() => {
@@ -141,6 +171,9 @@ const Conversations = () => {
             <h2 className="font-bold text-foreground">المحادثات</h2>
           </div>
           <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" onClick={() => setSoundEnabled(!soundEnabled)} title={soundEnabled ? "كتم الصوت" : "تفعيل الصوت"}>
+              {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
               <Settings className="h-4 w-4" />
             </Button>
