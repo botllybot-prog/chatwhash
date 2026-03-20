@@ -302,7 +302,7 @@ const BotAdmin = () => {
             <Bot className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-bold text-foreground">إدارة بوت الحجز</h1>
           </div>
-          <Button variant="ghost" onClick={() => navigate("/conversations")}>
+          <Button variant="ghost" onClick={() => navigate("/app/conversations")}>
             <ArrowRight className="h-4 w-4 ml-1" />المحادثات
           </Button>
         </div>
