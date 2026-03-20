@@ -49,14 +49,16 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (loading || !session || !role) return;
 
+    const path = location.pathname;
+
     if (role === "station_owner") {
       // Station owners can only access /station-portal
-      if (!location.pathname.startsWith("/station-portal")) {
+      if (!path.startsWith("/station-portal")) {
         navigate("/station-portal", { replace: true });
       }
     } else if (role === "admin") {
       // If admin is on station-portal, redirect to bot-admin
-      if (location.pathname.startsWith("/station-portal")) {
+      if (path.startsWith("/station-portal")) {
         navigate("/bot-admin", { replace: true });
       }
     }
