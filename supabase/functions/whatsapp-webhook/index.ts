@@ -190,11 +190,349 @@ async function handleBotLogic(
   // "0" resets to main menu from any step
   if (input === "0") {
     await updateSession(supabase, phone, { current_step: "idle", selected_station_id: null, selected_service_id: null, selected_date: null });
-    // Fall through to idle
     session.current_step = "idle";
   }
 
+  // Check for booking lookup command: "#1234" or "إلغاء" or "حجوزاتي"
+  if (input === "حجوزاتي" || input === "حجوزات") {
+    const { data: bookings } = await supabase
+      .from("bookings")
+      .select("booking_number, booking_date, booking_time, status, stations(name), services(name, price)")
+      .eq("customer_phone", phone)
+      .in("status", ["pending", "confirmed"])
+      .order("booking_date", { ascending: true })
+      .limit(10);
+
+    if (!bookings || bookings.length === 0) {
+      const msg = "لا توجد لديك حجوزات نشطة حالياً.\nأرسل أي رسالة لحجز جديد.";
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      return true;
+    }
+
+    let msg = "📋 حجوزاتك النشطة:\n\n";
+    bookings.forEach((b: any) => {
+      const statusLabel = b.status === "confirmed" ? "مؤكد ✅" : "قيد الانتظار ⏳";
+      msg += `🔢 #${b.booking_number} - ${statusLabel}\n`;
+      msg += `   🏪 ${b.stations?.name || "-"}\n`;
+      msg += `   🧽 ${b.services?.name || "-"} - ${b.services?.price || 0} ريال\n`;
+      msg += `   📅 ${b.booking_date}${b.booking_time ? " ⏰ " + b.booking_time.substring(0, 5) : ""}\n\n`;
+    });
+    msg += "لإلغاء حجز أرسل: إلغاء #رقم_الحجز\nمثال: إلغاء #" + bookings[0].booking_number;
+    msg += "\n\nلتعديل حجز أرسل: تعديل #رقم_الحجز\nمثال: تعديل #" + bookings[0].booking_number;
+
+    const waId = await sendWhatsAppMessage(phone, msg, settings);
+    await saveBotMessage(supabase, convId, msg, waId);
+    return true;
+  }
+
+  // Cancel booking: "إلغاء #1234" or "الغاء #1234"
+  const cancelMatch = input.match(/^(?:إلغاء|الغاء|cancel)\s*#?(\d+)$/i);
+  if (cancelMatch) {
+    const bookingNum = parseInt(cancelMatch[1]);
+    const { data: booking } = await supabase
+      .from("bookings")
+      .select("id, booking_number, status, stations(name), services(name)")
+      .eq("booking_number", bookingNum)
+      .eq("customer_phone", phone)
+      .maybeSingle();
+
+    if (!booking) {
+      const msg = `❌ لم يتم العثور على حجز برقم #${bookingNum} مرتبط برقمك.\nأرسل "حجوزاتي" لعرض حجوزاتك.`;
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      return true;
+    }
+
+    if (booking.status === "cancelled") {
+      const msg = `⚠️ الحجز #${bookingNum} ملغي مسبقاً.`;
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      return true;
+    }
+
+    if (booking.status === "completed") {
+      const msg = `⚠️ الحجز #${bookingNum} مكتمل ولا يمكن إلغاؤه.`;
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      return true;
+    }
+
+    // Store booking number in session for confirmation
+    await updateSession(supabase, phone, {
+      current_step: "confirm_cancel",
+      selected_station_id: null,
+      selected_service_id: null,
+      selected_date: String(bookingNum),
+    });
+
+    const msg = `⚠️ هل تريد إلغاء الحجز التالي؟\n\n🔢 رقم الحجز: #${bookingNum}\n🏪 المحطة: ${booking.stations?.name || "-"}\n🧽 الخدمة: ${booking.services?.name || "-"}\n\nأرسل "نعم" للتأكيد\nأرسل "لا" للتراجع`;
+    const waId = await sendWhatsAppMessage(phone, msg, settings);
+    await saveBotMessage(supabase, convId, msg, waId);
+    return true;
+  }
+
+  // Modify booking: "تعديل #1234"
+  const modifyMatch = input.match(/^(?:تعديل|modify)\s*#?(\d+)$/i);
+  if (modifyMatch) {
+    const bookingNum = parseInt(modifyMatch[1]);
+    const { data: booking } = await supabase
+      .from("bookings")
+      .select("id, booking_number, status, station_id, service_id, stations(name), services(name, price)")
+      .eq("booking_number", bookingNum)
+      .eq("customer_phone", phone)
+      .maybeSingle();
+
+    if (!booking) {
+      const msg = `❌ لم يتم العثور على حجز برقم #${bookingNum} مرتبط برقمك.\nأرسل "حجوزاتي" لعرض حجوزاتك.`;
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      return true;
+    }
+
+    if (booking.status === "cancelled" || booking.status === "completed") {
+      const msg = `⚠️ الحجز #${bookingNum} ${booking.status === "cancelled" ? "ملغي" : "مكتمل"} ولا يمكن تعديله.`;
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      return true;
+    }
+
+    // Ask what to modify
+    await updateSession(supabase, phone, {
+      current_step: "modify_choice",
+      selected_station_id: booking.station_id,
+      selected_service_id: booking.service_id,
+      selected_date: String(bookingNum),
+    });
+
+    const msg = `✏️ تعديل الحجز #${bookingNum}\n\n🏪 المحطة: ${booking.stations?.name}\n🧽 الخدمة: ${booking.services?.name}\n\nماذا تريد تعديل؟\n1. تغيير الخدمة\n2. تغيير الموعد\n3. إلغاء الحجز\n\nأرسل 0 للعودة`;
+    const waId = await sendWhatsAppMessage(phone, msg, settings);
+    await saveBotMessage(supabase, convId, msg, waId);
+    return true;
+  }
+
   const step = session.current_step;
+
+  // Handle cancel confirmation
+  if (step === "confirm_cancel") {
+    const bookingNum = parseInt(session.selected_date);
+    if (input === "نعم" || input === "اي" || input === "أي" || input === "yes") {
+      await supabase
+        .from("bookings")
+        .update({ status: "cancelled" })
+        .eq("booking_number", bookingNum)
+        .eq("customer_phone", phone);
+
+      const msg = `✅ تم إلغاء الحجز #${bookingNum} بنجاح.\nأرسل أي رسالة لحجز جديد.`;
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      await updateSession(supabase, phone, { current_step: "idle", selected_station_id: null, selected_service_id: null, selected_date: null });
+      return true;
+    } else {
+      const msg = "تم التراجع عن الإلغاء. ✅\nأرسل أي رسالة للمتابعة.";
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      await updateSession(supabase, phone, { current_step: "idle", selected_station_id: null, selected_service_id: null, selected_date: null });
+      return true;
+    }
+  }
+
+  // Handle modify choice
+  if (step === "modify_choice") {
+    const bookingNum = parseInt(session.selected_date);
+    const stationId = session.selected_station_id;
+
+    if (input === "1") {
+      // Change service
+      const { data: services } = await supabase
+        .from("services")
+        .select("id, name, price")
+        .eq("is_active", true)
+        .or(`station_id.eq.${stationId},station_id.is.null`)
+        .order("sort_order");
+
+      if (!services || services.length === 0) {
+        const msg = "عذراً، لا توجد خدمات متاحة حالياً.\nأرسل 0 للعودة";
+        const waId = await sendWhatsAppMessage(phone, msg, settings);
+        await saveBotMessage(supabase, convId, msg, waId);
+        return true;
+      }
+
+      let msg = `اختر الخدمة الجديدة للحجز #${bookingNum}:\n\n`;
+      services.forEach((s: any, i: number) => {
+        msg += `${i + 1}. ${s.name} - ${s.price} ريال\n`;
+      });
+      msg += "\nأرسل 0 للعودة";
+
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      await updateSession(supabase, phone, { current_step: "modify_service" });
+      return true;
+    }
+
+    if (input === "2") {
+      // Change time - get station scheduling type
+      const { data: station } = await supabase.from("stations").select("*").eq("id", stationId).single();
+
+      if (station.scheduling_type === "instant") {
+        const msg = "هذه المحطة تعمل بنظام الحجز الفوري ولا يمكن تغيير الموعد.\nأرسل 0 للعودة";
+        const waId = await sendWhatsAppMessage(phone, msg, settings);
+        await saveBotMessage(supabase, convId, msg, waId);
+        return true;
+      }
+
+      if (station.scheduling_type === "daily") {
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date();
+          d.setDate(d.getDate() + i);
+          const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-SA", { weekday: "long", month: "short", day: "numeric" });
+          days.push({ label });
+        }
+        let msg = `اختر اليوم الجديد للحجز #${bookingNum}:\n\n`;
+        days.forEach((d, i) => { msg += `${i + 1}. ${d.label}\n`; });
+        msg += "\nأرسل 0 للعودة";
+
+        const waId = await sendWhatsAppMessage(phone, msg, settings);
+        await saveBotMessage(supabase, convId, msg, waId);
+        await updateSession(supabase, phone, { current_step: "modify_day" });
+        return true;
+      }
+
+      // Slots
+      const today = new Date().toISOString().split("T")[0];
+      const allSlots = generateTimeSlots(station.working_hours_start, station.working_hours_end, station.slot_duration_minutes);
+      const { data: bookedToday } = await supabase
+        .from("bookings").select("booking_time").eq("station_id", stationId).eq("booking_date", today).in("status", ["pending", "confirmed"]);
+      const bookedTimes = new Set((bookedToday || []).map((b: any) => b.booking_time?.substring(0, 5)));
+      const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+      const available = allSlots.filter((s) => {
+        const [h, m] = s.split(":").map(Number);
+        return h * 60 + m > nowMinutes && !bookedTimes.has(s);
+      });
+
+      if (available.length === 0) {
+        const msg = "عذراً، لا توجد مواعيد متاحة اليوم.\nأرسل 0 للعودة";
+        const waId = await sendWhatsAppMessage(phone, msg, settings);
+        await saveBotMessage(supabase, convId, msg, waId);
+        return true;
+      }
+
+      let msg = `اختر الموعد الجديد للحجز #${bookingNum}:\n\n`;
+      available.forEach((s, i) => { msg += `${i + 1}. ${s}\n`; });
+      msg += "\nأرسل 0 للعودة";
+
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      await updateSession(supabase, phone, { current_step: "modify_time" });
+      return true;
+    }
+
+    if (input === "3") {
+      // Cancel from modify menu
+      await updateSession(supabase, phone, { current_step: "confirm_cancel" });
+      const msg = `⚠️ هل تريد إلغاء الحجز #${bookingNum}؟\n\nأرسل "نعم" للتأكيد\nأرسل "لا" للتراجع`;
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      return true;
+    }
+
+    const msg = "❌ اختيار غير صحيح. أرسل 1 أو 2 أو 3\nأرسل 0 للعودة";
+    const waId = await sendWhatsAppMessage(phone, msg, settings);
+    await saveBotMessage(supabase, convId, msg, waId);
+    return true;
+  }
+
+  // Handle modify service selection
+  if (step === "modify_service") {
+    const bookingNum = parseInt(session.selected_date);
+    const stationId = session.selected_station_id;
+
+    const { data: services } = await supabase
+      .from("services").select("id, name, price").eq("is_active", true)
+      .or(`station_id.eq.${stationId},station_id.is.null`).order("sort_order");
+
+    const idx = parseInt(input) - 1;
+    if (isNaN(idx) || !services || idx < 0 || idx >= services.length) {
+      const msg = `❌ اختيار غير صحيح. أرسل رقم من 1 إلى ${services?.length || 0}\nأرسل 0 للعودة`;
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      return true;
+    }
+
+    const newService = services[idx];
+    await supabase.from("bookings").update({ service_id: newService.id }).eq("booking_number", bookingNum).eq("customer_phone", phone);
+
+    const msg = `✅ تم تعديل الحجز #${bookingNum}\n🧽 الخدمة الجديدة: ${newService.name} - ${newService.price} ريال\n\nأرسل أي رسالة للمتابعة.`;
+    const waId = await sendWhatsAppMessage(phone, msg, settings);
+    await saveBotMessage(supabase, convId, msg, waId);
+    await updateSession(supabase, phone, { current_step: "idle", selected_station_id: null, selected_service_id: null, selected_date: null });
+    return true;
+  }
+
+  // Handle modify day selection
+  if (step === "modify_day") {
+    const bookingNum = parseInt(session.selected_date);
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      days.push(d.toISOString().split("T")[0]);
+    }
+
+    const idx = parseInt(input) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= days.length) {
+      const msg = `❌ اختيار غير صحيح. أرسل رقم من 1 إلى ${days.length}\nأرسل 0 للعودة`;
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      return true;
+    }
+
+    const newDate = days[idx];
+    await supabase.from("bookings").update({ booking_date: newDate }).eq("booking_number", bookingNum).eq("customer_phone", phone);
+
+    const dateLabel = new Date(newDate).toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const msg = `✅ تم تعديل الحجز #${bookingNum}\n📅 التاريخ الجديد: ${dateLabel}\n\nأرسل أي رسالة للمتابعة.`;
+    const waId = await sendWhatsAppMessage(phone, msg, settings);
+    await saveBotMessage(supabase, convId, msg, waId);
+    await updateSession(supabase, phone, { current_step: "idle", selected_station_id: null, selected_service_id: null, selected_date: null });
+    return true;
+  }
+
+  // Handle modify time selection
+  if (step === "modify_time") {
+    const bookingNum = parseInt(session.selected_date);
+    const stationId = session.selected_station_id;
+
+    const { data: station } = await supabase.from("stations").select("*").eq("id", stationId).single();
+    const today = new Date().toISOString().split("T")[0];
+    const allSlots = generateTimeSlots(station.working_hours_start, station.working_hours_end, station.slot_duration_minutes);
+    const { data: bookedToday } = await supabase
+      .from("bookings").select("booking_time").eq("station_id", stationId).eq("booking_date", today).in("status", ["pending", "confirmed"]);
+    const bookedTimes = new Set((bookedToday || []).map((b: any) => b.booking_time?.substring(0, 5)));
+    const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+    const available = allSlots.filter((s) => {
+      const [h, m] = s.split(":").map(Number);
+      return h * 60 + m > nowMinutes && !bookedTimes.has(s);
+    });
+
+    const idx = parseInt(input) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= available.length) {
+      const msg = `❌ اختيار غير صحيح. أرسل رقم من 1 إلى ${available.length}\nأرسل 0 للعودة`;
+      const waId = await sendWhatsAppMessage(phone, msg, settings);
+      await saveBotMessage(supabase, convId, msg, waId);
+      return true;
+    }
+
+    const newTime = available[idx];
+    await supabase.from("bookings").update({ booking_time: newTime, booking_date: today }).eq("booking_number", bookingNum).eq("customer_phone", phone);
+
+    const msg = `✅ تم تعديل الحجز #${bookingNum}\n⏰ الموعد الجديد: اليوم ${newTime}\n\nأرسل أي رسالة للمتابعة.`;
+    const waId = await sendWhatsAppMessage(phone, msg, settings);
+    await saveBotMessage(supabase, convId, msg, waId);
+    await updateSession(supabase, phone, { current_step: "idle", selected_station_id: null, selected_service_id: null, selected_date: null });
+    return true;
+  }
 
   if (step === "idle") {
     // Show stations
@@ -216,7 +554,7 @@ async function handleBotLogic(
     stations.forEach((s: any, i: number) => {
       msg += `${i + 1}. ${s.name}${s.address ? ` - ${s.address}` : ""}\n`;
     });
-    msg += "\nأرسل رقم المحطة للاختيار\nأرسل 0 للعودة للقائمة الرئيسية";
+    msg += "\nأرسل رقم المحطة للاختيار\nأرسل \"حجوزاتي\" لعرض حجوزاتك\nأرسل \"إلغاء #رقم\" لإلغاء حجز\nأرسل \"تعديل #رقم\" لتعديل حجز";
 
     const waId = await sendWhatsAppMessage(phone, msg, settings);
     await saveBotMessage(supabase, convId, msg, waId);
@@ -240,7 +578,6 @@ async function handleBotLogic(
     }
 
     const station = stations[idx];
-    // Get services for this station (station-specific + global where station_id is null)
     const { data: services } = await supabase
       .from("services")
       .select("id, name, price")
@@ -285,11 +622,9 @@ async function handleBotLogic(
     }
 
     const service = services[idx];
-    // Get station scheduling type
     const { data: station } = await supabase.from("stations").select("*").eq("id", stationId).single();
 
     if (station.scheduling_type === "instant") {
-      // Instant booking - confirm now
       const today = new Date().toISOString().split("T")[0];
       const nowTime = new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
 
@@ -314,7 +649,6 @@ async function handleBotLogic(
     }
 
     if (station.scheduling_type === "daily") {
-      // Show day options
       const days = [];
       for (let i = 0; i < 7; i++) {
         const d = new Date();
@@ -335,11 +669,10 @@ async function handleBotLogic(
       return true;
     }
 
-    // Default: slots - show available time slots
+    // Default: slots
     const today = new Date().toISOString().split("T")[0];
     const allSlots = generateTimeSlots(station.working_hours_start, station.working_hours_end, station.slot_duration_minutes);
 
-    // Get booked slots for today
     const { data: bookedToday } = await supabase
       .from("bookings")
       .select("booking_time")
