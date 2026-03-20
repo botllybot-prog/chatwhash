@@ -386,7 +386,7 @@ async function handleBotLogic(
         for (let i = 0; i < 7; i++) {
           const d = new Date();
           d.setDate(d.getDate() + i);
-          const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { weekday: "long", month: "short", day: "numeric" });
+          const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", month: "short", day: "numeric" });
           days.push({ label });
         }
         let msg = `اختر اليوم الجديد للحجز #${bookingNum}:\n\n`;
