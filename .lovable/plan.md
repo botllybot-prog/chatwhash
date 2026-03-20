@@ -1,120 +1,106 @@
 
 
-# فحص شامل + استراتيجية الربح
+# خطة تحويل التبويبات إلى صفحات مستقلة مع إعدادات بوت متقدمة
 
-## أولاً: التدقيق التقني — المشاكل والإصلاحات المطلوبة
+## الهيكل الجديد
 
-### 1. مشاكل أمنية (حرجة)
-- **RLS على `bookings` و `services` و `stations` مفتوح بالكامل** — أي مستخدم مسجل يقرأ/يعدل كل شيء. صاحب المحطة يجب أن يرى حجوزات محطته فقط، والأدمن يرى الكل. يجب تشديد سياسات RLS.
-- **RLS على `app_settings`** مفتوح للقراءة والكتابة لأي مستخدم مسجل — يجب تقييد الكتابة للأدمن فقط.
-- **حذف `station_owners` من الفرونت بدون حذف المستخدم من `auth.users` و `user_roles`** — حساب المالك يبقى فعالاً بدون ربط بمحطة، ما يسبب خطأ في `/station-portal`.
-
-### 2. مشاكل منطقية
-- **`AuthGuard` يعطي دور `admin` كافتراضي** (سطر 41: `data?.role || "admin"`) — أي مستخدم بدون دور يحصل على صلاحيات أدمن! يجب أن يكون الافتراضي رفض الوصول.
-- **لا يوجد فحص في `EditRequestsTab` للأدمن** — صاحب المحطة يستطيع نظرياً الوصول لهذا المكون لو تم تحميله مباشرة.
-- **`notify-station-owner` بدون JWT ولا فحص مصدر** — أي شخص يستطيع استدعاء هذه الدالة وإنشاء إشعارات مزيفة.
-
-### 3. مشاكل وظيفية
-- **عند حذف مالك من `OwnersTab`** يُحذف السجل فقط من `station_owners` بدون حذف الدور أو تعطيل الحساب — يجب إنشاء Edge Function للحذف الكامل.
-- **لا يوجد جدول `subscriptions` أو `payments`** — لا يمكن تتبع الاشتراكات أو المدفوعات.
-- **لا توجد صفحة landing page عامة** — المستخدمون يصلون مباشرة لصفحة تسجيل الدخول.
-
----
-
-## ثانياً: خطة الإصلاح التقني
-
-### Step 1: إصلاح RLS (Migration جديد)
-- تشديد `bookings`: المالك يقرأ حجوزات محطته فقط، الأدمن يقرأ/يعدل الكل
-- تشديد `services`: مماثل
-- تشديد `stations`: مماثل
-- تقييد `app_settings`: القراءة للمسجلين، الكتابة للأدمن فقط
-
-### Step 2: إصلاح AuthGuard
-- تغيير الافتراضي من `"admin"` إلى `null` — إذا لم يوجد دور يُعرض خطأ "حسابك غير مفعّل"
-
-### Step 3: إصلاح حذف المالك
-- إنشاء Edge Function `delete-station-owner` تحذف من `auth.users` + `user_roles` + `station_owners`
-
-### Step 4: تأمين `notify-station-owner`
-- إضافة فحص أن المستدعي هو `service_role` أو التحقق من header خاص
-
----
-
-## ثالثاً: رأيي التجاري — كيف يكون المشروع مربحاً (Passive Income)
-
-### النموذج الأفضل: اشتراك شهري لأصحاب المحطات + نسبة على كل حجز
+بدلاً من صفحة واحدة `BotAdmin.tsx` بتبويبات، سيكون لكل قسم صفحة مستقلة مع **Sidebar** للتنقل بين الصفحات.
 
 ```text
-مصادر الدخل:
-┌─────────────────────────────────────────────┐
-│ 1. اشتراك شهري (أساسي)                     │
-│    - 50,000 - 150,000 د.ع / شهر            │
-│    - يشمل: لوحة تحكم + حجوزات + إشعارات   │
-│    - خطط: أساسي / متقدم / مميز              │
-│                                             │
-│ 2. نسبة على كل حجز (إضافي)                 │
-│    - 3-5% من سعر الخدمة                     │
-│    - أو مبلغ ثابت 500-1000 د.ع / حجز       │
-│    - يُخصم تلقائياً من إيرادات المحطة        │
-│                                             │
-│ 3. إعلانات وظهور مميز (مستقبلي)             │
-│    - المحطة تظهر أولاً في الخريطة والبحث    │
-│    - 25,000 - 50,000 د.ع / شهر إضافي       │
-└─────────────────────────────────────────────┘
+/app/admin/stations       → المحطات
+/app/admin/services       → الخدمات
+/app/admin/bookings       → الحجوزات
+/app/admin/owners         → الحسابات
+/app/admin/edit-requests  → طلبات التعديل
+/app/admin/subscriptions  → الاشتراكات
+/app/admin/reports        → التقارير
+/app/admin/settings       → الإعدادات (بوت + واتساب مدمجة)
 ```
 
-### لماذا هذا النموذج؟
+## التفاصيل التقنية
 
-| النموذج | المميزات | العيوب |
-|---------|---------|--------|
-| اشتراك فقط | دخل ثابت متوقع | لا يتناسب مع حجم المحطة |
-| نسبة فقط | عادل - يدفع حسب الاستخدام | دخل غير مستقر، صعب التتبع |
-| **اشتراك + نسبة** | **دخل ثابت + متغير، عادل** | **يحتاج نظام فوترة** |
-| من السيارات | أعداد كبيرة | صعب التحصيل، يُنفّر العملاء |
+### 1. إنشاء Layout مع Sidebar
+- إنشاء `src/components/admin/AdminLayout.tsx` يحتوي على `SidebarProvider` + `Sidebar` مع روابط لكل صفحة
+- تصميم Sidebar بألوان Ocean المستخدمة، مع أيقونات لكل قسم
+- دعم الطي (collapse) على الموبايل
 
-### لماذا لا نأخذ من أصحاب السيارات؟
-- العميل النهائي يدفع للمحطة مباشرة
-- أخذ رسوم من العميل يجعله يفضل الذهاب مباشرة بدون التطبيق
-- **المحطة هي المستفيد الأكبر** (تنظيم، حجوزات، تقليل وقت الانتظار)
+### 2. تحويل كل تبويب لصفحة مستقلة
+نقل المكونات الموجودة داخل `BotAdmin.tsx` (ServicesTab, BookingsTab, BotSettingsTab) إلى ملفات مستقلة في `src/pages/admin/`:
+- `src/pages/admin/AdminStations.tsx` → يستخدم StationsTab الموجود
+- `src/pages/admin/AdminServices.tsx` → نقل ServicesTab
+- `src/pages/admin/AdminBookings.tsx` → نقل BookingsTab  
+- `src/pages/admin/AdminOwners.tsx` → يستخدم OwnersTab الموجود
+- `src/pages/admin/AdminEditRequests.tsx` → يستخدم EditRequestsTab الموجود
+- `src/pages/admin/AdminSubscriptions.tsx` → يستخدم SubscriptionsTab الموجود
+- `src/pages/admin/AdminReports.tsx` → يستخدم ReportsTab الموجود
+- `src/pages/admin/AdminSettings.tsx` → إعدادات متقدمة (جديد)
 
----
+### 3. إعدادات البوت المتقدمة (الصفحة الجديدة)
+دمج إعدادات واتساب (من Settings.tsx الحالي) + إعدادات البوت في صفحة واحدة بأقسام:
 
-## رابعاً: الميزات المطلوبة للربح (خطة التنفيذ)
+**قسم 1: إعدادات البوت الأساسية**
+- تفعيل/تعطيل البوت
+- رسالة الترحيب (textarea مع متغيرات)
+- رسالة عند عدم الفهم
+- رسالة تأكيد الحجز (مع متغيرات: {station}, {service}, {time}, {date}, {booking_number})
+- رسالة إلغاء الحجز
 
-### Phase 1: نظام الاشتراكات
-- جدول `subscriptions` (station_id, plan, status, start_date, end_date, amount)
-- جدول `payments` (subscription_id, amount, payment_date, method, status)
-- عند انتهاء الاشتراك: تعطيل المحطة تلقائياً من الخريطة والبوت
-- لوحة إدارة الاشتراكات في `/bot-admin`
+**قسم 2: إعدادات التذكير**
+- تفعيل/تعطيل التذكير
+- وقت التذكير قبل الموعد (1 ساعة / 2 ساعة / يوم)
+- رسالة التذكير (textarea مع متغيرات)
 
-### Phase 2: نظام النسبة على الحجز
-- عمود `commission_rate` في جدول `stations` (نسبة أو مبلغ ثابت)
-- جدول `commissions` لتتبع العمولات لكل حجز
-- تقرير شهري تلقائي للعمولات
+**قسم 3: إعدادات الردود التلقائية**
+- رسالة خارج ساعات العمل
+- رسالة عند امتلاء المواعيد
+- رسالة بعد اكتمال الحجز (شكر)
+- تفعيل/تعطيل كل رسالة
 
-### Phase 3: صفحة هبوط عامة
-- صفحة `/` عامة تعرض المحطات والخدمات وطريقة الحجز
-- نموذج تسجيل محطة جديدة (يُراجع من الأدمن)
-- تحسين SEO
+**قسم 4: ربط واتساب (من Settings.tsx)**
+- Access Token, Phone Number ID, Verify Token, App Secret
+- رابط Webhook
 
-### Phase 4: تطبيق موبايل للعملاء (مستقبلي)
-- PWA أو تطبيق React Native
-- حجز مباشر من التطبيق بدلاً من واتساب فقط
+### 4. تحديث الراوتر
+```text
+/app/admin/*  → AdminLayout wrapping nested Routes
+```
+- تحديث AuthGuard لتوجيه الأدمن إلى `/app/admin/stations` بدل `/app/bot-admin`
+- تحديث Login.tsx للتوجيه الصحيح
+- حذف صفحة Settings.tsx القديمة (مدمجة في إعدادات الأدمن)
 
----
+### 5. إضافة app_settings keys جديدة
+مفاتيح إعدادات جديدة في `app_settings`:
+- `BOT_UNKNOWN_MESSAGE` — رسالة عدم الفهم
+- `BOT_CONFIRMATION_MESSAGE` — رسالة تأكيد الحجز
+- `BOT_CANCELLATION_MESSAGE` — رسالة الإلغاء
+- `BOT_AFTER_HOURS_MESSAGE` — رسالة خارج العمل
+- `BOT_FULLY_BOOKED_MESSAGE` — رسالة امتلاء المواعيد
+- `BOT_THANK_YOU_MESSAGE` — رسالة الشكر
+- `REMINDER_HOURS_BEFORE` — عدد الساعات قبل التذكير
+- `BOT_AFTER_HOURS_ENABLED` — تفعيل رسالة خارج العمل
+- `BOT_THANK_YOU_ENABLED` — تفعيل رسالة الشكر
 
 ## الملفات المتأثرة
 
-**إصلاحات أمنية:**
-- `supabase/migrations/` — migration جديد لتشديد RLS
-- `src/components/AuthGuard.tsx` — إصلاح الدور الافتراضي
-- `supabase/functions/delete-station-owner/index.ts` — جديد
-- `supabase/functions/notify-station-owner/index.ts` — تأمين
-- `src/components/bot-admin/OwnersTab.tsx` — استخدام Edge Function للحذف
+**جديدة:**
+- `src/components/admin/AdminLayout.tsx`
+- `src/components/admin/AdminSidebar.tsx`
+- `src/pages/admin/AdminStations.tsx`
+- `src/pages/admin/AdminServices.tsx`
+- `src/pages/admin/AdminBookings.tsx`
+- `src/pages/admin/AdminOwners.tsx`
+- `src/pages/admin/AdminEditRequests.tsx`
+- `src/pages/admin/AdminSubscriptions.tsx`
+- `src/pages/admin/AdminReports.tsx`
+- `src/pages/admin/AdminSettings.tsx`
 
-**نظام الاشتراكات (Phase 1):**
-- `supabase/migrations/` — جداول subscriptions + payments
-- `src/components/bot-admin/SubscriptionsTab.tsx` — جديد
-- `src/pages/BotAdmin.tsx` — إضافة تبويب الاشتراكات
-- `supabase/functions/check-subscriptions/index.ts` — تعطيل المحطات المنتهية
+**معدّلة:**
+- `src/App.tsx` — تحديث الراوتر
+- `src/components/AuthGuard.tsx` — تحديث التوجيه
+- `src/pages/Login.tsx` — تحديث التوجيه
+- `src/pages/Conversations.tsx` — تحديث رابط الإعدادات
+
+**تُحذف:**
+- `src/pages/BotAdmin.tsx` (استُبدلت بصفحات مستقلة)
+- `src/pages/Settings.tsx` (دُمجت في AdminSettings)
 
