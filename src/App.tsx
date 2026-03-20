@@ -14,6 +14,19 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const ProtectedRoutes = () => (
+  <AuthGuard>
+    <Routes>
+      <Route path="/" element={<Index />} />
+      <Route path="/conversations" element={<Conversations />} />
+      <Route path="/settings" element={<Settings />} />
+      <Route path="/bot-admin" element={<BotAdmin />} />
+      <Route path="/station-portal" element={<StationPortal />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  </AuthGuard>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -21,12 +34,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          {/* Public route - no auth */}
           <Route path="/map" element={<StationsMap />} />
-
-          {/* Protected routes */}
-          <Route element={<AuthGuard><Routes><Route path="/" element={<Index />} /><Route path="/conversations" element={<Conversations />} /><Route path="/settings" element={<Settings />} /><Route path="/bot-admin" element={<BotAdmin />} /><Route path="/station-portal" element={<StationPortal />} /><Route path="*" element={<NotFound />} /></Routes></AuthGuard>}>
-          </Route>
+          <Route path="/*" element={<ProtectedRoutes />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
