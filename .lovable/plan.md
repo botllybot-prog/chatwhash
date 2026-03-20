@@ -1,81 +1,70 @@
 
 
-# خطة إصلاح خلل الإرسال والاستقبال المتكرر
+# Store and Display WhatsApp Media Message Types
 
-## المشاكل المكتشفة
+## Current State
+- The `messages` table already has a `message_type` column (defaults to `'text'`).
+- The webhook already stores `msg.type` (text, image, audio, document, etc.) in `message_type`.
+- However, `content` only extracts `msg.text?.body` — for non-text messages, it falls back to the type name string, losing the media URL/caption.
+- The UI only renders `msg.content` as plain text, with no visual distinction for media types.
 
-بعد فحص الكود، هناك عدة مشاكل تسبب الفشل عند الإرسال/الاستقبال المتكرر:
+## No DB changes needed — `message_type` column already exists.
 
-### 1. Race Condition في إنشاء المحادثات (webhook)
-عند وصول رسالتين متزامنتين من نفس الرقم، كلتاهما تجد أنه لا توجد محادثة مفتوحة فتحاول كل منهما إنشاء محادثة جديدة، مما يسبب تكرار أو أخطاء.
+## Changes
 
-### 2. عدم وجود حماية من تكرار الرسائل (Duplicate Messages)
-Meta ترسل نفس الـ webhook أكثر من مرة أحياناً. لا يوجد فحص لتجنب إدخال رسالة بنفس `whatsapp_message_id` مرتين.
+### 1. Update webhook to extract media metadata
+**File**: `supabase/functions/whatsapp-webhook/index.ts`
 
-### 3. عدم معالجة أخطاء DB بشكل صحيح
-الـ webhook يبتلع الأخطاء بصمت (`catch` فارغ)، فلا نعرف السبب الحقيقي للفشل.
+For each message type, extract the relevant content:
+- **text**: `msg.text.body` (already works)
+- **image**: Store caption (`msg.image.caption`) as content, and media ID (`msg.image.id`) — we'll store a JSON string with `{media_id, caption, mime_type}` in `content` for media types
+- **audio**: Store `{media_id, mime_type}` 
+- **document**: Store `{media_id, filename, caption, mime_type}`
+- **video**: Store `{media_id, caption, mime_type}`
+- **sticker**: Store `{media_id, mime_type}`
 
-### 4. الـ Realtime Channels في الواجهة
-عند تغيير المحادثة بسرعة، قد تتراكم القنوات القديمة ولا يتم تنظيفها بشكل صحيح.
+Content format for non-text: JSON string like `{"media_id":"...","caption":"...","mime_type":"image/jpeg"}`
 
-### 5. عدم وجود unique constraint على whatsapp_message_id
-إدخال نفس الرسالة مرتين يمر بدون خطأ مما يسبب تكرار الرسائل.
+### 2. Add a media download helper in the webhook
+Download media from WhatsApp API using the media ID and access token, then store it — or simply store the media ID for now and let the frontend display a placeholder with the type indicator.
 
----
+**Simpler approach**: Store descriptive content + `message_type`, and show appropriate UI indicators. Media download can be added later.
 
-## خطوات الإصلاح
+For non-text messages, content will be:
+- image: caption or "📷 صورة"
+- audio: "🎵 رسالة صوتية"  
+- video: caption or "🎥 فيديو"
+- document: filename or "📄 مستند"
+- sticker: "😊 ملصق"
 
-### الخطوة 1: Migration لإضافة unique constraint
-- إضافة `UNIQUE` constraint على `messages.whatsapp_message_id` (مع استثناء NULL)
-- إضافة unique composite index على `conversations(customer_phone, status)` لمنع محادثات مكررة
+### 3. Update the chat UI to show message type indicators
+**File**: `src/pages/Conversations.tsx`
 
-### الخطوة 2: إعادة كتابة whatsapp-webhook
-- استخدام `ON CONFLICT` (upsert) عند إنشاء المحادثة لتجنب race condition
-- استخدام `ON CONFLICT DO NOTHING` عند إدراج الرسالة لتجنب التكرار
-- إضافة logging تفصيلي لكل خطوة
-- إرجاع 200 دائماً لـ Meta (حتى مع أخطاء داخلية) لمنع إعادة المحاولات
+Add a `MessageContent` component that renders differently based on `message_type`:
+- **text**: Current plain text rendering
+- **image**: Show an image icon + caption text
+- **audio**: Show audio icon + "رسالة صوتية"
+- **document**: Show document icon + filename
+- **video**: Show video icon + caption
+- **sticker**: Show sticker indicator
 
-### الخطوة 3: إصلاح whatsapp-send
-- إضافة try-catch أفضل مع تفاصيل الخطأ
-- التحقق من وجود المحادثة قبل الإرسال
+Also show the message type in the conversation list preview.
 
-### الخطوة 4: إصلاح Realtime في الواجهة (Conversations.tsx)
-- استخدام unique channel names مع timestamp لتجنب تضارب القنوات
-- إضافة cleanup أفضل للقنوات عند تغيير المحادثة
+## Technical Details
 
----
-
-## التفاصيل التقنية
-
-**Migration SQL:**
-```sql
--- Unique partial index on whatsapp_message_id (excluding nulls)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_wa_id_unique 
-ON public.messages(whatsapp_message_id) WHERE whatsapp_message_id IS NOT NULL;
-
--- Unique composite to prevent duplicate open conversations
-CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_phone_status_unique 
-ON public.conversations(customer_phone, status) WHERE status = 'open';
-```
-
-**Webhook upsert pattern:**
+**Webhook content extraction:**
 ```typescript
-// Find or create conversation atomically
-const { data: conv } = await supabase
-  .from("conversations")
-  .upsert(
-    { customer_phone: phone, customer_name: contactName, status: "open", last_message_at: now },
-    { onConflict: "customer_phone,status", ignoreDuplicates: false }
-  )
-  .select("id")
-  .single();
-
-// Insert message, skip if duplicate
-const { error: msgError } = await supabase
-  .from("messages")
-  .upsert(
-    { conversation_id: conv.id, direction: "inbound", content, ... , whatsapp_message_id: msg.id },
-    { onConflict: "whatsapp_message_id", ignoreDuplicates: true }
-  );
+let content = "";
+switch (msg.type) {
+  case "text": content = msg.text?.body || ""; break;
+  case "image": content = msg.image?.caption || "📷 صورة"; break;
+  case "audio": content = "🎵 رسالة صوتية"; break;
+  case "video": content = msg.video?.caption || "🎥 فيديو"; break;
+  case "document": content = msg.document?.filename || "📄 مستند"; break;
+  case "sticker": content = "😊 ملصق"; break;
+  default: content = msg.type || "";
+}
 ```
+
+**UI MessageContent component** will use icons from lucide-react (Image, Mic, FileText, Video) alongside the content text, with a subtle badge/indicator for the message type.
 
