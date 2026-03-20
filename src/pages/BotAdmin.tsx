@@ -12,8 +12,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Plus, Pencil, Trash2, Store, Wrench, CalendarCheck, Settings, Bot, BarChart3 } from "lucide-react";
+import { ArrowRight, Plus, Pencil, Trash2, Store, Wrench, CalendarCheck, Settings, Bot, BarChart3, Bell } from "lucide-react";
 import ReportsTab from "@/components/bot-admin/ReportsTab";
+import { Textarea } from "@/components/ui/textarea";
 
 // ==================== STATIONS TAB ====================
 const StationsTab = () => {
