@@ -47,6 +47,7 @@ export type Database = {
           customer_name: string | null
           customer_phone: string
           id: string
+          reminder_sent: boolean
           service_id: string
           station_id: string
           status: Database["public"]["Enums"]["booking_status"]
@@ -59,6 +60,7 @@ export type Database = {
           customer_name?: string | null
           customer_phone: string
           id?: string
+          reminder_sent?: boolean
           service_id: string
           station_id: string
           status?: Database["public"]["Enums"]["booking_status"]
@@ -71,6 +73,7 @@ export type Database = {
           customer_name?: string | null
           customer_phone?: string
           id?: string
+          reminder_sent?: boolean
           service_id?: string
           station_id?: string
           status?: Database["public"]["Enums"]["booking_status"]
