@@ -553,6 +553,7 @@ const StationPortal = () => {
               {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full h-4 w-4 flex items-center justify-center">{unreadCount}</span>}
             </TabsTrigger>
             <TabsTrigger value="edit-requests" className="gap-1"><Pencil className="h-4 w-4" />طلبات التعديل</TabsTrigger>
+            <TabsTrigger value="account" className="gap-1"><Key className="h-4 w-4" />الحساب</TabsTrigger>
           </TabsList>
           <TabsContent value="dashboard"><StatsDashboard stationId={stationId} /></TabsContent>
           <TabsContent value="info"><StationInfoTab stationId={stationId} /></TabsContent>
@@ -560,6 +561,7 @@ const StationPortal = () => {
           <TabsContent value="bookings"><StationBookingsTab stationId={stationId} /></TabsContent>
           <TabsContent value="notifications"><NotificationsTab /></TabsContent>
           <TabsContent value="edit-requests"><MyEditRequestsTab stationId={stationId} /></TabsContent>
+          <TabsContent value="account"><AccountTab /></TabsContent>
         </Tabs>
       </div>
     </div>
