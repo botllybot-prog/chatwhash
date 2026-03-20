@@ -246,7 +246,7 @@ const Conversations = () => {
                       : "ml-auto bg-card text-card-foreground border border-border rounded-br-md"
                   )}
                 >
-                  <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                  <MessageContent content={msg.content} messageType={msg.message_type} direction={msg.direction} />
                   <div className={cn(
                     "flex items-center gap-1 mt-1",
                     msg.direction === "outbound" ? "justify-start" : "justify-end"
