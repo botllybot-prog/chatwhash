@@ -177,6 +177,21 @@ function generateTimeSlots(start: string, end: string, durationMin: number): str
   return slots;
 }
 
+async function notifyStationOwner(supabase: any, bookingId: string, stationId: string) {
+  try {
+    await supabase.functions.invoke("notify-station-owner", {
+      body: { booking_id: bookingId, station_id: stationId },
+    });
+  } catch (e) {
+    console.error("Failed to notify station owner:", e);
+  }
+}
+
+async function getCustomerName(supabase: any, convId: string): Promise<string | null> {
+  const { data } = await supabase.from("conversations").select("customer_name").eq("id", convId).single();
+  return data?.customer_name || null;
+}
+
 async function handleBotLogic(
   supabase: any, phone: string, content: string, convId: string, settings: Record<string, string>
 ): Promise<boolean> {
