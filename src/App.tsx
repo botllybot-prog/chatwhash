@@ -7,6 +7,7 @@ import AuthGuard from "@/components/AuthGuard";
 import Index from "./pages/Index";
 import Conversations from "./pages/Conversations";
 import Settings from "./pages/Settings";
+import BotAdmin from "./pages/BotAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
