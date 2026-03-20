@@ -11,7 +11,74 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image } from "lucide-react";
+import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle } from "lucide-react";
+
+// ==================== STATS DASHBOARD ====================
+const StatsDashboard = ({ stationId }: { stationId: string }) => {
+  const [stats, setStats] = useState({ todayBookings: 0, todayRevenue: 0, pendingBookings: 0, completedBookings: 0, weekRevenue: 0, totalBookings: 0 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+      const [todayRes, pendingRes, completedRes, weekRes, totalRes] = await Promise.all([
+        supabase.from("bookings").select("id, services(price)").eq("station_id", stationId).eq("booking_date", today).in("status", ["pending", "confirmed", "completed"] as any),
+        supabase.from("bookings").select("id", { count: "exact", head: true }).eq("station_id", stationId).eq("status", "pending" as any),
+        supabase.from("bookings").select("id", { count: "exact", head: true }).eq("station_id", stationId).eq("status", "completed" as any),
+        supabase.from("bookings").select("id, services(price)").eq("station_id", stationId).gte("booking_date", weekAgo).in("status", ["confirmed", "completed"] as any),
+        supabase.from("bookings").select("id", { count: "exact", head: true }).eq("station_id", stationId),
+      ]);
+
+      const todayBookings = todayRes.data?.length || 0;
+      const todayRevenue = todayRes.data?.reduce((sum: number, b: any) => sum + ((b as any).services?.price || 0), 0) || 0;
+      const weekRevenue = weekRes.data?.reduce((sum: number, b: any) => sum + ((b as any).services?.price || 0), 0) || 0;
+
+      setStats({
+        todayBookings,
+        todayRevenue,
+        pendingBookings: pendingRes.count || 0,
+        completedBookings: completedRes.count || 0,
+        weekRevenue,
+        totalBookings: totalRes.count || 0,
+      });
+      setLoading(false);
+    };
+    load();
+  }, [stationId]);
+
+  if (loading) return <p className="text-muted-foreground">جاري التحميل...</p>;
+
+  const cards = [
+    { title: "حجوزات اليوم", value: stats.todayBookings, icon: <CalendarCheck className="h-5 w-5 text-primary" />, subtitle: "حجز" },
+    { title: "إيرادات اليوم", value: `${stats.todayRevenue.toLocaleString()} د.ع`, icon: <TrendingUp className="h-5 w-5 text-primary" />, subtitle: "" },
+    { title: "حجوزات معلقة", value: stats.pendingBookings, icon: <Hourglass className="h-5 w-5 text-amber-500" />, subtitle: "بانتظار التأكيد" },
+    { title: "حجوزات مكتملة", value: stats.completedBookings, icon: <CheckCircle className="h-5 w-5 text-emerald-500" />, subtitle: "إجمالي" },
+    { title: "إيرادات الأسبوع", value: `${stats.weekRevenue.toLocaleString()} د.ع`, icon: <TrendingUp className="h-5 w-5 text-primary" />, subtitle: "آخر 7 أيام" },
+    { title: "إجمالي الحجوزات", value: stats.totalBookings, icon: <CalendarCheck className="h-5 w-5 text-muted-foreground" />, subtitle: "منذ البداية" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-foreground">الإحصائيات</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {cards.map((c, i) => (
+          <Card key={i}>
+            <CardContent className="pt-5 pb-4 px-5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-muted-foreground">{c.title}</span>
+                {c.icon}
+              </div>
+              <p className="text-2xl font-bold text-foreground">{c.value}</p>
+              {c.subtitle && <p className="text-xs text-muted-foreground mt-1">{c.subtitle}</p>}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 // ==================== STATION INFO TAB ====================
 const StationInfoTab = ({ stationId }: { stationId: string }) => {
@@ -381,8 +448,9 @@ const StationPortal = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <Tabs defaultValue="info" dir="rtl">
+        <Tabs defaultValue="dashboard" dir="rtl">
           <TabsList className="mb-6">
+            <TabsTrigger value="dashboard" className="gap-1"><LayoutDashboard className="h-4 w-4" />الإحصائيات</TabsTrigger>
             <TabsTrigger value="info" className="gap-1"><Store className="h-4 w-4" />المحطة</TabsTrigger>
             <TabsTrigger value="services" className="gap-1"><Wrench className="h-4 w-4" />الخدمات</TabsTrigger>
             <TabsTrigger value="bookings" className="gap-1"><CalendarCheck className="h-4 w-4" />الحجوزات</TabsTrigger>
@@ -392,6 +460,7 @@ const StationPortal = () => {
             </TabsTrigger>
             <TabsTrigger value="edit-requests" className="gap-1"><Pencil className="h-4 w-4" />طلبات التعديل</TabsTrigger>
           </TabsList>
+          <TabsContent value="dashboard"><StatsDashboard stationId={stationId} /></TabsContent>
           <TabsContent value="info"><StationInfoTab stationId={stationId} /></TabsContent>
           <TabsContent value="services"><StationServicesTab stationId={stationId} /></TabsContent>
           <TabsContent value="bookings"><StationBookingsTab stationId={stationId} /></TabsContent>
