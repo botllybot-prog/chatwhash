@@ -38,7 +38,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
         .eq("user_id", session.user.id)
         .limit(1)
         .maybeSingle();
-      const userRole = data?.role || "admin"; // Default to admin for existing users
+      const userRole = data?.role || null;
       setRole(userRole);
       setLoading(false);
     };
