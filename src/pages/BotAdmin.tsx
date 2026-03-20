@@ -319,15 +319,19 @@ const BookingsTab = () => {
 const BotSettingsTab = () => {
   const [botEnabled, setBotEnabled] = useState(true);
   const [welcomeMsg, setWelcomeMsg] = useState("");
+  const [remindersEnabled, setRemindersEnabled] = useState(false);
+  const [reminderMsg, setReminderMsg] = useState("تذكير: لديك حجز غسيل سيارة خلال ساعة.\n📍 المحطة: {station}\n🔧 الخدمة: {service}\n🕐 الوقت: {time}\n📋 رقم الحجز: #{booking_number}\nنتطلع لخدمتك! 🚗✨");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from("app_settings").select("key, value").in("key", ["BOT_ENABLED", "BOT_WELCOME_MESSAGE"]);
+      const { data } = await supabase.from("app_settings").select("key, value").in("key", ["BOT_ENABLED", "BOT_WELCOME_MESSAGE", "REMINDERS_ENABLED", "REMINDER_MESSAGE"]);
       if (data) {
         for (const row of data) {
           if (row.key === "BOT_ENABLED") setBotEnabled(row.value === "true");
           if (row.key === "BOT_WELCOME_MESSAGE") setWelcomeMsg(row.value);
+          if (row.key === "REMINDERS_ENABLED") setRemindersEnabled(row.value === "true");
+          if (row.key === "REMINDER_MESSAGE") setReminderMsg(row.value);
         }
       }
       setLoading(false);
@@ -339,6 +343,8 @@ const BotSettingsTab = () => {
     await Promise.all([
       supabase.from("app_settings").upsert({ key: "BOT_ENABLED", value: botEnabled ? "true" : "false" }, { onConflict: "key" }),
       supabase.from("app_settings").upsert({ key: "BOT_WELCOME_MESSAGE", value: welcomeMsg }, { onConflict: "key" }),
+      supabase.from("app_settings").upsert({ key: "REMINDERS_ENABLED", value: remindersEnabled ? "true" : "false" }, { onConflict: "key" }),
+      supabase.from("app_settings").upsert({ key: "REMINDER_MESSAGE", value: reminderMsg }, { onConflict: "key" }),
     ]);
     toast({ title: "تم الحفظ" });
   };
@@ -357,6 +363,30 @@ const BotSettingsTab = () => {
           <div>
             <Label>رسالة الترحيب</Label>
             <Input value={welcomeMsg} onChange={(e) => setWelcomeMsg(e.target.value)} placeholder="مرحباً بك في خدمة غسيل السيارات!" />
+          </div>
+          <Button onClick={save} className="w-full">حفظ الإعدادات</Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5" />إشعارات التذكير</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label>تفعيل التذكير قبل الموعد بساعة</Label>
+            <Switch checked={remindersEnabled} onCheckedChange={setRemindersEnabled} />
+          </div>
+          <div>
+            <Label>رسالة التذكير</Label>
+            <textarea
+              value={reminderMsg}
+              onChange={(e) => setReminderMsg(e.target.value)}
+              placeholder="رسالة التذكير..."
+              rows={5}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              المتغيرات المتاحة: {"{station}"} {"{service}"} {"{time}"} {"{date}"} {"{booking_number}"}
+            </p>
           </div>
           <Button onClick={save} className="w-full">حفظ الإعدادات</Button>
         </CardContent>
