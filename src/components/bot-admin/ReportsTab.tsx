@@ -113,7 +113,7 @@ const ReportsTab = () => {
               <div className="p-2 rounded-lg bg-primary/10"><DollarSign className="h-5 w-5 text-primary" /></div>
               <div>
                 <p className="text-sm text-muted-foreground">الإيرادات</p>
-                <p className="text-2xl font-bold text-foreground">{totalRevenue} ريال</p>
+                <p className="text-2xl font-bold text-foreground">{totalRevenue} د.ع</p>
               </div>
             </div>
           </CardContent>
