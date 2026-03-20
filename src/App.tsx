@@ -4,12 +4,14 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AuthGuard from "@/components/AuthGuard";
+import LandingPage from "./pages/LandingPage";
 import Index from "./pages/Index";
 import Conversations from "./pages/Conversations";
 import Settings from "./pages/Settings";
 import BotAdmin from "./pages/BotAdmin";
 import StationPortal from "./pages/StationPortal";
 import StationsMap from "./pages/StationsMap";
+import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,8 +36,10 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<LandingPage />} />
           <Route path="/map" element={<StationsMap />} />
-          <Route path="/*" element={<ProtectedRoutes />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/app/*" element={<ProtectedRoutes />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
