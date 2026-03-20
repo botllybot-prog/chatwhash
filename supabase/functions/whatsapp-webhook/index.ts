@@ -177,6 +177,28 @@ function generateTimeSlots(start: string, end: string, durationMin: number): str
   return slots;
 }
 
+async function notifyStationOwner(supabase: any, bookingId: string, stationId: string) {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    await fetch(`${supabaseUrl}/functions/v1/notify-station-owner`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({ booking_id: bookingId, station_id: stationId }),
+    });
+  } catch (e) {
+    console.error("Failed to notify station owner:", e);
+  }
+}
+
+async function getCustomerName(supabase: any, convId: string): Promise<string | null> {
+  const { data } = await supabase.from("conversations").select("customer_name").eq("id", convId).single();
+  return data?.customer_name || null;
+}
+
 async function handleBotLogic(
   supabase: any, phone: string, content: string, convId: string, settings: Record<string, string>
 ): Promise<boolean> {
@@ -627,19 +649,23 @@ async function handleBotLogic(
     if (station.scheduling_type === "instant") {
       const today = new Date().toISOString().split("T")[0];
       const nowTime = new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
+      const customerName = await getCustomerName(supabase, convId);
 
       const { data: booking } = await supabase
         .from("bookings")
         .insert({
           customer_phone: phone,
+          customer_name: customerName,
           station_id: stationId,
           service_id: service.id,
           booking_date: today,
           booking_time: nowTime,
           status: "confirmed",
         })
-        .select("booking_number")
+        .select("id, booking_number")
         .single();
+
+      if (booking) await notifyStationOwner(supabase, booking.id, stationId);
 
       const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station.name}\n🧽 الخدمة: ${service.name}\n💰 السعر: ${service.price} د.ع\n📅 التاريخ: اليوم\n⏰ الوقت: الآن\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
       const waId = await sendWhatsAppMessage(phone, msg, settings);
@@ -728,18 +754,22 @@ async function handleBotLogic(
 
     const { data: station } = await supabase.from("stations").select("name").eq("id", stationId).single();
     const { data: service } = await supabase.from("services").select("name, price").eq("id", serviceId).single();
+    const customerName = await getCustomerName(supabase, convId);
 
     const { data: booking } = await supabase
       .from("bookings")
       .insert({
         customer_phone: phone,
+        customer_name: customerName,
         station_id: stationId,
         service_id: serviceId,
         booking_date: selectedDate,
         status: "confirmed",
       })
-      .select("booking_number")
+      .select("id, booking_number")
       .single();
+
+    if (booking) await notifyStationOwner(supabase, booking.id, stationId);
 
     const dateLabel = new Date(selectedDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station?.name}\n🧽 الخدمة: ${service?.name}\n💰 السعر: ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
@@ -784,19 +814,23 @@ async function handleBotLogic(
 
     const selectedTime = available[idx];
     const { data: service } = await supabase.from("services").select("name, price").eq("id", serviceId).single();
+    const customerName = await getCustomerName(supabase, convId);
 
     const { data: booking } = await supabase
       .from("bookings")
       .insert({
         customer_phone: phone,
+        customer_name: customerName,
         station_id: stationId,
         service_id: serviceId,
         booking_date: bookingDate,
         booking_time: selectedTime,
         status: "confirmed",
       })
-      .select("booking_number")
+      .select("id, booking_number")
       .single();
+
+    if (booking) await notifyStationOwner(supabase, booking.id, stationId);
 
     const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station.name}\n🧽 الخدمة: ${service?.name}\n💰 السعر: ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${selectedTime}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
