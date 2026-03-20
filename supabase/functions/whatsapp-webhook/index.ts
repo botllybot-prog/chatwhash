@@ -807,19 +807,23 @@ async function handleBotLogic(
 
     const selectedTime = available[idx];
     const { data: service } = await supabase.from("services").select("name, price").eq("id", serviceId).single();
+    const customerName = await getCustomerName(supabase, convId);
 
     const { data: booking } = await supabase
       .from("bookings")
       .insert({
         customer_phone: phone,
+        customer_name: customerName,
         station_id: stationId,
         service_id: serviceId,
         booking_date: bookingDate,
         booking_time: selectedTime,
         status: "confirmed",
       })
-      .select("booking_number")
+      .select("id, booking_number")
       .single();
+
+    if (booking) await notifyStationOwner(supabase, booking.id, stationId);
 
     const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station.name}\n🧽 الخدمة: ${service?.name}\n💰 السعر: ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${selectedTime}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
