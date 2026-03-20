@@ -19,7 +19,7 @@ const StationsTab = () => {
   const [stations, setStations] = useState<any[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", address: "", working_hours_start: "08:00", working_hours_end: "22:00", slot_duration_minutes: 30, scheduling_type: "slots" as string, is_active: true });
+  const [form, setForm] = useState({ name: "", address: "", working_hours_start: "08:00", working_hours_end: "22:00", slot_duration_minutes: 30, scheduling_type: "slots" as "slots" | "instant" | "daily", is_active: true });
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("stations").select("*").order("created_at");

@@ -23,6 +23,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/conversations" element={<Conversations />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/bot-admin" element={<BotAdmin />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthGuard>
