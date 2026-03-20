@@ -53,7 +53,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
       }
     } else if (role === "admin") {
       if (path.startsWith("/app/station-portal")) {
-        navigate("/app/bot-admin", { replace: true });
+        navigate("/app/admin/stations", { replace: true });
       }
     }
   }, [role, loading, session, location.pathname, navigate]);
