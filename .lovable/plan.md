@@ -1,70 +1,113 @@
 
 
-# Store and Display WhatsApp Media Message Types
+# بوت حجز غسيل السيارات عبر واتساب
 
-## Current State
-- The `messages` table already has a `message_type` column (defaults to `'text'`).
-- The webhook already stores `msg.type` (text, image, audio, document, etc.) in `message_type`.
-- However, `content` only extracts `msg.text?.body` — for non-text messages, it falls back to the type name string, losing the media URL/caption.
-- The UI only renders `msg.content` as plain text, with no visual distinction for media types.
+## الفكرة العامة
+بوت تلقائي يعمل عبر واتساب يتيح للعملاء حجز خدمات غسيل السيارات باختيار المحطة والخدمة والموعد، مع لوحة إدارة كاملة لإدارة المحطات والخدمات والحجوزات ونوع المواعيد.
 
-## No DB changes needed — `message_type` column already exists.
+## تدفق المحادثة مع العميل
 
-## Changes
-
-### 1. Update webhook to extract media metadata
-**File**: `supabase/functions/whatsapp-webhook/index.ts`
-
-For each message type, extract the relevant content:
-- **text**: `msg.text.body` (already works)
-- **image**: Store caption (`msg.image.caption`) as content, and media ID (`msg.image.id`) — we'll store a JSON string with `{media_id, caption, mime_type}` in `content` for media types
-- **audio**: Store `{media_id, mime_type}` 
-- **document**: Store `{media_id, filename, caption, mime_type}`
-- **video**: Store `{media_id, caption, mime_type}`
-- **sticker**: Store `{media_id, mime_type}`
-
-Content format for non-text: JSON string like `{"media_id":"...","caption":"...","mime_type":"image/jpeg"}`
-
-### 2. Add a media download helper in the webhook
-Download media from WhatsApp API using the media ID and access token, then store it — or simply store the media ID for now and let the frontend display a placeholder with the type indicator.
-
-**Simpler approach**: Store descriptive content + `message_type`, and show appropriate UI indicators. Media download can be added later.
-
-For non-text messages, content will be:
-- image: caption or "📷 صورة"
-- audio: "🎵 رسالة صوتية"  
-- video: caption or "🎥 فيديو"
-- document: filename or "📄 مستند"
-- sticker: "😊 ملصق"
-
-### 3. Update the chat UI to show message type indicators
-**File**: `src/pages/Conversations.tsx`
-
-Add a `MessageContent` component that renders differently based on `message_type`:
-- **text**: Current plain text rendering
-- **image**: Show an image icon + caption text
-- **audio**: Show audio icon + "رسالة صوتية"
-- **document**: Show document icon + filename
-- **video**: Show video icon + caption
-- **sticker**: Show sticker indicator
-
-Also show the message type in the conversation list preview.
-
-## Technical Details
-
-**Webhook content extraction:**
-```typescript
-let content = "";
-switch (msg.type) {
-  case "text": content = msg.text?.body || ""; break;
-  case "image": content = msg.image?.caption || "📷 صورة"; break;
-  case "audio": content = "🎵 رسالة صوتية"; break;
-  case "video": content = msg.video?.caption || "🎥 فيديو"; break;
-  case "document": content = msg.document?.filename || "📄 مستند"; break;
-  case "sticker": content = "😊 ملصق"; break;
-  default: content = msg.type || "";
-}
+```text
+العميل: أي رسالة (مرحبا / حجز / أي شيء)
+    ↓
+البوت: مرحباً! اختر المحطة:
+  1. محطة الرياض
+  2. محطة جدة
+  3. محطة الدمام
+    ↓
+العميل: 1
+    ↓
+البوت: اختر الخدمة:
+  1. غسيل خارجي - 30 ريال
+  2. غسيل داخلي وخارجي - 50 ريال
+  3. تلميع وبوليش - 100 ريال
+    ↓
+العميل: 2
+    ↓
+البوت: اختر الموعد:          ← (يتغير حسب إعداد المحطة)
+  • فترات ثابتة: 10:00, 10:30, 11:00...
+  • فوري: "تأكيد الحجز الآن؟"
+  • يومي: "اختر اليوم: اليوم / غداً / ..."
+    ↓
+العميل: 10:30
+    ↓
+البوت: ✅ تم الحجز!
+  المحطة: الرياض
+  الخدمة: غسيل داخلي وخارجي
+  الموعد: اليوم 10:30
+  رقم الحجز: #1234
 ```
 
-**UI MessageContent component** will use icons from lucide-react (Image, Mic, FileText, Video) alongside the content text, with a subtle badge/indicator for the message type.
+---
+
+## التغييرات المطلوبة
+
+### 1. جداول قاعدة البيانات (Migration)
+
+- **`stations`** — المحطات (الاسم، العنوان، ساعات العمل، نوع المواعيد، فترة الفاصل الزمني، حالة التفعيل)
+- **`services`** — الخدمات (الاسم، السعر، المدة، مرتبطة بمحطة أو عامة، حالة التفعيل)
+- **`bookings`** — الحجوزات (العميل، المحطة، الخدمة، التاريخ/الوقت، الحالة، رقم الحجز)
+- **`bot_sessions`** — حالة المحادثة الحالية مع كل عميل (المرحلة الحالية، المحطة المختارة، الخدمة المختارة، تاريخ انتهاء الجلسة)
+
+### 2. منطق البوت في الـ Webhook
+**ملف**: `supabase/functions/whatsapp-webhook/index.ts`
+
+إضافة دالة `handleBotLogic` تعمل كآلة حالات (state machine):
+- **`idle`**: رسالة ترحيب + عرض المحطات
+- **`awaiting_station`**: التحقق من اختيار المحطة + عرض الخدمات
+- **`awaiting_service`**: التحقق من اختيار الخدمة + عرض المواعيد
+- **`awaiting_time`**: التحقق من الموعد + تأكيد الحجز
+- **`0`** في أي مرحلة: العودة للقائمة الرئيسية
+
+البوت يرسل الردود عبر `whatsapp-send` أو مباشرة عبر WhatsApp API.
+
+### 3. صفحة إدارة المحطات والخدمات
+**ملف جديد**: `src/pages/BotAdmin.tsx`
+
+لوحة تحكم تشمل:
+- **تبويب المحطات**: إضافة/تعديل/حذف محطات، ضبط ساعات العمل، اختيار نوع المواعيد (فترات ثابتة / فوري / يومي)
+- **تبويب الخدمات**: إضافة/تعديل/حذف خدمات مع الأسعار والمدة
+- **تبويب الحجوزات**: عرض جميع الحجوزات مع فلترة بالمحطة والحالة والتاريخ
+- **تبويب الإعدادات**: رسالة الترحيب، تفعيل/تعطيل البوت
+
+### 4. تحديث التوجيه
+إضافة مسار `/bot-admin` في `App.tsx` وربطه بالقائمة الجانبية.
+
+---
+
+## التفاصيل التقنية
+
+**هيكل الجداول:**
+```text
+stations:
+  id, name, address, working_hours_start, working_hours_end,
+  slot_duration_minutes, scheduling_type (slots|instant|daily),
+  is_active, created_at
+
+services:
+  id, station_id (nullable = عام), name, price, 
+  duration_minutes, is_active, sort_order, created_at
+
+bookings:
+  id, booking_number (serial), customer_phone, customer_name,
+  station_id, service_id, booking_date, booking_time,
+  status (pending|confirmed|completed|cancelled), created_at
+
+bot_sessions:
+  id, customer_phone (unique), current_step, 
+  selected_station_id, selected_service_id, selected_date,
+  expires_at, updated_at
+```
+
+**منطق البوت**: يتحقق من `bot_sessions` لمعرفة مرحلة العميل الحالية. إذا لم توجد جلسة أو انتهت صلاحيتها (30 دقيقة)، يبدأ من البداية. الجلسة تُحدث بعد كل خطوة.
+
+**حساب المواعيد المتاحة**: يحسب الفترات بناءً على `working_hours_start/end` و`slot_duration_minutes`، ويستبعد الفترات المحجوزة بالفعل من جدول `bookings`.
+
+**الملفات المتأثرة:**
+- `supabase/migrations/` — migration جديد للجداول الأربعة
+- `supabase/functions/whatsapp-webhook/index.ts` — إضافة منطق البوت
+- `supabase/functions/whatsapp-send/index.ts` — بدون تغيير (يُستخدم لإرسال الردود)
+- `src/pages/BotAdmin.tsx` — صفحة إدارة جديدة
+- `src/App.tsx` — إضافة مسار جديد
+- `src/pages/Conversations.tsx` — إضافة رابط لصفحة الإدارة
 
