@@ -125,74 +125,84 @@ Deno.serve(async (req) => {
 
               console.log(`Incoming message from ${phone}: ${content.substring(0, 50)}`);
 
-              // Atomic upsert: find or create open conversation
-              const { data: conv, error: convErr } = await supabase
+              // Step 1: Check for duplicate message
+              if (msg.id) {
+                const { data: existingMsg } = await supabase
+                  .from("messages")
+                  .select("id")
+                  .eq("whatsapp_message_id", msg.id)
+                  .maybeSingle();
+                if (existingMsg) {
+                  console.log(`Duplicate message skipped: ${msg.id}`);
+                  continue;
+                }
+              }
+
+              // Step 2: Find or create conversation (select first, insert if needed)
+              let convId: string;
+              const { data: existingConv } = await supabase
                 .from("conversations")
-                .upsert(
-                  {
+                .select("id")
+                .eq("customer_phone", phone)
+                .eq("status", "open")
+                .limit(1)
+                .maybeSingle();
+
+              if (existingConv) {
+                convId = existingConv.id;
+                // Update last_message_at and customer_name
+                await supabase
+                  .from("conversations")
+                  .update({ last_message_at: now, customer_name: contactName })
+                  .eq("id", convId);
+              } else {
+                const { data: newConv, error: newConvErr } = await supabase
+                  .from("conversations")
+                  .insert({
                     customer_phone: phone,
                     customer_name: contactName,
                     status: "open",
                     last_message_at: now,
-                  },
-                  { onConflict: "customer_phone,status", ignoreDuplicates: false }
-                )
-                .select("id")
-                .single();
-
-              if (convErr || !conv) {
-                console.error("Conversation upsert error:", convErr);
-                // Fallback: try to find existing conversation
-                const { data: existingConv } = await supabase
-                  .from("conversations")
+                  })
                   .select("id")
-                  .eq("customer_phone", phone)
-                  .eq("status", "open")
-                  .limit(1)
-                  .maybeSingle();
+                  .single();
 
-                if (!existingConv) {
-                  console.error("Could not find or create conversation for:", phone);
-                  continue;
+                if (newConvErr || !newConv) {
+                  console.error("Failed to create conversation:", newConvErr);
+                  // Race condition: another request may have created it
+                  const { data: retryConv } = await supabase
+                    .from("conversations")
+                    .select("id")
+                    .eq("customer_phone", phone)
+                    .eq("status", "open")
+                    .limit(1)
+                    .maybeSingle();
+                  if (!retryConv) {
+                    console.error("Could not find or create conversation for:", phone);
+                    continue;
+                  }
+                  convId = retryConv.id;
+                } else {
+                  convId = newConv.id;
                 }
-
-                // Insert message with duplicate protection
-                const { error: msgErr } = await supabase
-                  .from("messages")
-                  .upsert(
-                    {
-                      conversation_id: existingConv.id,
-                      direction: "inbound",
-                      content,
-                      message_type: messageType,
-                      whatsapp_message_id: msg.id,
-                      status: "received",
-                    },
-                    { onConflict: "whatsapp_message_id", ignoreDuplicates: true }
-                  );
-                if (msgErr) console.error("Message insert error (fallback):", msgErr);
-                continue;
               }
 
-              // Insert message with duplicate protection
+              // Step 3: Insert message
               const { error: msgErr } = await supabase
                 .from("messages")
-                .upsert(
-                  {
-                    conversation_id: conv.id,
-                    direction: "inbound",
-                    content,
-                    message_type: messageType,
-                    whatsapp_message_id: msg.id,
-                    status: "received",
-                  },
-                  { onConflict: "whatsapp_message_id", ignoreDuplicates: true }
-                );
+                .insert({
+                  conversation_id: convId,
+                  direction: "inbound",
+                  content,
+                  message_type: messageType,
+                  whatsapp_message_id: msg.id,
+                  status: "received",
+                });
 
               if (msgErr) {
                 console.error("Message insert error:", msgErr);
               } else {
-                console.log(`Message saved for conversation ${conv.id}`);
+                console.log(`Message saved for conversation ${convId}`);
               }
             }
           }
