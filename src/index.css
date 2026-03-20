@@ -1,88 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 210 25% 98%;
+    --foreground: 210 50% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 210 50% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 210 50% 10%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 205 78% 42%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 200 30% 94%;
+    --secondary-foreground: 210 50% 15%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 210 20% 95%;
+    --muted-foreground: 210 15% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 195 85% 45%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 210 25% 90%;
+    --input: 210 25% 90%;
+    --ring: 205 78% 42%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+
+    /* Landing page oceanic tokens */
+    --ocean-50: 200 80% 97%;
+    --ocean-100: 200 75% 92%;
+    --ocean-200: 200 70% 82%;
+    --ocean-300: 200 68% 68%;
+    --ocean-400: 205 72% 55%;
+    --ocean-500: 205 78% 42%;
+    --ocean-600: 208 80% 35%;
+    --ocean-700: 210 75% 28%;
+    --ocean-800: 212 70% 20%;
+    --ocean-900: 215 65% 12%;
+
+    --foam: 180 45% 92%;
+    --sparkle: 45 90% 65%;
 
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 215 65% 6%;
+    --foreground: 200 30% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 215 55% 10%;
+    --card-foreground: 200 30% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 215 55% 10%;
+    --popover-foreground: 200 30% 95%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 200 75% 55%;
+    --primary-foreground: 215 65% 6%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 215 40% 18%;
+    --secondary-foreground: 200 30% 95%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 215 40% 18%;
+    --muted-foreground: 210 20% 60%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 195 75% 50%;
+    --accent-foreground: 215 65% 6%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 215 40% 18%;
+    --input: 215 40% 18%;
+    --ring: 200 75% 55%;
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -98,8 +105,63 @@ All colors MUST be HSL.
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
+    font-family: 'Tajawal', 'Cairo', sans-serif;
   }
+}
+
+@layer utilities {
+  /* Wave animation */
+  @keyframes wave-slow {
+    0%, 100% { transform: translateX(0) translateY(0); }
+    25% { transform: translateX(-15px) translateY(-8px); }
+    50% { transform: translateX(0) translateY(-15px); }
+    75% { transform: translateX(15px) translateY(-8px); }
+  }
+  @keyframes wave-medium {
+    0%, 100% { transform: translateX(0) translateY(0); }
+    25% { transform: translateX(10px) translateY(-12px); }
+    50% { transform: translateX(-5px) translateY(-20px); }
+    75% { transform: translateX(-10px) translateY(-10px); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  @keyframes bubble {
+    0% { transform: translateY(100%) scale(0); opacity: 0; }
+    30% { opacity: 0.6; }
+    100% { transform: translateY(-100vh) scale(1); opacity: 0; }
+  }
+  @keyframes car-drive {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(120vw); }
+  }
+  @keyframes sparkle-pulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+  @keyframes droplet {
+    0% { transform: translateY(-20px) scale(1); opacity: 1; }
+    60% { transform: translateY(40px) scale(0.8); opacity: 0.6; }
+    100% { transform: translateY(60px) scale(0.5); opacity: 0; }
+  }
+
+  .animate-wave-slow { animation: wave-slow 8s ease-in-out infinite; }
+  .animate-wave-medium { animation: wave-medium 6s ease-in-out infinite; }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .animate-shimmer {
+    background: linear-gradient(90deg, transparent 0%, hsl(var(--ocean-200) / 0.4) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+  }
+  .animate-bubble { animation: bubble 8s ease-in infinite; }
+  .animate-car-drive { animation: car-drive 12s linear infinite; }
+  .animate-sparkle { animation: sparkle-pulse 2s ease-in-out infinite; }
+  .animate-droplet { animation: droplet 2.5s ease-in infinite; }
 }
