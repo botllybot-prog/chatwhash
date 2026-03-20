@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MapPin, Clock, Navigation, Wrench, CalendarCheck, X, ChevronLeft } from "lucide-react";
+import { MapPin, Clock, Navigation, Wrench, CalendarCheck, X, ChevronLeft, Search } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
 // Fix leaflet default icon
@@ -265,6 +266,9 @@ const StationsMap = () => {
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -286,6 +290,33 @@ const StationsMap = () => {
     }
   };
 
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.trim().toLowerCase();
+    return stations.filter((s) =>
+      s.name.toLowerCase().includes(q) ||
+      (s.address && s.address.toLowerCase().includes(q)) ||
+      (s.detailed_address && s.detailed_address.toLowerCase().includes(q))
+    ).slice(0, 5);
+  }, [searchQuery, stations]);
+
+  const handleSearchSelect = (station: Station) => {
+    setSearchQuery("");
+    setSearchOpen(false);
+    handleMarkerClick(station);
+  };
+
+  // Close search dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   // Center on Iraq by default
   const defaultCenter: [number, number] = [33.3, 44.4];
 
@@ -304,14 +335,52 @@ const StationsMap = () => {
     <div className="h-screen w-full relative" dir="rtl">
       {/* Back button */}
       <div className="absolute top-4 right-4 z-[1000]">
-        <Button
-          variant="secondary"
-          className="shadow-lg gap-1"
-          onClick={() => window.history.back()}
-        >
+        <Button variant="secondary" className="shadow-lg gap-1" onClick={() => window.history.back()}>
           <ChevronLeft className="h-4 w-4" />
           رجوع
         </Button>
+      </div>
+
+      {/* Search bar */}
+      <div ref={searchRef} className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-sm">
+        <div className="relative">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="ابحث عن محطة بالاسم أو العنوان..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+            onFocus={() => setSearchOpen(true)}
+            className="pr-9 pl-9 bg-background shadow-lg border-border"
+          />
+          {searchQuery && (
+            <button onClick={() => { setSearchQuery(""); setSearchOpen(false); }} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {searchOpen && searchQuery.trim() && (
+          <Card className="mt-1 shadow-xl overflow-hidden">
+            <CardContent className="p-0">
+              {searchResults.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">لا توجد نتائج</p>
+              ) : (
+                searchResults.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleSearchSelect(s)}
+                    className="w-full text-right px-4 py-3 hover:bg-accent transition-colors border-b border-border last:border-0 flex items-start gap-2"
+                  >
+                    <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{s.name}</p>
+                      {s.address && <p className="text-xs text-muted-foreground">{s.address}</p>}
+                    </div>
+                  </button>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Station count badge */}
