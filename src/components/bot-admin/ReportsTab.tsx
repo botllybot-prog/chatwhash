@@ -201,7 +201,7 @@ const ReportsTab = () => {
                       </div>
                     </TableCell>
                     <TableCell>{s.count}</TableCell>
-                    <TableCell>{s.revenue} ريال</TableCell>
+                    <TableCell>{s.revenue} د.ع</TableCell>
                   </TableRow>
                 ))}
                 {topServices.length === 0 && <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-6">لا توجد بيانات</TableCell></TableRow>}
