@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
                   content,
                   message_type: messageType,
                   whatsapp_message_id: msg.id,
-                  status: "received",
+                  status: "delivered",
                 });
 
               if (msgErr) {
