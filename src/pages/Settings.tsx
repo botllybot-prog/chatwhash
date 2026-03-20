@@ -118,7 +118,7 @@ const Settings = () => {
             <SettingsIcon className="h-7 w-7 text-primary" />
             <h1 className="text-2xl font-bold text-foreground">إعدادات WhatsApp</h1>
           </div>
-          <Button variant="outline" onClick={() => navigate("/conversations")}>
+          <Button variant="outline" onClick={() => navigate("/app/conversations")}>
             المحادثات
             <ArrowRight className="h-4 w-4 mr-2" />
           </Button>

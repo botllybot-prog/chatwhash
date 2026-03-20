@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 import { useNavigate, useLocation } from "react-router-dom";
-import Login from "@/pages/Login";
 
 const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
@@ -28,7 +27,6 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch role when session changes
   useEffect(() => {
     if (!session?.user) return;
     const fetchRole = async () => {
@@ -38,8 +36,7 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
         .eq("user_id", session.user.id)
         .limit(1)
         .maybeSingle();
-      const userRole = data?.role || null;
-      setRole(userRole);
+      setRole(data?.role || null);
       setLoading(false);
     };
     fetchRole();
@@ -48,18 +45,15 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
   // Redirect based on role
   useEffect(() => {
     if (loading || !session || !role) return;
-
     const path = location.pathname;
 
     if (role === "station_owner") {
-      // Station owners can only access /station-portal
-      if (!path.startsWith("/station-portal")) {
-        navigate("/station-portal", { replace: true });
+      if (!path.startsWith("/app/station-portal")) {
+        navigate("/app/station-portal", { replace: true });
       }
     } else if (role === "admin") {
-      // If admin is on station-portal, redirect to bot-admin
-      if (path.startsWith("/station-portal")) {
-        navigate("/bot-admin", { replace: true });
+      if (path.startsWith("/app/station-portal")) {
+        navigate("/app/bot-admin", { replace: true });
       }
     }
   }, [role, loading, session, location.pathname, navigate]);
@@ -72,7 +66,10 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (!session) return <Login />;
+  if (!session) {
+    navigate("/login", { replace: true });
+    return null;
+  }
 
   if (!role) {
     return (
