@@ -119,8 +119,20 @@ Deno.serve(async (req) => {
             for (const msg of value.messages) {
               const phone = msg.from;
               const contactName = value.contacts?.[0]?.profile?.name || phone;
-              const content = msg.text?.body || msg.type || "";
               const messageType = msg.type || "text";
+
+              let content = "";
+              switch (msg.type) {
+                case "text": content = msg.text?.body || ""; break;
+                case "image": content = msg.image?.caption || "📷 صورة"; break;
+                case "audio": content = "🎵 رسالة صوتية"; break;
+                case "video": content = msg.video?.caption || "🎥 فيديو"; break;
+                case "document": content = msg.document?.filename || "📄 مستند"; break;
+                case "sticker": content = "😊 ملصق"; break;
+                case "location": content = "📍 موقع"; break;
+                case "contacts": content = "👤 جهة اتصال"; break;
+                default: content = msg.type || "";
+              }
               const now = new Date().toISOString();
 
               console.log(`Incoming message from ${phone}: ${content.substring(0, 50)}`);
