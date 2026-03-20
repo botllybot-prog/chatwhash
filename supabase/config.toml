@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.notify-station-owner]
 verify_jwt = false
+
+[functions.delete-station-owner]
+verify_jwt = false

@@ -12,11 +12,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Plus, Pencil, Trash2, Store, Wrench, CalendarCheck, Settings, Bot, BarChart3, Bell, Users, FileEdit } from "lucide-react";
+import { ArrowRight, Plus, Pencil, Trash2, Store, Wrench, CalendarCheck, Settings, Bot, BarChart3, Bell, Users, FileEdit, CreditCard } from "lucide-react";
 import ReportsTab from "@/components/bot-admin/ReportsTab";
 import StationsTab from "@/components/bot-admin/StationsTab";
 import OwnersTab from "@/components/bot-admin/OwnersTab";
 import EditRequestsTab from "@/components/bot-admin/EditRequestsTab";
+import SubscriptionsTab from "@/components/bot-admin/SubscriptionsTab";
 
 // ==================== SERVICES TAB ====================
 const ServicesTab = () => {
@@ -314,7 +315,8 @@ const BotAdmin = () => {
             <TabsTrigger value="services" className="gap-1"><Wrench className="h-4 w-4" />الخدمات</TabsTrigger>
             <TabsTrigger value="bookings" className="gap-1"><CalendarCheck className="h-4 w-4" />الحجوزات</TabsTrigger>
             <TabsTrigger value="owners" className="gap-1"><Users className="h-4 w-4" />الحسابات</TabsTrigger>
-            <TabsTrigger value="edit-requests" className="gap-1"><FileEdit className="h-4 w-4" />طلبات التعديل</TabsTrigger>
+             <TabsTrigger value="edit-requests" className="gap-1"><FileEdit className="h-4 w-4" />طلبات التعديل</TabsTrigger>
+            <TabsTrigger value="subscriptions" className="gap-1"><CreditCard className="h-4 w-4" />الاشتراكات</TabsTrigger>
             <TabsTrigger value="reports" className="gap-1"><BarChart3 className="h-4 w-4" />التقارير</TabsTrigger>
             <TabsTrigger value="settings" className="gap-1"><Settings className="h-4 w-4" />الإعدادات</TabsTrigger>
           </TabsList>
@@ -323,6 +325,7 @@ const BotAdmin = () => {
           <TabsContent value="bookings"><BookingsTab /></TabsContent>
           <TabsContent value="owners"><OwnersTab /></TabsContent>
           <TabsContent value="edit-requests"><EditRequestsTab /></TabsContent>
+          <TabsContent value="subscriptions"><SubscriptionsTab /></TabsContent>
           <TabsContent value="reports"><ReportsTab /></TabsContent>
           <TabsContent value="settings"><BotSettingsTab /></TabsContent>
         </Tabs>

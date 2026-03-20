@@ -143,6 +143,48 @@ export type Database = {
           },
         ]
       }
+      commissions: {
+        Row: {
+          booking_amount: number
+          booking_id: string
+          commission_amount: number
+          created_at: string
+          id: string
+          station_id: string
+        }
+        Insert: {
+          booking_amount: number
+          booking_id: string
+          commission_amount: number
+          created_at?: string
+          id?: string
+          station_id: string
+        }
+        Update: {
+          booking_amount?: number
+          booking_id?: string
+          commission_amount?: number
+          created_at?: string
+          id?: string
+          station_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commissions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: false
+            referencedRelation: "stations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           created_at: string
@@ -294,6 +336,47 @@ export type Database = {
         }
         Relationships: []
       }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          method: string
+          notes: string | null
+          payment_date: string
+          status: Database["public"]["Enums"]["payment_status"]
+          subscription_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          method?: string
+          notes?: string | null
+          payment_date?: string
+          status?: Database["public"]["Enums"]["payment_status"]
+          subscription_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          method?: string
+          notes?: string | null
+          payment_date?: string
+          status?: Database["public"]["Enums"]["payment_status"]
+          subscription_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       services: {
         Row: {
           created_at: string
@@ -373,6 +456,7 @@ export type Database = {
       stations: {
         Row: {
           address: string | null
+          commission_rate: number
           created_at: string
           detailed_address: string | null
           id: string
@@ -388,6 +472,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          commission_rate?: number
           created_at?: string
           detailed_address?: string | null
           id?: string
@@ -403,6 +488,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          commission_rate?: number
           created_at?: string
           detailed_address?: string | null
           id?: string
@@ -417,6 +503,50 @@ export type Database = {
           working_hours_start?: string
         }
         Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          amount: number
+          created_at: string
+          end_date: string
+          id: string
+          plan: Database["public"]["Enums"]["subscription_plan"]
+          start_date: string
+          station_id: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          end_date?: string
+          id?: string
+          plan?: Database["public"]["Enums"]["subscription_plan"]
+          start_date?: string
+          station_id: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          end_date?: string
+          id?: string
+          plan?: Database["public"]["Enums"]["subscription_plan"]
+          start_date?: string
+          station_id?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: true
+            referencedRelation: "stations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -457,7 +587,10 @@ export type Database = {
       app_role: "admin" | "station_owner"
       booking_status: "pending" | "confirmed" | "completed" | "cancelled"
       edit_request_status: "pending" | "approved" | "rejected"
+      payment_status: "paid" | "pending" | "failed" | "refunded"
       scheduling_type: "slots" | "instant" | "daily"
+      subscription_plan: "basic" | "pro" | "premium"
+      subscription_status: "active" | "expired" | "cancelled" | "trial"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -588,7 +721,10 @@ export const Constants = {
       app_role: ["admin", "station_owner"],
       booking_status: ["pending", "confirmed", "completed", "cancelled"],
       edit_request_status: ["pending", "approved", "rejected"],
+      payment_status: ["paid", "pending", "failed", "refunded"],
       scheduling_type: ["slots", "instant", "daily"],
+      subscription_plan: ["basic", "pro", "premium"],
+      subscription_status: ["active", "expired", "cancelled", "trial"],
     },
   },
 } as const

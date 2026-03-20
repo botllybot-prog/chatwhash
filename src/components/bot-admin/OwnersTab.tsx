@@ -58,9 +58,17 @@ const OwnersTab = () => {
   };
 
   const handleDelete = async (ownerId: string) => {
-    await supabase.from("station_owners").delete().eq("id", ownerId);
+    setLoading(true);
+    const { data, error } = await supabase.functions.invoke("delete-station-owner", {
+      body: { owner_id: ownerId },
+    });
+    setLoading(false);
+    if (error || data?.error) {
+      toast({ title: "فشل الحذف", description: data?.error || error?.message, variant: "destructive" });
+      return;
+    }
     load();
-    toast({ title: "تم الحذف" });
+    toast({ title: "تم حذف الحساب بالكامل" });
   };
 
   return (
