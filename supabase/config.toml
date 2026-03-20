@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.whatsapp-send]
 verify_jwt = false
+
+[functions.booking-reminders]
+verify_jwt = false
