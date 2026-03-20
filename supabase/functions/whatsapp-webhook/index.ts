@@ -798,7 +798,7 @@ async function handleBotLogic(
       .select("booking_number")
       .single();
 
-    const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station.name}\n🧽 الخدمة: ${service?.name}\n💰 السعر: ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${selectedTime}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
     const waId = await sendWhatsAppMessage(phone, msg, settings);
     await saveBotMessage(supabase, convId, msg, waId);
