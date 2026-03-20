@@ -7,6 +7,7 @@ import AuthGuard from "@/components/AuthGuard";
 import Index from "./pages/Index";
 import Conversations from "./pages/Conversations";
 import Settings from "./pages/Settings";
+import BotAdmin from "./pages/BotAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/conversations" element={<Conversations />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/bot-admin" element={<BotAdmin />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthGuard>

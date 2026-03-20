@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { Settings, Send, MessageCircle, Check, CheckCheck, User, LogOut, Volume2, VolumeX } from "lucide-react";
+import { Settings, Send, MessageCircle, Check, CheckCheck, User, LogOut, Volume2, VolumeX, Bot } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useNotificationSound } from "@/hooks/use-notification-sound";
@@ -174,6 +174,9 @@ const Conversations = () => {
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={() => setSoundEnabled(!soundEnabled)} title={soundEnabled ? "كتم الصوت" : "تفعيل الصوت"}>
               {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => navigate("/bot-admin")} title="إدارة البوت">
+              <Bot className="h-4 w-4" />
             </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
               <Settings className="h-4 w-4" />

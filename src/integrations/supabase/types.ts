@@ -38,6 +38,108 @@ export type Database = {
         }
         Relationships: []
       }
+      bookings: {
+        Row: {
+          booking_date: string
+          booking_number: number
+          booking_time: string | null
+          created_at: string
+          customer_name: string | null
+          customer_phone: string
+          id: string
+          service_id: string
+          station_id: string
+          status: Database["public"]["Enums"]["booking_status"]
+        }
+        Insert: {
+          booking_date: string
+          booking_number?: number
+          booking_time?: string | null
+          created_at?: string
+          customer_name?: string | null
+          customer_phone: string
+          id?: string
+          service_id: string
+          station_id: string
+          status?: Database["public"]["Enums"]["booking_status"]
+        }
+        Update: {
+          booking_date?: string
+          booking_number?: number
+          booking_time?: string | null
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string
+          id?: string
+          service_id?: string
+          station_id?: string
+          status?: Database["public"]["Enums"]["booking_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: false
+            referencedRelation: "stations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_sessions: {
+        Row: {
+          current_step: string
+          customer_phone: string
+          expires_at: string
+          id: string
+          selected_date: string | null
+          selected_service_id: string | null
+          selected_station_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          current_step?: string
+          customer_phone: string
+          expires_at?: string
+          id?: string
+          selected_date?: string | null
+          selected_service_id?: string | null
+          selected_station_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          current_step?: string
+          customer_phone?: string
+          expires_at?: string
+          id?: string
+          selected_date?: string | null
+          selected_service_id?: string | null
+          selected_station_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_sessions_selected_service_id_fkey"
+            columns: ["selected_service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_sessions_selected_station_id_fkey"
+            columns: ["selected_station_id"]
+            isOneToOne: false
+            referencedRelation: "stations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           created_at: string
@@ -109,6 +211,83 @@ export type Database = {
           },
         ]
       }
+      services: {
+        Row: {
+          created_at: string
+          duration_minutes: number
+          id: string
+          is_active: boolean
+          name: string
+          price: number
+          sort_order: number
+          station_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          price?: number
+          sort_order?: number
+          station_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          price?: number
+          sort_order?: number
+          station_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "services_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: false
+            referencedRelation: "stations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stations: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          scheduling_type: Database["public"]["Enums"]["scheduling_type"]
+          slot_duration_minutes: number
+          working_hours_end: string
+          working_hours_start: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          scheduling_type?: Database["public"]["Enums"]["scheduling_type"]
+          slot_duration_minutes?: number
+          working_hours_end?: string
+          working_hours_start?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          scheduling_type?: Database["public"]["Enums"]["scheduling_type"]
+          slot_duration_minutes?: number
+          working_hours_end?: string
+          working_hours_start?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -117,7 +296,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      booking_status: "pending" | "confirmed" | "completed" | "cancelled"
+      scheduling_type: "slots" | "instant" | "daily"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -244,6 +424,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      booking_status: ["pending", "confirmed", "completed", "cancelled"],
+      scheduling_type: ["slots", "instant", "daily"],
+    },
   },
 } as const
