@@ -242,7 +242,7 @@ const BookingsTab = () => {
 
     let q = supabase.from("bookings").select("*, stations(name), services(name, price)").order("created_at", { ascending: false }).limit(100);
     if (filterStation !== "all") q = q.eq("station_id", filterStation);
-    if (filterStatus !== "all") q = q.eq("status", filterStatus);
+    if (filterStatus !== "all") q = q.eq("status", filterStatus as any);
     const { data } = await q;
     if (data) setBookings(data);
   }, [filterStation, filterStatus]);
