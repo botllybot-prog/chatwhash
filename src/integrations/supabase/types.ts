@@ -72,6 +72,7 @@ export type Database = {
           created_at: string
           direction: string
           id: string
+          media_url: string | null
           message_type: string
           status: string
           whatsapp_message_id: string | null
@@ -82,6 +83,7 @@ export type Database = {
           created_at?: string
           direction: string
           id?: string
+          media_url?: string | null
           message_type?: string
           status?: string
           whatsapp_message_id?: string | null
@@ -92,6 +94,7 @@ export type Database = {
           created_at?: string
           direction?: string
           id?: string
+          media_url?: string | null
           message_type?: string
           status?: string
           whatsapp_message_id?: string | null

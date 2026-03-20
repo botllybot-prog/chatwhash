@@ -36,6 +36,78 @@ async function verifySignature(body: string, signature: string, appSecret: strin
   }
 }
 
+// Get file extension from mime type
+function getExtension(mimeType: string): string {
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+    "audio/aac": "aac", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/amr": "amr",
+    "audio/ogg": "ogg", "audio/opus": "opus",
+    "video/mp4": "mp4", "video/3gp": "3gp",
+    "image/webp": "webp",
+  };
+  return map[mimeType] || mimeType.split("/")[1] || "bin";
+}
+
+// Download media from WhatsApp and upload to Supabase Storage
+async function downloadAndStoreMedia(
+  mediaId: string,
+  accessToken: string,
+  supabase: any,
+  messageType: string,
+  mimeType?: string
+): Promise<string | null> {
+  try {
+    // Step 1: Get media URL from WhatsApp
+    const mediaInfoRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!mediaInfoRes.ok) {
+      console.error("Failed to get media info:", await mediaInfoRes.text());
+      return null;
+    }
+    const mediaInfo = await mediaInfoRes.json();
+    const mediaUrl = mediaInfo.url;
+    const mediaMime = mimeType || mediaInfo.mime_type || "application/octet-stream";
+
+    // Step 2: Download the actual file
+    const fileRes = await fetch(mediaUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!fileRes.ok) {
+      console.error("Failed to download media:", fileRes.status);
+      return null;
+    }
+    const fileBlob = await fileRes.blob();
+
+    // Step 3: Upload to Supabase Storage
+    const ext = getExtension(mediaMime);
+    const filePath = `${messageType}/${mediaId}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("whatsapp-media")
+      .upload(filePath, fileBlob, {
+        contentType: mediaMime,
+        upsert: true,
+      });
+
+    if (uploadErr) {
+      console.error("Storage upload error:", uploadErr);
+      return null;
+    }
+
+    // Step 4: Get public URL
+    const { data: urlData } = supabase.storage
+      .from("whatsapp-media")
+      .getPublicUrl(filePath);
+
+    console.log(`Media stored: ${filePath}`);
+    return urlData?.publicUrl || null;
+  } catch (e) {
+    console.error("Media download/store error:", e);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -72,7 +144,6 @@ Deno.serve(async (req) => {
       const valid = await verifySignature(bodyText, signature, settings.WHATSAPP_APP_SECRET);
       if (!valid) {
         console.error("Invalid webhook signature");
-        // Still return 200 to prevent Meta from retrying
         return new Response(JSON.stringify({ success: false, reason: "invalid_signature" }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -122,22 +193,52 @@ Deno.serve(async (req) => {
               const messageType = msg.type || "text";
 
               let content = "";
+              let mediaId: string | null = null;
+              let mediaMime: string | undefined;
+
               switch (msg.type) {
-                case "text": content = msg.text?.body || ""; break;
-                case "image": content = msg.image?.caption || "📷 صورة"; break;
-                case "audio": content = "🎵 رسالة صوتية"; break;
-                case "video": content = msg.video?.caption || "🎥 فيديو"; break;
-                case "document": content = msg.document?.filename || "📄 مستند"; break;
-                case "sticker": content = "😊 ملصق"; break;
-                case "location": content = "📍 موقع"; break;
-                case "contacts": content = "👤 جهة اتصال"; break;
-                default: content = msg.type || "";
+                case "text":
+                  content = msg.text?.body || "";
+                  break;
+                case "image":
+                  content = msg.image?.caption || "📷 صورة";
+                  mediaId = msg.image?.id;
+                  mediaMime = msg.image?.mime_type;
+                  break;
+                case "audio":
+                  content = "🎵 رسالة صوتية";
+                  mediaId = msg.audio?.id;
+                  mediaMime = msg.audio?.mime_type;
+                  break;
+                case "video":
+                  content = msg.video?.caption || "🎥 فيديو";
+                  mediaId = msg.video?.id;
+                  mediaMime = msg.video?.mime_type;
+                  break;
+                case "document":
+                  content = msg.document?.filename || "📄 مستند";
+                  mediaId = msg.document?.id;
+                  mediaMime = msg.document?.mime_type;
+                  break;
+                case "sticker":
+                  content = "😊 ملصق";
+                  mediaId = msg.sticker?.id;
+                  mediaMime = msg.sticker?.mime_type;
+                  break;
+                case "location":
+                  content = "📍 موقع";
+                  break;
+                case "contacts":
+                  content = "👤 جهة اتصال";
+                  break;
+                default:
+                  content = msg.type || "";
               }
+
               const now = new Date().toISOString();
+              console.log(`Incoming ${messageType} from ${phone}: ${content.substring(0, 50)}`);
 
-              console.log(`Incoming message from ${phone}: ${content.substring(0, 50)}`);
-
-              // Step 1: Check for duplicate message
+              // Check for duplicate message
               if (msg.id) {
                 const { data: existingMsg } = await supabase
                   .from("messages")
@@ -150,7 +251,19 @@ Deno.serve(async (req) => {
                 }
               }
 
-              // Step 2: Find or create conversation (select first, insert if needed)
+              // Download and store media if applicable
+              let mediaUrl: string | null = null;
+              if (mediaId && settings.WHATSAPP_ACCESS_TOKEN) {
+                mediaUrl = await downloadAndStoreMedia(
+                  mediaId,
+                  settings.WHATSAPP_ACCESS_TOKEN,
+                  supabase,
+                  messageType,
+                  mediaMime
+                );
+              }
+
+              // Find or create conversation
               let convId: string;
               const { data: existingConv } = await supabase
                 .from("conversations")
@@ -162,7 +275,6 @@ Deno.serve(async (req) => {
 
               if (existingConv) {
                 convId = existingConv.id;
-                // Update last_message_at and customer_name
                 await supabase
                   .from("conversations")
                   .update({ last_message_at: now, customer_name: contactName })
@@ -181,7 +293,6 @@ Deno.serve(async (req) => {
 
                 if (newConvErr || !newConv) {
                   console.error("Failed to create conversation:", newConvErr);
-                  // Race condition: another request may have created it
                   const { data: retryConv } = await supabase
                     .from("conversations")
                     .select("id")
@@ -199,7 +310,7 @@ Deno.serve(async (req) => {
                 }
               }
 
-              // Step 3: Insert message
+              // Insert message with media_url
               const { error: msgErr } = await supabase
                 .from("messages")
                 .insert({
@@ -209,12 +320,13 @@ Deno.serve(async (req) => {
                   message_type: messageType,
                   whatsapp_message_id: msg.id,
                   status: "delivered",
+                  media_url: mediaUrl,
                 });
 
               if (msgErr) {
                 console.error("Message insert error:", msgErr);
               } else {
-                console.log(`Message saved for conversation ${convId}`);
+                console.log(`Message saved for conversation ${convId}${mediaUrl ? ' (with media)' : ''}`);
               }
             }
           }
@@ -224,7 +336,6 @@ Deno.serve(async (req) => {
       console.error("Error processing webhook:", error);
     }
 
-    // Always return 200 to Meta to prevent retries
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

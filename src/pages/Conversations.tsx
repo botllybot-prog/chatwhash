@@ -246,7 +246,7 @@ const Conversations = () => {
                       : "ml-auto bg-card text-card-foreground border border-border rounded-br-md"
                   )}
                 >
-                  <MessageContent content={msg.content} messageType={msg.message_type} direction={msg.direction} />
+                  <MessageContent content={msg.content} messageType={msg.message_type} direction={msg.direction} mediaUrl={(msg as any).media_url} />
                   <div className={cn(
                     "flex items-center gap-1 mt-1",
                     msg.direction === "outbound" ? "justify-start" : "justify-end"
