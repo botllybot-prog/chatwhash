@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MapPin, Clock, Navigation, Wrench, CalendarCheck, X, ChevronLeft } from "lucide-react";
+import { MapPin, Clock, Navigation, Wrench, CalendarCheck, X, ChevronLeft, Search } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
 // Fix leaflet default icon
