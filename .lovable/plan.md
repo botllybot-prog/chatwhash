@@ -1,113 +1,112 @@
 
 
-# بوت حجز غسيل السيارات عبر واتساب
+# خطة: نظام حسابات أصحاب المحطات مع طلبات التعديل وموافقة الأدمن
 
-## الفكرة العامة
-بوت تلقائي يعمل عبر واتساب يتيح للعملاء حجز خدمات غسيل السيارات باختيار المحطة والخدمة والموعد، مع لوحة إدارة كاملة لإدارة المحطات والخدمات والحجوزات ونوع المواعيد.
+## ملخص
+إنشاء نظام متعدد الأدوار يتيح للأدمن إنشاء حسابات لأصحاب المحطات، ولكل صاحب محطة لوحة خاصة تعرض بيانات محطته وحجوزاتها، مع نظام طلبات تعديل تحتاج موافقة الأدمن، وإشعارات داخل التطبيق وعبر واتساب.
 
-## تدفق المحادثة مع العميل
+## هيكل النظام
 
 ```text
-العميل: أي رسالة (مرحبا / حجز / أي شيء)
-    ↓
-البوت: مرحباً! اختر المحطة:
-  1. محطة الرياض
-  2. محطة جدة
-  3. محطة الدمام
-    ↓
-العميل: 1
-    ↓
-البوت: اختر الخدمة:
-  1. غسيل خارجي - 30 ريال
-  2. غسيل داخلي وخارجي - 50 ريال
-  3. تلميع وبوليش - 100 ريال
-    ↓
-العميل: 2
-    ↓
-البوت: اختر الموعد:          ← (يتغير حسب إعداد المحطة)
-  • فترات ثابتة: 10:00, 10:30, 11:00...
-  • فوري: "تأكيد الحجز الآن؟"
-  • يومي: "اختر اليوم: اليوم / غداً / ..."
-    ↓
-العميل: 10:30
-    ↓
-البوت: ✅ تم الحجز!
-  المحطة: الرياض
-  الخدمة: غسيل داخلي وخارجي
-  الموعد: اليوم 10:30
-  رقم الحجز: #1234
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│   أدمن          │     │  صاحب محطة           │     │  واتساب         │
+│  /bot-admin     │────▶│  /station-portal      │────▶│  إشعارات        │
+│  - إدارة كاملة  │     │  - عرض حجوزات        │     │  حجز جديد       │
+│  - إنشاء حسابات│     │  - طلب تعديل         │     └─────────────────┘
+│  - موافقة طلبات │     │  - إشعارات           │
+└─────────────────┘     └──────────────────────┘
 ```
 
 ---
 
-## التغييرات المطلوبة
+## 1. قاعدة البيانات (Migration)
 
-### 1. جداول قاعدة البيانات (Migration)
+### جداول جديدة:
 
-- **`stations`** — المحطات (الاسم، العنوان، ساعات العمل، نوع المواعيد، فترة الفاصل الزمني، حالة التفعيل)
-- **`services`** — الخدمات (الاسم، السعر، المدة، مرتبطة بمحطة أو عامة، حالة التفعيل)
-- **`bookings`** — الحجوزات (العميل، المحطة، الخدمة، التاريخ/الوقت، الحالة، رقم الحجز)
-- **`bot_sessions`** — حالة المحادثة الحالية مع كل عميل (المرحلة الحالية، المحطة المختارة، الخدمة المختارة، تاريخ انتهاء الجلسة)
+**`user_roles`** — أدوار المستخدمين (admin / station_owner)
+- `id`, `user_id` (FK auth.users), `role` (enum: admin, station_owner), unique(user_id, role)
 
-### 2. منطق البوت في الـ Webhook
-**ملف**: `supabase/functions/whatsapp-webhook/index.ts`
+**`station_owners`** — ربط صاحب المحطة بمحطته
+- `id`, `user_id` (FK auth.users), `station_id` (FK stations), `owner_name`, `owner_phone`, `created_at`
 
-إضافة دالة `handleBotLogic` تعمل كآلة حالات (state machine):
-- **`idle`**: رسالة ترحيب + عرض المحطات
-- **`awaiting_station`**: التحقق من اختيار المحطة + عرض الخدمات
-- **`awaiting_service`**: التحقق من اختيار الخدمة + عرض المواعيد
-- **`awaiting_time`**: التحقق من الموعد + تأكيد الحجز
-- **`0`** في أي مرحلة: العودة للقائمة الرئيسية
+**`edit_requests`** — طلبات التعديل المعلقة
+- `id`, `station_id`, `requested_by` (FK auth.users), `field_name`, `old_value`, `new_value`, `status` (enum: pending, approved, rejected), `admin_note`, `created_at`, `reviewed_at`
 
-البوت يرسل الردود عبر `whatsapp-send` أو مباشرة عبر WhatsApp API.
+**`notifications`** — إشعارات داخل التطبيق
+- `id`, `user_id`, `title`, `body`, `is_read`, `type` (booking, edit_request, etc.), `reference_id`, `created_at`
 
-### 3. صفحة إدارة المحطات والخدمات
-**ملف جديد**: `src/pages/BotAdmin.tsx`
+### تعديلات:
+- إضافة `owner_id` (nullable) إلى جدول `stations`
 
-لوحة تحكم تشمل:
-- **تبويب المحطات**: إضافة/تعديل/حذف محطات، ضبط ساعات العمل، اختيار نوع المواعيد (فترات ثابتة / فوري / يومي)
-- **تبويب الخدمات**: إضافة/تعديل/حذف خدمات مع الأسعار والمدة
-- **تبويب الحجوزات**: عرض جميع الحجوزات مع فلترة بالمحطة والحالة والتاريخ
-- **تبويب الإعدادات**: رسالة الترحيب، تفعيل/تعطيل البوت
+### Enums جديدة:
+- `app_role`: admin, station_owner
+- `edit_request_status`: pending, approved, rejected
 
-### 4. تحديث التوجيه
-إضافة مسار `/bot-admin` في `App.tsx` وربطه بالقائمة الجانبية.
+### دالة أمان:
+- `has_role(user_id, role)` — SECURITY DEFINER لفحص الدور بدون تكرار RLS
+
+### سياسات RLS:
+- `stations`: المالك يقرأ محطته فقط، الأدمن يقرأ/يعدل الكل
+- `bookings`: المالك يقرأ حجوزات محطته فقط
+- `services`: المالك يقرأ خدمات محطته فقط
+- `edit_requests`: المالك يُنشئ ويقرأ طلباته، الأدمن يقرأ/يعدل الكل
+- `notifications`: كل مستخدم يقرأ إشعاراته فقط
+
+---
+
+## 2. صفحات جديدة
+
+### `/station-portal` — لوحة صاحب المحطة
+- **معلومات المحطة**: عرض فقط (الاسم، العنوان، الصورة، ساعات العمل، نوع المواعيد، الحالة)
+- **طلب تعديل**: زر بجانب كل حقل يفتح نافذة لإدخال القيمة الجديدة → يُنشئ سجل في `edit_requests`
+- **الخدمات**: عرض خدمات المحطة (قراءة فقط) مع إمكانية طلب تعديل
+- **الحجوزات**: جدول حجوزات المحطة مع فلترة بالحالة والتاريخ
+- **الإشعارات**: جرس إشعارات يعرض الحجوزات الجديدة وحالة طلبات التعديل
+
+### تبويب جديد في `/bot-admin` — إدارة الحسابات
+- **إنشاء حساب صاحب محطة**: إدخال الاسم، البريد، كلمة المرور، اختيار المحطة → إنشاء مستخدم عبر Edge Function (service_role)
+- **عرض/تعديل/حذف الحسابات** الموجودة
+- **طلبات التعديل**: عرض الطلبات المعلقة مع أزرار موافقة/رفض → عند الموافقة يُطبق التعديل على الجدول الأصلي
+
+---
+
+## 3. Edge Functions
+
+### `create-station-owner` (جديدة)
+- تُنشئ مستخدم في auth.users عبر admin API
+- تُضيف دور station_owner في user_roles
+- تُضيف سجل في station_owners
+
+### `notify-station-owner` (جديدة)
+- تُرسل إشعار واتساب لصاحب المحطة عند حجز جديد
+- تستخدم قالب واتساب مُعد مسبقاً
+- تُستدعى من webhook عند إتمام حجز
+
+---
+
+## 4. تعديل AuthGuard والتوجيه
+- فحص دور المستخدم بعد تسجيل الدخول
+- `admin` → توجيه إلى `/bot-admin`
+- `station_owner` → توجيه إلى `/station-portal`
+- حماية المسارات حسب الدور
+
+---
+
+## 5. تعديل webhook الحجز
+- عند إتمام حجز جديد: إنشاء إشعار في جدول `notifications` + استدعاء `notify-station-owner` لإرسال رسالة واتساب
 
 ---
 
 ## التفاصيل التقنية
 
-**هيكل الجداول:**
-```text
-stations:
-  id, name, address, working_hours_start, working_hours_end,
-  slot_duration_minutes, scheduling_type (slots|instant|daily),
-  is_active, created_at
-
-services:
-  id, station_id (nullable = عام), name, price, 
-  duration_minutes, is_active, sort_order, created_at
-
-bookings:
-  id, booking_number (serial), customer_phone, customer_name,
-  station_id, service_id, booking_date, booking_time,
-  status (pending|confirmed|completed|cancelled), created_at
-
-bot_sessions:
-  id, customer_phone (unique), current_step, 
-  selected_station_id, selected_service_id, selected_date,
-  expires_at, updated_at
-```
-
-**منطق البوت**: يتحقق من `bot_sessions` لمعرفة مرحلة العميل الحالية. إذا لم توجد جلسة أو انتهت صلاحيتها (30 دقيقة)، يبدأ من البداية. الجلسة تُحدث بعد كل خطوة.
-
-**حساب المواعيد المتاحة**: يحسب الفترات بناءً على `working_hours_start/end` و`slot_duration_minutes`، ويستبعد الفترات المحجوزة بالفعل من جدول `bookings`.
-
 **الملفات المتأثرة:**
-- `supabase/migrations/` — migration جديد للجداول الأربعة
-- `supabase/functions/whatsapp-webhook/index.ts` — إضافة منطق البوت
-- `supabase/functions/whatsapp-send/index.ts` — بدون تغيير (يُستخدم لإرسال الردود)
-- `src/pages/BotAdmin.tsx` — صفحة إدارة جديدة
-- `src/App.tsx` — إضافة مسار جديد
-- `src/pages/Conversations.tsx` — إضافة رابط لصفحة الإدارة
+- `supabase/migrations/` — migration جديد (جداول + enums + RLS + دالة has_role)
+- `supabase/functions/create-station-owner/index.ts` — جديد
+- `supabase/functions/notify-station-owner/index.ts` — جديد
+- `supabase/functions/whatsapp-webhook/index.ts` — إضافة إشعار عند الحجز
+- `supabase/config.toml` — إضافة الدوال الجديدة
+- `src/pages/StationPortal.tsx` — صفحة جديدة
+- `src/pages/BotAdmin.tsx` — تبويبات جديدة (حسابات + طلبات تعديل)
+- `src/components/AuthGuard.tsx` — فحص الدور والتوجيه
+- `src/App.tsx` — مسار `/station-portal`
 
