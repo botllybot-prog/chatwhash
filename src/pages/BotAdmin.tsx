@@ -315,7 +315,8 @@ const BotAdmin = () => {
             <TabsTrigger value="services" className="gap-1"><Wrench className="h-4 w-4" />الخدمات</TabsTrigger>
             <TabsTrigger value="bookings" className="gap-1"><CalendarCheck className="h-4 w-4" />الحجوزات</TabsTrigger>
             <TabsTrigger value="owners" className="gap-1"><Users className="h-4 w-4" />الحسابات</TabsTrigger>
-            <TabsTrigger value="edit-requests" className="gap-1"><FileEdit className="h-4 w-4" />طلبات التعديل</TabsTrigger>
+             <TabsTrigger value="edit-requests" className="gap-1"><FileEdit className="h-4 w-4" />طلبات التعديل</TabsTrigger>
+            <TabsTrigger value="subscriptions" className="gap-1"><CreditCard className="h-4 w-4" />الاشتراكات</TabsTrigger>
             <TabsTrigger value="reports" className="gap-1"><BarChart3 className="h-4 w-4" />التقارير</TabsTrigger>
             <TabsTrigger value="settings" className="gap-1"><Settings className="h-4 w-4" />الإعدادات</TabsTrigger>
           </TabsList>
@@ -324,6 +325,7 @@ const BotAdmin = () => {
           <TabsContent value="bookings"><BookingsTab /></TabsContent>
           <TabsContent value="owners"><OwnersTab /></TabsContent>
           <TabsContent value="edit-requests"><EditRequestsTab /></TabsContent>
+          <TabsContent value="subscriptions"><SubscriptionsTab /></TabsContent>
           <TabsContent value="reports"><ReportsTab /></TabsContent>
           <TabsContent value="settings"><BotSettingsTab /></TabsContent>
         </Tabs>
