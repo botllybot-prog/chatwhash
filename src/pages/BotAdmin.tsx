@@ -253,7 +253,7 @@ const BookingsTab = () => {
   const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = { pending: "secondary", confirmed: "default", completed: "outline", cancelled: "destructive" };
 
   const updateStatus = async (id: string, status: string) => {
-    await supabase.from("bookings").update({ status }).eq("id", id);
+    await supabase.from("bookings").update({ status: status as any }).eq("id", id);
     load();
     toast({ title: "تم تحديث الحالة" });
   };
