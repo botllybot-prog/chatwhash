@@ -3,9 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { CalendarCheck, DollarSign, TrendingUp, Users } from "lucide-react";
+import { CalendarCheck, DollarSign, TrendingUp, Users, Download, FileSpreadsheet } from "lucide-react";
+import * as XLSX from "xlsx";
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
@@ -79,19 +81,87 @@ const ReportsTab = () => {
     value: count,
   }));
 
+  const statusLabelsExport: Record<string, string> = { pending: "قيد الانتظار", confirmed: "مؤكد", completed: "مكتمل", cancelled: "ملغي" };
+
+  const getExportRows = () => bookings.map(b => ({
+    "رقم الحجز": b.booking_number,
+    "رقم العميل": b.customer_phone,
+    "اسم العميل": b.customer_name || "-",
+    "المحطة": (b as any).stations?.name || "-",
+    "الخدمة": (b as any).services?.name || "-",
+    "السعر (د.ع)": (b as any).services?.price || 0,
+    "التاريخ": b.booking_date,
+    "الوقت": b.booking_time?.substring(0, 5) || "-",
+    "الحالة": statusLabelsExport[b.status] || b.status,
+  }));
+
+  const exportCSV = () => {
+    const rows = getExportRows();
+    if (rows.length === 0) return;
+    const headers = Object.keys(rows[0]);
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(r => headers.map(h => `"${(r as any)[h]}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `حجوزات_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportExcel = () => {
+    const rows = getExportRows();
+    if (rows.length === 0) return;
+
+    const wb = XLSX.utils.book_new();
+
+    // Bookings sheet
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = Object.keys(rows[0]).map(() => ({ wch: 18 }));
+    XLSX.utils.book_append_sheet(wb, ws, "الحجوزات");
+
+    // Summary sheet
+    const summaryData = [
+      ["التقرير", `آخر ${period} يوم`],
+      ["إجمالي الحجوزات", totalBookings],
+      ["الإيرادات (د.ع)", totalRevenue],
+      ["الحجوزات المكتملة", completedBookings],
+      ["عدد العملاء", uniqueCustomers],
+      [],
+      ["أكثر الخدمات طلباً", "عدد الحجوزات", "الإيرادات (د.ع)"],
+      ...topServices.map(s => [s.name, s.count, s.revenue]),
+      [],
+      ["توزيع المحطات", "عدد الحجوزات", "النسبة"],
+      ...stationData.map(s => [s.name, s.count, totalBookings > 0 ? `${((s.count / totalBookings) * 100).toFixed(0)}%` : "0%"]),
+    ];
+    const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
+    ws2["!cols"] = [{ wch: 25 }, { wch: 18 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "ملخص");
+
+    XLSX.writeFile(wb, `تقرير_حجوزات_${new Date().toISOString().split("T")[0]}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-3">
         <h3 className="text-lg font-semibold text-foreground">التقارير والإحصائيات</h3>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7">آخر 7 أيام</SelectItem>
-            <SelectItem value="30">آخر 30 يوم</SelectItem>
-            <SelectItem value="90">آخر 3 أشهر</SelectItem>
-            <SelectItem value="365">آخر سنة</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportCSV} disabled={bookings.length === 0}>
+            <Download className="h-4 w-4 ml-1" />CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportExcel} disabled={bookings.length === 0}>
+            <FileSpreadsheet className="h-4 w-4 ml-1" />Excel
+          </Button>
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">آخر 7 أيام</SelectItem>
+              <SelectItem value="30">آخر 30 يوم</SelectItem>
+              <SelectItem value="90">آخر 3 أشهر</SelectItem>
+              <SelectItem value="365">آخر سنة</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Summary Cards */}
