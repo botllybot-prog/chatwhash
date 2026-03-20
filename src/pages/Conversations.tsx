@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,18 @@ import type { Tables } from "@/integrations/supabase/types";
 type Conversation = Tables<"conversations">;
 type Message = Tables<"messages">;
 
+const StatusIcon = ({ status }: { status: string }) => {
+  if (status === "read") return <CheckCheck className="h-3.5 w-3.5 text-blue-500" />;
+  if (status === "delivered") return <CheckCheck className="h-3.5 w-3.5 text-muted-foreground" />;
+  if (status === "sent") return <Check className="h-3.5 w-3.5 text-muted-foreground" />;
+  return null;
+};
+
+const formatTime = (dateStr: string) => {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
+};
+
 const Conversations = () => {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -19,32 +31,38 @@ const Conversations = () => {
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Load conversations
+  const loadConversations = useCallback(async () => {
+    const { data } = await supabase
+      .from("conversations")
+      .select("*")
+      .order("last_message_at", { ascending: false });
+    if (data) setConversations(data);
+  }, []);
+
+  // Load conversations + realtime
   useEffect(() => {
-    const loadConversations = async () => {
-      const { data } = await supabase
-        .from("conversations")
-        .select("*")
-        .order("last_message_at", { ascending: false });
-      if (data) setConversations(data);
-    };
     loadConversations();
 
-    // Realtime subscription for conversations
     const channel = supabase
-      .channel("conversations-changes")
+      .channel("conv-list")
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
         loadConversations();
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadConversations]);
 
-  // Load messages for selected conversation
+  // Load messages for selected conversation + realtime
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId) {
+      setMessages([]);
+      return;
+    }
 
     const loadMessages = async () => {
       const { data } = await supabase
@@ -56,8 +74,15 @@ const Conversations = () => {
     };
     loadMessages();
 
+    // Clean up previous channel
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    const channelName = `msgs-${selectedId}-${Date.now()}`;
     const channel = supabase
-      .channel(`messages-${selectedId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${selectedId}` },
@@ -65,7 +90,14 @@ const Conversations = () => {
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    channelRef.current = channel;
+
+    return () => {
+      if (channelRef.current === channel) {
+        supabase.removeChannel(channel);
+        channelRef.current = null;
+      }
+    };
   }, [selectedId]);
 
   // Auto scroll
@@ -97,18 +129,6 @@ const Conversations = () => {
       toast({ title: "خطأ في الإرسال", description: e.message || "فشل في إرسال الرسالة", variant: "destructive" });
     }
     setSending(false);
-  };
-
-  const formatTime = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
-  };
-
-  const StatusIcon = ({ status }: { status: string }) => {
-    if (status === "read") return <CheckCheck className="h-3.5 w-3.5 text-blue-500" />;
-    if (status === "delivered") return <CheckCheck className="h-3.5 w-3.5 text-muted-foreground" />;
-    if (status === "sent") return <Check className="h-3.5 w-3.5 text-muted-foreground" />;
-    return null;
   };
 
   return (
@@ -151,9 +171,7 @@ const Conversations = () => {
                     <p className="font-medium text-foreground truncate">
                       {conv.customer_name || conv.customer_phone}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {conv.customer_phone}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{conv.customer_phone}</p>
                   </div>
                   {conv.last_message_at && (
                     <span className="text-xs text-muted-foreground shrink-0">
@@ -171,7 +189,6 @@ const Conversations = () => {
       <div className="flex-1 flex flex-col">
         {selectedConv ? (
           <>
-            {/* Header */}
             <div className="p-4 border-b border-border bg-card flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
                 <User className="h-5 w-5 text-primary" />
@@ -184,7 +201,6 @@ const Conversations = () => {
               </div>
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
               {messages.map((msg) => (
                 <div
@@ -209,7 +225,6 @@ const Conversations = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
             <div className="p-4 border-t border-border bg-card">
               <div className="flex gap-2">
                 <Input
