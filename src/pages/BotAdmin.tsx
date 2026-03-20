@@ -75,7 +75,7 @@ const StationsTab = () => {
                 <div><Label>نهاية العمل</Label><Input type="time" value={form.working_hours_end} onChange={(e) => setForm({ ...form, working_hours_end: e.target.value })} /></div>
               </div>
               <div><Label>نوع المواعيد</Label>
-                <Select value={form.scheduling_type} onValueChange={(v) => setForm({ ...form, scheduling_type: v })}>
+                <Select value={form.scheduling_type} onValueChange={(v: "slots" | "instant" | "daily") => setForm({ ...form, scheduling_type: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="slots">فترات زمنية ثابتة</SelectItem>
