@@ -448,8 +448,9 @@ const StationPortal = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <Tabs defaultValue="info" dir="rtl">
+        <Tabs defaultValue="dashboard" dir="rtl">
           <TabsList className="mb-6">
+            <TabsTrigger value="dashboard" className="gap-1"><LayoutDashboard className="h-4 w-4" />الإحصائيات</TabsTrigger>
             <TabsTrigger value="info" className="gap-1"><Store className="h-4 w-4" />المحطة</TabsTrigger>
             <TabsTrigger value="services" className="gap-1"><Wrench className="h-4 w-4" />الخدمات</TabsTrigger>
             <TabsTrigger value="bookings" className="gap-1"><CalendarCheck className="h-4 w-4" />الحجوزات</TabsTrigger>
@@ -459,6 +460,7 @@ const StationPortal = () => {
             </TabsTrigger>
             <TabsTrigger value="edit-requests" className="gap-1"><Pencil className="h-4 w-4" />طلبات التعديل</TabsTrigger>
           </TabsList>
+          <TabsContent value="dashboard"><StatsDashboard stationId={stationId} /></TabsContent>
           <TabsContent value="info"><StationInfoTab stationId={stationId} /></TabsContent>
           <TabsContent value="services"><StationServicesTab stationId={stationId} /></TabsContent>
           <TabsContent value="bookings"><StationBookingsTab stationId={stationId} /></TabsContent>
