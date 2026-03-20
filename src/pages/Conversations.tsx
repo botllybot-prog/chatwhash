@@ -26,6 +26,8 @@ const formatTime = (dateStr: string) => {
 
 const Conversations = () => {
   const navigate = useNavigate();
+  const playNotification = useNotificationSound();
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -33,6 +35,7 @@ const Conversations = () => {
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const soundEnabledRef = useRef(true);
 
   const loadConversations = useCallback(async () => {
     const { data } = await supabase
