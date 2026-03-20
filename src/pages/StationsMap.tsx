@@ -290,6 +290,33 @@ const StationsMap = () => {
     }
   };
 
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.trim().toLowerCase();
+    return stations.filter((s) =>
+      s.name.toLowerCase().includes(q) ||
+      (s.address && s.address.toLowerCase().includes(q)) ||
+      (s.detailed_address && s.detailed_address.toLowerCase().includes(q))
+    ).slice(0, 5);
+  }, [searchQuery, stations]);
+
+  const handleSearchSelect = (station: Station) => {
+    setSearchQuery("");
+    setSearchOpen(false);
+    handleMarkerClick(station);
+  };
+
+  // Close search dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   // Center on Iraq by default
   const defaultCenter: [number, number] = [33.3, 44.4];
 
