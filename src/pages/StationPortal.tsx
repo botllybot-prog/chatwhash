@@ -17,19 +17,22 @@ import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Imag
 // ==================== STATS DASHBOARD ====================
 const StatsDashboard = ({ stationId }: { stationId: string }) => {
   const [stats, setStats] = useState({ todayBookings: 0, todayRevenue: 0, pendingBookings: 0, completedBookings: 0, weekRevenue: 0, totalBookings: 0 });
+  const [dailyRevenue, setDailyRevenue] = useState<{ date: string; revenue: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       const today = new Date().toISOString().split("T")[0];
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-      const [todayRes, pendingRes, completedRes, weekRes, totalRes] = await Promise.all([
+      const [todayRes, pendingRes, completedRes, weekRes, totalRes, last30Res] = await Promise.all([
         supabase.from("bookings").select("id, services(price)").eq("station_id", stationId).eq("booking_date", today).in("status", ["pending", "confirmed", "completed"] as any),
         supabase.from("bookings").select("id", { count: "exact", head: true }).eq("station_id", stationId).eq("status", "pending" as any),
         supabase.from("bookings").select("id", { count: "exact", head: true }).eq("station_id", stationId).eq("status", "completed" as any),
         supabase.from("bookings").select("id, services(price)").eq("station_id", stationId).gte("booking_date", weekAgo).in("status", ["confirmed", "completed"] as any),
         supabase.from("bookings").select("id", { count: "exact", head: true }).eq("station_id", stationId),
+        supabase.from("bookings").select("booking_date, services(price)").eq("station_id", stationId).gte("booking_date", thirtyDaysAgo).in("status", ["confirmed", "completed"] as any),
       ]);
 
       const todayBookings = todayRes.data?.length || 0;
@@ -44,6 +47,24 @@ const StatsDashboard = ({ stationId }: { stationId: string }) => {
         weekRevenue,
         totalBookings: totalRes.count || 0,
       });
+
+      // Build daily revenue map for last 30 days
+      const revenueMap: Record<string, number> = {};
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        revenueMap[d] = 0;
+      }
+      last30Res.data?.forEach((b: any) => {
+        const date = b.booking_date;
+        if (revenueMap[date] !== undefined) {
+          revenueMap[date] += b.services?.price || 0;
+        }
+      });
+      setDailyRevenue(Object.entries(revenueMap).map(([date, revenue]) => ({
+        date: new Date(date).toLocaleDateString("ar-IQ", { day: "numeric", month: "short" }),
+        revenue,
+      })));
+
       setLoading(false);
     };
     load();
@@ -61,7 +82,7 @@ const StatsDashboard = ({ stationId }: { stationId: string }) => {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <h3 className="text-lg font-semibold text-foreground">الإحصائيات</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {cards.map((c, i) => (
@@ -77,6 +98,29 @@ const StatsDashboard = ({ stationId }: { stationId: string }) => {
           </Card>
         ))}
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">الإيرادات اليومية — آخر 30 يوم</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dailyRevenue} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} className="fill-muted-foreground" interval={2} />
+                <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", direction: "rtl" }}
+                  labelStyle={{ color: "hsl(var(--foreground))" }}
+                  formatter={(value: number) => [`${value.toLocaleString()} د.ع`, "الإيرادات"]}
+                />
+                <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
