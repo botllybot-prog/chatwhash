@@ -175,6 +175,9 @@ const Conversations = () => {
             <Button variant="ghost" size="icon" onClick={() => setSoundEnabled(!soundEnabled)} title={soundEnabled ? "كتم الصوت" : "تفعيل الصوت"}>
               {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             </Button>
+            <Button variant="ghost" size="icon" onClick={() => navigate("/bot-admin")} title="إدارة البوت">
+              <Bot className="h-4 w-4" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
               <Settings className="h-4 w-4" />
             </Button>
