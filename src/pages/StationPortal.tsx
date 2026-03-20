@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image } from "lucide-react";
+import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle } from "lucide-react";
 
 // ==================== STATION INFO TAB ====================
 const StationInfoTab = ({ stationId }: { stationId: string }) => {
