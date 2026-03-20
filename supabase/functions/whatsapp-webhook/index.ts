@@ -179,8 +179,15 @@ function generateTimeSlots(start: string, end: string, durationMin: number): str
 
 async function notifyStationOwner(supabase: any, bookingId: string, stationId: string) {
   try {
-    await supabase.functions.invoke("notify-station-owner", {
-      body: { booking_id: bookingId, station_id: stationId },
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    await fetch(`${supabaseUrl}/functions/v1/notify-station-owner`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({ booking_id: bookingId, station_id: stationId }),
     });
   } catch (e) {
     console.error("Failed to notify station owner:", e);
