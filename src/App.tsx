@@ -25,6 +25,7 @@ const App = () => (
             <Route path="/conversations" element={<Conversations />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/bot-admin" element={<BotAdmin />} />
+            <Route path="/station-portal" element={<StationPortal />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthGuard>
