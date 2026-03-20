@@ -170,6 +170,53 @@ export type Database = {
         }
         Relationships: []
       }
+      edit_requests: {
+        Row: {
+          admin_note: string | null
+          created_at: string
+          field_name: string
+          id: string
+          new_value: string
+          old_value: string | null
+          requested_by: string
+          reviewed_at: string | null
+          station_id: string
+          status: Database["public"]["Enums"]["edit_request_status"]
+        }
+        Insert: {
+          admin_note?: string | null
+          created_at?: string
+          field_name: string
+          id?: string
+          new_value: string
+          old_value?: string | null
+          requested_by: string
+          reviewed_at?: string | null
+          station_id: string
+          status?: Database["public"]["Enums"]["edit_request_status"]
+        }
+        Update: {
+          admin_note?: string | null
+          created_at?: string
+          field_name?: string
+          id?: string
+          new_value?: string
+          old_value?: string | null
+          requested_by?: string
+          reviewed_at?: string | null
+          station_id?: string
+          status?: Database["public"]["Enums"]["edit_request_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "edit_requests_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: false
+            referencedRelation: "stations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string
@@ -214,6 +261,39 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          is_read: boolean
+          reference_id: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          reference_id?: string | null
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          reference_id?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       services: {
         Row: {
           created_at: string
@@ -248,6 +328,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "services_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: false
+            referencedRelation: "stations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      station_owners: {
+        Row: {
+          created_at: string
+          id: string
+          owner_name: string
+          owner_phone: string | null
+          station_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_name: string
+          owner_phone?: string | null
+          station_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_name?: string
+          owner_phone?: string | null
+          station_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "station_owners_station_id_fkey"
             columns: ["station_id"]
             isOneToOne: false
             referencedRelation: "stations"
@@ -303,15 +418,45 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_owner_station_id: { Args: { _user_id: string }; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
+      app_role: "admin" | "station_owner"
       booking_status: "pending" | "confirmed" | "completed" | "cancelled"
+      edit_request_status: "pending" | "approved" | "rejected"
       scheduling_type: "slots" | "instant" | "daily"
     }
     CompositeTypes: {
@@ -440,7 +585,9 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "station_owner"],
       booking_status: ["pending", "confirmed", "completed", "cancelled"],
+      edit_request_status: ["pending", "approved", "rejected"],
       scheduling_type: ["slots", "instant", "daily"],
     },
   },
