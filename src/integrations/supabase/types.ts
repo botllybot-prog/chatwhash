@@ -259,8 +259,12 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          detailed_address: string | null
           id: string
+          image_url: string | null
           is_active: boolean
+          latitude: number | null
+          longitude: number | null
           name: string
           scheduling_type: Database["public"]["Enums"]["scheduling_type"]
           slot_duration_minutes: number
@@ -270,8 +274,12 @@ export type Database = {
         Insert: {
           address?: string | null
           created_at?: string
+          detailed_address?: string | null
           id?: string
+          image_url?: string | null
           is_active?: boolean
+          latitude?: number | null
+          longitude?: number | null
           name: string
           scheduling_type?: Database["public"]["Enums"]["scheduling_type"]
           slot_duration_minutes?: number
@@ -281,8 +289,12 @@ export type Database = {
         Update: {
           address?: string | null
           created_at?: string
+          detailed_address?: string | null
           id?: string
+          image_url?: string | null
           is_active?: boolean
+          latitude?: number | null
+          longitude?: number | null
           name?: string
           scheduling_type?: Database["public"]["Enums"]["scheduling_type"]
           slot_duration_minutes?: number

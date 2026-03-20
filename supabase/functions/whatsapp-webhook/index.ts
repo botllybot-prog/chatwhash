@@ -215,7 +215,7 @@ async function handleBotLogic(
       const statusLabel = b.status === "confirmed" ? "مؤكد ✅" : "قيد الانتظار ⏳";
       msg += `🔢 #${b.booking_number} - ${statusLabel}\n`;
       msg += `   🏪 ${b.stations?.name || "-"}\n`;
-      msg += `   🧽 ${b.services?.name || "-"} - ${b.services?.price || 0} ريال\n`;
+      msg += `   🧽 ${b.services?.name || "-"} - ${b.services?.price || 0} د.ع\n`;
       msg += `   📅 ${b.booking_date}${b.booking_time ? " ⏰ " + b.booking_time.substring(0, 5) : ""}\n\n`;
     });
     msg += "لإلغاء حجز أرسل: إلغاء #رقم_الحجز\nمثال: إلغاء #" + bookings[0].booking_number;
@@ -360,7 +360,7 @@ async function handleBotLogic(
 
       let msg = `اختر الخدمة الجديدة للحجز #${bookingNum}:\n\n`;
       services.forEach((s: any, i: number) => {
-        msg += `${i + 1}. ${s.name} - ${s.price} ريال\n`;
+        msg += `${i + 1}. ${s.name} - ${s.price} د.ع\n`;
       });
       msg += "\nأرسل 0 للعودة";
 
@@ -386,7 +386,7 @@ async function handleBotLogic(
         for (let i = 0; i < 7; i++) {
           const d = new Date();
           d.setDate(d.getDate() + i);
-          const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-SA", { weekday: "long", month: "short", day: "numeric" });
+          const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { weekday: "long", month: "short", day: "numeric" });
           days.push({ label });
         }
         let msg = `اختر اليوم الجديد للحجز #${bookingNum}:\n\n`;
@@ -463,7 +463,7 @@ async function handleBotLogic(
     const newService = services[idx];
     await supabase.from("bookings").update({ service_id: newService.id }).eq("booking_number", bookingNum).eq("customer_phone", phone);
 
-    const msg = `✅ تم تعديل الحجز #${bookingNum}\n🧽 الخدمة الجديدة: ${newService.name} - ${newService.price} ريال\n\nأرسل أي رسالة للمتابعة.`;
+    const msg = `✅ تم تعديل الحجز #${bookingNum}\n🧽 الخدمة الجديدة: ${newService.name} - ${newService.price} د.ع\n\nأرسل أي رسالة للمتابعة.`;
     const waId = await sendWhatsAppMessage(phone, msg, settings);
     await saveBotMessage(supabase, convId, msg, waId);
     await updateSession(supabase, phone, { current_step: "idle", selected_station_id: null, selected_service_id: null, selected_date: null });
@@ -491,7 +491,7 @@ async function handleBotLogic(
     const newDate = days[idx];
     await supabase.from("bookings").update({ booking_date: newDate }).eq("booking_number", bookingNum).eq("customer_phone", phone);
 
-    const dateLabel = new Date(newDate).toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const dateLabel = new Date(newDate).toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
     const msg = `✅ تم تعديل الحجز #${bookingNum}\n📅 التاريخ الجديد: ${dateLabel}\n\nأرسل أي رسالة للمتابعة.`;
     const waId = await sendWhatsAppMessage(phone, msg, settings);
     await saveBotMessage(supabase, convId, msg, waId);
@@ -594,7 +594,7 @@ async function handleBotLogic(
 
     let msg = `✅ اخترت: ${station.name}\n\nاختر الخدمة:\n`;
     services.forEach((s: any, i: number) => {
-      msg += `${i + 1}. ${s.name} - ${s.price} ريال\n`;
+      msg += `${i + 1}. ${s.name} - ${s.price} د.ع\n`;
     });
     msg += "\nأرسل رقم الخدمة للاختيار\nأرسل 0 للعودة للقائمة الرئيسية";
 
@@ -641,7 +641,7 @@ async function handleBotLogic(
         .select("booking_number")
         .single();
 
-      const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station.name}\n🧽 الخدمة: ${service.name}\n💰 السعر: ${service.price} ريال\n📅 التاريخ: اليوم\n⏰ الوقت: الآن\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
+      const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station.name}\n🧽 الخدمة: ${service.name}\n💰 السعر: ${service.price} د.ع\n📅 التاريخ: اليوم\n⏰ الوقت: الآن\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
       const waId = await sendWhatsAppMessage(phone, msg, settings);
       await saveBotMessage(supabase, convId, msg, waId);
       await updateSession(supabase, phone, { current_step: "idle", selected_station_id: null, selected_service_id: null, selected_date: null });
@@ -653,11 +653,11 @@ async function handleBotLogic(
       for (let i = 0; i < 7; i++) {
         const d = new Date();
         d.setDate(d.getDate() + i);
-        const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-SA", { weekday: "long", month: "short", day: "numeric" });
+        const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { weekday: "long", month: "short", day: "numeric" });
         days.push({ date: d.toISOString().split("T")[0], label });
       }
 
-      let msg = `✅ اخترت: ${service.name} - ${service.price} ريال\n\nاختر اليوم:\n`;
+      let msg = `✅ اخترت: ${service.name} - ${service.price} د.ع\n\nاختر اليوم:\n`;
       days.forEach((d, i) => {
         msg += `${i + 1}. ${d.label}\n`;
       });
@@ -694,7 +694,7 @@ async function handleBotLogic(
       return true;
     }
 
-    let msg = `✅ اخترت: ${service.name} - ${service.price} ريال\n\nالمواعيد المتاحة اليوم:\n`;
+    let msg = `✅ اخترت: ${service.name} - ${service.price} د.ع\n\nالمواعيد المتاحة اليوم:\n`;
     available.forEach((s, i) => {
       msg += `${i + 1}. ${s}\n`;
     });
@@ -741,8 +741,8 @@ async function handleBotLogic(
       .select("booking_number")
       .single();
 
-    const dateLabel = new Date(selectedDate).toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-    const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station?.name}\n🧽 الخدمة: ${service?.name}\n💰 السعر: ${service?.price} ريال\n📅 التاريخ: ${dateLabel}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
+    const dateLabel = new Date(selectedDate).toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station?.name}\n🧽 الخدمة: ${service?.name}\n💰 السعر: ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
     const waId = await sendWhatsAppMessage(phone, msg, settings);
     await saveBotMessage(supabase, convId, msg, waId);
     await updateSession(supabase, phone, { current_step: "idle", selected_station_id: null, selected_service_id: null, selected_date: null });
@@ -798,8 +798,8 @@ async function handleBotLogic(
       .select("booking_number")
       .single();
 
-    const dateLabel = new Date(bookingDate).toLocaleDateString("ar-SA", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-    const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station.name}\n🧽 الخدمة: ${service?.name}\n💰 السعر: ${service?.price} ريال\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${selectedTime}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
+    const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const msg = `✅ تم الحجز بنجاح!\n\n📋 تفاصيل الحجز:\n🏪 المحطة: ${station.name}\n🧽 الخدمة: ${service?.name}\n💰 السعر: ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${selectedTime}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\nشكراً لاختيارك خدمتنا! 🚗✨\nأرسل أي رسالة لحجز جديد`;
     const waId = await sendWhatsAppMessage(phone, msg, settings);
     await saveBotMessage(supabase, convId, msg, waId);
     await updateSession(supabase, phone, { current_step: "idle", selected_station_id: null, selected_service_id: null, selected_date: null });

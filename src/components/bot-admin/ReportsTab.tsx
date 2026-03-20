@@ -113,7 +113,7 @@ const ReportsTab = () => {
               <div className="p-2 rounded-lg bg-primary/10"><DollarSign className="h-5 w-5 text-primary" /></div>
               <div>
                 <p className="text-sm text-muted-foreground">الإيرادات</p>
-                <p className="text-2xl font-bold text-foreground">{totalRevenue} ريال</p>
+                <p className="text-2xl font-bold text-foreground">{totalRevenue} د.ع</p>
               </div>
             </div>
           </CardContent>
@@ -201,7 +201,7 @@ const ReportsTab = () => {
                       </div>
                     </TableCell>
                     <TableCell>{s.count}</TableCell>
-                    <TableCell>{s.revenue} ريال</TableCell>
+                    <TableCell>{s.revenue} د.ع</TableCell>
                   </TableRow>
                 ))}
                 {topServices.length === 0 && <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-6">لا توجد بيانات</TableCell></TableRow>}

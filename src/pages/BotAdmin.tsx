@@ -14,115 +14,7 @@ import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Plus, Pencil, Trash2, Store, Wrench, CalendarCheck, Settings, Bot, BarChart3, Bell } from "lucide-react";
 import ReportsTab from "@/components/bot-admin/ReportsTab";
-import { Textarea } from "@/components/ui/textarea";
-
-// ==================== STATIONS TAB ====================
-const StationsTab = () => {
-  const [stations, setStations] = useState<any[]>([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", address: "", working_hours_start: "08:00", working_hours_end: "22:00", slot_duration_minutes: 30, scheduling_type: "slots" as "slots" | "instant" | "daily", is_active: true });
-
-  const load = useCallback(async () => {
-    const { data } = await supabase.from("stations").select("*").order("created_at");
-    if (data) setStations(data);
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const handleSave = async () => {
-    if (!form.name.trim()) { toast({ title: "الاسم مطلوب", variant: "destructive" }); return; }
-    const payload = { ...form, slot_duration_minutes: Number(form.slot_duration_minutes) };
-    if (editing) {
-      await supabase.from("stations").update(payload).eq("id", editing.id);
-    } else {
-      await supabase.from("stations").insert(payload);
-    }
-    setDialogOpen(false);
-    setEditing(null);
-    setForm({ name: "", address: "", working_hours_start: "08:00", working_hours_end: "22:00", slot_duration_minutes: 30, scheduling_type: "slots", is_active: true });
-    load();
-    toast({ title: editing ? "تم التحديث" : "تمت الإضافة" });
-  };
-
-  const handleDelete = async (id: string) => {
-    await supabase.from("stations").delete().eq("id", id);
-    load();
-    toast({ title: "تم الحذف" });
-  };
-
-  const openEdit = (s: any) => {
-    setEditing(s);
-    setForm({ name: s.name, address: s.address || "", working_hours_start: s.working_hours_start, working_hours_end: s.working_hours_end, slot_duration_minutes: s.slot_duration_minutes, scheduling_type: s.scheduling_type, is_active: s.is_active });
-    setDialogOpen(true);
-  };
-
-  const schedulingLabels: Record<string, string> = { slots: "فترات ثابتة", instant: "حجز فوري", daily: "يومي" };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-foreground">المحطات</h3>
-        <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setEditing(null); setForm({ name: "", address: "", working_hours_start: "08:00", working_hours_end: "22:00", slot_duration_minutes: 30, scheduling_type: "slots", is_active: true }); } }}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="h-4 w-4 ml-1" />إضافة محطة</Button>
-          </DialogTrigger>
-          <DialogContent dir="rtl">
-            <DialogHeader><DialogTitle>{editing ? "تعديل محطة" : "إضافة محطة جديدة"}</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>اسم المحطة</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="محطة الرياض" /></div>
-              <div><Label>العنوان</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="حي النخيل" /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>بداية العمل</Label><Input type="time" value={form.working_hours_start} onChange={(e) => setForm({ ...form, working_hours_start: e.target.value })} /></div>
-                <div><Label>نهاية العمل</Label><Input type="time" value={form.working_hours_end} onChange={(e) => setForm({ ...form, working_hours_end: e.target.value })} /></div>
-              </div>
-              <div><Label>نوع المواعيد</Label>
-                <Select value={form.scheduling_type} onValueChange={(v: "slots" | "instant" | "daily") => setForm({ ...form, scheduling_type: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="slots">فترات زمنية ثابتة</SelectItem>
-                    <SelectItem value="instant">حجز فوري</SelectItem>
-                    <SelectItem value="daily">اختيار اليوم فقط</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {form.scheduling_type === "slots" && (
-                <div><Label>مدة الفترة (دقائق)</Label><Input type="number" value={form.slot_duration_minutes} onChange={(e) => setForm({ ...form, slot_duration_minutes: Number(e.target.value) })} /></div>
-              )}
-              <div className="flex items-center gap-2">
-                <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
-                <Label>مفعّلة</Label>
-              </div>
-              <Button onClick={handleSave} className="w-full">{editing ? "تحديث" : "إضافة"}</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <Table>
-        <TableHeader><TableRow><TableHead>المحطة</TableHead><TableHead>العنوان</TableHead><TableHead>ساعات العمل</TableHead><TableHead>نوع المواعيد</TableHead><TableHead>الحالة</TableHead><TableHead>إجراءات</TableHead></TableRow></TableHeader>
-        <TableBody>
-          {stations.map((s) => (
-            <TableRow key={s.id}>
-              <TableCell className="font-medium">{s.name}</TableCell>
-              <TableCell>{s.address || "-"}</TableCell>
-              <TableCell>{s.working_hours_start?.substring(0, 5)} - {s.working_hours_end?.substring(0, 5)}</TableCell>
-              <TableCell><Badge variant="secondary">{schedulingLabels[s.scheduling_type] || s.scheduling_type}</Badge></TableCell>
-              <TableCell><Badge variant={s.is_active ? "default" : "outline"}>{s.is_active ? "مفعّلة" : "معطلة"}</Badge></TableCell>
-              <TableCell>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-          {stations.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">لا توجد محطات بعد</TableCell></TableRow>}
-        </TableBody>
-      </Table>
-    </div>
-  );
-};
+import StationsTab from "@/components/bot-admin/StationsTab";
 
 // ==================== SERVICES TAB ====================
 const ServicesTab = () => {
@@ -183,7 +75,7 @@ const ServicesTab = () => {
             <div className="space-y-4">
               <div><Label>اسم الخدمة</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="غسيل خارجي" /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>السعر (ريال)</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></div>
+                <div><Label>السعر (دينار عراقي)</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></div>
                 <div><Label>المدة (دقائق)</Label><Input type="number" value={form.duration_minutes} onChange={(e) => setForm({ ...form, duration_minutes: Number(e.target.value) })} /></div>
               </div>
               <div><Label>المحطة (اتركه فارغاً للكل)</Label>
@@ -212,7 +104,7 @@ const ServicesTab = () => {
           {services.map((s) => (
             <TableRow key={s.id}>
               <TableCell className="font-medium">{s.name}</TableCell>
-              <TableCell>{s.price} ريال</TableCell>
+              <TableCell>{s.price} د.ع</TableCell>
               <TableCell>{s.duration_minutes} دقيقة</TableCell>
               <TableCell>{(s as any).stations?.name || "الكل"}</TableCell>
               <TableCell><Badge variant={s.is_active ? "default" : "outline"}>{s.is_active ? "مفعّلة" : "معطلة"}</Badge></TableCell>
@@ -291,7 +183,7 @@ const BookingsTab = () => {
               <TableCell>#{b.booking_number}</TableCell>
               <TableCell>{b.customer_phone}</TableCell>
               <TableCell>{(b as any).stations?.name}</TableCell>
-              <TableCell>{(b as any).services?.name} - {(b as any).services?.price} ريال</TableCell>
+              <TableCell>{(b as any).services?.name} - {(b as any).services?.price} د.ع</TableCell>
               <TableCell>{b.booking_date}</TableCell>
               <TableCell>{b.booking_time?.substring(0, 5) || "-"}</TableCell>
               <TableCell><Badge variant={statusColors[b.status] || "secondary"}>{statusLabels[b.status] || b.status}</Badge></TableCell>
