@@ -12,7 +12,56 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle } from "lucide-react";
+import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key } from "lucide-react";
+
+// ==================== ACCOUNT TAB ====================
+const AccountTab = () => {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      toast({ title: "خطأ", description: "كلمة المرور يجب أن تكون 6 أحرف على الأقل", variant: "destructive" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ title: "خطأ", description: "كلمتا المرور غير متطابقتين", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setSaving(false);
+    if (error) {
+      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "تم بنجاح", description: "تم تغيير كلمة المرور" });
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-foreground">تغيير كلمة المرور</h3>
+      <Card className="max-w-md">
+        <CardContent className="pt-6 space-y-4">
+          <div className="space-y-2">
+            <Label>كلمة المرور الجديدة</Label>
+            <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="أدخل كلمة المرور الجديدة" />
+          </div>
+          <div className="space-y-2">
+            <Label>تأكيد كلمة المرور</Label>
+            <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="أعد إدخال كلمة المرور" />
+          </div>
+          <Button onClick={handleChangePassword} disabled={saving || !newPassword || !confirmPassword} className="w-full">
+            {saving ? "جاري الحفظ..." : "تغيير كلمة المرور"}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
 
 // ==================== STATS DASHBOARD ====================
 const StatsDashboard = ({ stationId }: { stationId: string }) => {
@@ -504,6 +553,7 @@ const StationPortal = () => {
               {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full h-4 w-4 flex items-center justify-center">{unreadCount}</span>}
             </TabsTrigger>
             <TabsTrigger value="edit-requests" className="gap-1"><Pencil className="h-4 w-4" />طلبات التعديل</TabsTrigger>
+            <TabsTrigger value="account" className="gap-1"><Key className="h-4 w-4" />الحساب</TabsTrigger>
           </TabsList>
           <TabsContent value="dashboard"><StatsDashboard stationId={stationId} /></TabsContent>
           <TabsContent value="info"><StationInfoTab stationId={stationId} /></TabsContent>
@@ -511,6 +561,7 @@ const StationPortal = () => {
           <TabsContent value="bookings"><StationBookingsTab stationId={stationId} /></TabsContent>
           <TabsContent value="notifications"><NotificationsTab /></TabsContent>
           <TabsContent value="edit-requests"><MyEditRequestsTab stationId={stationId} /></TabsContent>
+          <TabsContent value="account"><AccountTab /></TabsContent>
         </Tabs>
       </div>
     </div>
