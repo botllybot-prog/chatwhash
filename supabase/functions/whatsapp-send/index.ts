@@ -19,36 +19,73 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Get settings from DB
-  const { data: settingsData } = await supabase.from("app_settings").select("key, value");
-  const settings: Record<string, string> = {};
-  if (settingsData) {
-    for (const row of settingsData) {
-      settings[row.key] = row.value;
-    }
-  }
-
-  const accessToken = settings.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = settings.WHATSAPP_PHONE_NUMBER_ID;
-
-  if (!accessToken || !phoneNumberId) {
-    return new Response(
-      JSON.stringify({ error: "WhatsApp not configured. Please add settings." }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
-  const { conversation_id, to, message } = await req.json();
-
-  if (!conversation_id || !to || !message) {
-    return new Response(
-      JSON.stringify({ error: "Missing required fields: conversation_id, to, message" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
   try {
+    // Get settings from DB
+    const { data: settingsData, error: settingsErr } = await supabase
+      .from("app_settings")
+      .select("key, value");
+
+    if (settingsErr) {
+      console.error("Failed to load settings:", settingsErr);
+      return new Response(
+        JSON.stringify({ error: "Failed to load settings" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const settings: Record<string, string> = {};
+    if (settingsData) {
+      for (const row of settingsData) {
+        settings[row.key] = row.value;
+      }
+    }
+
+    const accessToken = settings.WHATSAPP_ACCESS_TOKEN;
+    const phoneNumberId = settings.WHATSAPP_PHONE_NUMBER_ID;
+
+    if (!accessToken || !phoneNumberId) {
+      return new Response(
+        JSON.stringify({ error: "WhatsApp not configured. Please add settings." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    let body: any;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { conversation_id, to, message } = body;
+
+    if (!conversation_id || !to || !message) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: conversation_id, to, message" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify conversation exists
+    const { data: convCheck, error: convErr } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("id", conversation_id)
+      .maybeSingle();
+
+    if (convErr || !convCheck) {
+      console.error("Conversation not found:", conversation_id, convErr);
+      return new Response(
+        JSON.stringify({ error: "Conversation not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Send via WhatsApp Cloud API
+    console.log(`Sending message to ${to} in conversation ${conversation_id}`);
     const waResponse = await fetch(
       `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
       {
@@ -69,7 +106,7 @@ Deno.serve(async (req) => {
     const waData = await waResponse.json();
 
     if (!waResponse.ok) {
-      console.error("WhatsApp API error:", waData);
+      console.error("WhatsApp API error:", JSON.stringify(waData));
       return new Response(
         JSON.stringify({ error: "Failed to send message", details: waData }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -77,6 +114,7 @@ Deno.serve(async (req) => {
     }
 
     const waMessageId = waData.messages?.[0]?.id || null;
+    console.log(`WhatsApp message sent, ID: ${waMessageId}`);
 
     // Save to DB
     const { data: msgData, error: dbError } = await supabase
@@ -93,14 +131,23 @@ Deno.serve(async (req) => {
       .single();
 
     if (dbError) {
-      console.error("DB error:", dbError);
+      console.error("DB insert error:", JSON.stringify(dbError));
+      // Message was sent via WhatsApp but failed to save - still return success
+      return new Response(
+        JSON.stringify({ success: true, whatsapp_message_id: waMessageId, db_error: "Failed to save message locally" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Update conversation timestamp
-    await supabase
+    const { error: updateErr } = await supabase
       .from("conversations")
       .update({ last_message_at: new Date().toISOString() })
       .eq("id", conversation_id);
+
+    if (updateErr) {
+      console.error("Conversation update error:", updateErr);
+    }
 
     return new Response(
       JSON.stringify({ success: true, message: msgData, whatsapp_message_id: waMessageId }),
@@ -109,7 +156,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Send error:", error);
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
+      JSON.stringify({ error: "Internal server error", details: String(error) }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
