@@ -45,6 +45,11 @@ const Conversations = () => {
     if (data) setConversations(data);
   }, []);
 
+  // Keep ref in sync with state for use in realtime callbacks
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
   // Load conversations + realtime
   useEffect(() => {
     loadConversations();
@@ -60,6 +65,27 @@ const Conversations = () => {
       supabase.removeChannel(channel);
     };
   }, [loadConversations]);
+
+  // Global listener for inbound message notifications
+  useEffect(() => {
+    const channel = supabase
+      .channel("inbound-notifications")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const msg = payload.new as Message;
+          if (msg.direction === "inbound" && soundEnabledRef.current) {
+            playNotification();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [playNotification]);
 
   // Load messages for selected conversation + realtime
   useEffect(() => {
