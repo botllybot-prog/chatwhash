@@ -28,7 +28,7 @@ const Login = () => {
     if (data?.role === "station_owner") {
       navigate("/app/station-portal", { replace: true });
     } else if (data?.role === "admin") {
-      navigate("/app/admin/stations", { replace: true });
+      navigate("/app/admin/dashboard", { replace: true });
     } else {
       navigate("/app", { replace: true });
     }
