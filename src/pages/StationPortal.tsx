@@ -708,6 +708,7 @@ const StationPortal = () => {
               {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full h-4 w-4 flex items-center justify-center">{unreadCount}</span>}
             </TabsTrigger>
             <TabsTrigger value="edit-requests" className="gap-1"><Pencil className="h-4 w-4" />طلبات التعديل</TabsTrigger>
+            <TabsTrigger value="subscription" className="gap-1"><CreditCard className="h-4 w-4" />الاشتراك</TabsTrigger>
             <TabsTrigger value="account" className="gap-1"><Key className="h-4 w-4" />الحساب</TabsTrigger>
           </TabsList>
           <TabsContent value="dashboard"><StatsDashboard stationId={stationId} /></TabsContent>
