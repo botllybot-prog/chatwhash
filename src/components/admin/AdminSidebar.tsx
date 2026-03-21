@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   Store, Wrench, CalendarCheck, Users, FileEdit,
-  CreditCard, BarChart3, Settings, MessageCircle, LogOut, Car, Bell
+  CreditCard, BarChart3, Settings, MessageCircle, LogOut, Car, LayoutDashboard
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";

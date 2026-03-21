@@ -12,6 +12,7 @@ import StationsMap from "./pages/StationsMap";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./components/admin/AdminLayout";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminStations from "./pages/admin/AdminStations";
 import AdminServices from "./pages/admin/AdminServices";
 import AdminBookings from "./pages/admin/AdminBookings";
