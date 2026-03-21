@@ -717,6 +717,7 @@ const StationPortal = () => {
           <TabsContent value="bookings"><StationBookingsTab stationId={stationId} /></TabsContent>
           <TabsContent value="notifications"><NotificationsTab /></TabsContent>
           <TabsContent value="edit-requests"><MyEditRequestsTab stationId={stationId} /></TabsContent>
+          <TabsContent value="subscription"><SubscriptionTab stationId={stationId} /></TabsContent>
           <TabsContent value="account"><AccountTab /></TabsContent>
         </Tabs>
       </div>
