@@ -159,37 +159,7 @@ const LandingPage = () => {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
 
   return (
-    <div className="min-h-screen bg-background overflow-x-hidden" dir="rtl">
-      {/* ─── Navbar ─── */}
-      <motion.nav
-        initial={{ y: -60, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/50"
-      >
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-ocean-500 flex items-center justify-center shadow-lg shadow-ocean-500/30">
-              <Car className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xl font-black font-cairo text-foreground tracking-tight">واشلي</span>
-          </div>
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-            <a href="#features" className="hover:text-ocean-500 transition-colors">المميزات</a>
-            <a href="#car-owners" className="hover:text-ocean-500 transition-colors">أصحاب السيارات</a>
-            <a href="#stations" className="hover:text-ocean-500 transition-colors">المحطات</a>
-            <a href="#how-it-works" className="hover:text-ocean-500 transition-colors">كيف يعمل</a>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/login")} className="text-muted-foreground hover:text-ocean-500">
-              دخول
-            </Button>
-            <Button size="sm" onClick={() => navigate("/login")} className="bg-ocean-500 hover:bg-ocean-600 text-white shadow-lg shadow-ocean-500/25">
-              ابدأ الآن
-            </Button>
-          </div>
-        </div>
-      </motion.nav>
+    <div className="bg-background overflow-x-hidden" dir="rtl">
 
       {/* ─── Hero Section ─── */}
       <section ref={heroRef} className="relative min-h-screen flex items-center justify-center pt-16 overflow-hidden">
