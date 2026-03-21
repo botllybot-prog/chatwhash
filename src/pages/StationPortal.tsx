@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key } from "lucide-react";
+import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key, CreditCard, AlertTriangle } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 // ==================== ACCOUNT TAB ====================
 const AccountTab = () => {
@@ -508,6 +509,144 @@ const MyEditRequestsTab = ({ stationId }: { stationId: string }) => {
   );
 };
 
+// ==================== SUBSCRIPTION TAB ====================
+const SubscriptionTab = ({ stationId }: { stationId: string }) => {
+  const [sub, setSub] = useState<any>(null);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: subData } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("station_id", stationId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setSub(subData);
+
+      if (subData) {
+        const { data: payData } = await supabase
+          .from("payments")
+          .select("*")
+          .eq("subscription_id", subData.id)
+          .order("payment_date", { ascending: false });
+        setPayments(payData || []);
+      }
+      setLoading(false);
+    };
+    load();
+  }, [stationId]);
+
+  if (loading) return <p className="text-muted-foreground">جاري التحميل...</p>;
+  if (!sub) return (
+    <Card className="max-w-lg">
+      <CardContent className="pt-6 text-center text-muted-foreground py-12">
+        <CreditCard className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+        <p>لا يوجد اشتراك حالي لهذه المحطة.</p>
+        <p className="text-sm mt-1">تواصل مع الإدارة لتفعيل اشتراك.</p>
+      </CardContent>
+    </Card>
+  );
+
+  const planLabels: Record<string, string> = { basic: "أساسي", pro: "متقدم", premium: "مميز" };
+  const statusLabels: Record<string, string> = { active: "فعّال", trial: "تجريبي", expired: "منتهي", cancelled: "ملغي" };
+  const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = { active: "default", trial: "secondary", expired: "destructive", cancelled: "destructive" };
+  const paymentStatusLabels: Record<string, string> = { paid: "مدفوع", pending: "معلّق", failed: "فاشل", refunded: "مسترد" };
+
+  const startDate = new Date(sub.start_date);
+  const endDate = new Date(sub.end_date);
+  const now = new Date();
+  const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+  const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  const progressPercent = Math.min(100, Math.max(0, ((totalDays - daysRemaining) / totalDays) * 100));
+  const isExpiringSoon = daysRemaining <= 3 && daysRemaining > 0 && (sub.status === "active" || sub.status === "trial");
+
+  return (
+    <div className="space-y-6">
+      <h3 className="text-lg font-semibold text-foreground">تفاصيل الاشتراك</h3>
+
+      <Card className="max-w-lg">
+        <CardContent className="pt-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">الخطة</span>
+            <span className="font-bold text-foreground text-lg">{planLabels[sub.plan] || sub.plan}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">الحالة</span>
+            <Badge variant={statusColors[sub.status] || "outline"}>{statusLabels[sub.status] || sub.status}</Badge>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">المبلغ</span>
+            <span className="font-semibold text-foreground">{Number(sub.amount).toLocaleString()} د.ع</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">تاريخ البدء</span>
+            <span className="text-foreground">{new Date(sub.start_date).toLocaleDateString("ar-IQ")}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">تاريخ الانتهاء</span>
+            <span className="text-foreground">{new Date(sub.end_date).toLocaleDateString("ar-IQ")}</span>
+          </div>
+
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">المدة المتبقية</span>
+              <span className={`font-medium ${isExpiringSoon ? "text-destructive" : "text-foreground"}`}>
+                {daysRemaining > 0 ? `${daysRemaining} يوم` : "منتهي"}
+              </span>
+            </div>
+            <Progress value={progressPercent} className="h-2" />
+          </div>
+
+          {isExpiringSoon && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>اشتراكك ينتهي قريباً! تواصل مع الإدارة للتجديد قبل تعطيل المحطة تلقائياً.</span>
+            </div>
+          )}
+
+          {sub.status === "expired" && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>اشتراكك منتهي. تواصل مع الإدارة لتجديد الاشتراك وإعادة تفعيل المحطة.</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {payments.length > 0 && (
+        <>
+          <h3 className="text-lg font-semibold text-foreground">سجل الدفعات</h3>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>التاريخ</TableHead>
+                <TableHead>المبلغ</TableHead>
+                <TableHead>الطريقة</TableHead>
+                <TableHead>الحالة</TableHead>
+                <TableHead>ملاحظات</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {payments.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell>{new Date(p.payment_date).toLocaleDateString("ar-IQ")}</TableCell>
+                  <TableCell>{Number(p.amount).toLocaleString()} د.ع</TableCell>
+                  <TableCell>{p.method}</TableCell>
+                  <TableCell><Badge variant={p.status === "paid" ? "default" : "secondary"}>{paymentStatusLabels[p.status] || p.status}</Badge></TableCell>
+                  <TableCell className="text-sm">{p.notes || "-"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </>
+      )}
+    </div>
+  );
+};
+
 // ==================== MAIN PAGE ====================
 const StationPortal = () => {
   const navigate = useNavigate();
@@ -569,6 +708,7 @@ const StationPortal = () => {
               {unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full h-4 w-4 flex items-center justify-center">{unreadCount}</span>}
             </TabsTrigger>
             <TabsTrigger value="edit-requests" className="gap-1"><Pencil className="h-4 w-4" />طلبات التعديل</TabsTrigger>
+            <TabsTrigger value="subscription" className="gap-1"><CreditCard className="h-4 w-4" />الاشتراك</TabsTrigger>
             <TabsTrigger value="account" className="gap-1"><Key className="h-4 w-4" />الحساب</TabsTrigger>
           </TabsList>
           <TabsContent value="dashboard"><StatsDashboard stationId={stationId} /></TabsContent>
@@ -577,6 +717,7 @@ const StationPortal = () => {
           <TabsContent value="bookings"><StationBookingsTab stationId={stationId} /></TabsContent>
           <TabsContent value="notifications"><NotificationsTab /></TabsContent>
           <TabsContent value="edit-requests"><MyEditRequestsTab stationId={stationId} /></TabsContent>
+          <TabsContent value="subscription"><SubscriptionTab stationId={stationId} /></TabsContent>
           <TabsContent value="account"><AccountTab /></TabsContent>
         </Tabs>
       </div>
