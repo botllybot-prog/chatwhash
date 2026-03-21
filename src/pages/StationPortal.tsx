@@ -339,7 +339,6 @@ const StationBookingsTab = ({ stationId }: { stationId: string }) => {
 
   useEffect(() => { load(); }, [load]);
 
-  // Realtime subscription for new bookings
   useEffect(() => {
     const channel = supabase
       .channel("station-bookings")
@@ -350,6 +349,12 @@ const StationBookingsTab = ({ stationId }: { stationId: string }) => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [stationId, load]);
+
+  const updateStatus = async (id: string, status: string) => {
+    await supabase.from("bookings").update({ status: status as any }).eq("id", id);
+    load();
+    toast({ title: "تم تحديث الحالة" });
+  };
 
   const statusLabels: Record<string, string> = { pending: "قيد الانتظار", confirmed: "مؤكد", completed: "مكتمل", cancelled: "ملغي" };
   const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = { pending: "secondary", confirmed: "default", completed: "outline", cancelled: "destructive" };
@@ -370,7 +375,7 @@ const StationBookingsTab = ({ stationId }: { stationId: string }) => {
         </Select>
       </div>
       <Table>
-        <TableHeader><TableRow><TableHead>#</TableHead><TableHead>العميل</TableHead><TableHead>الخدمة</TableHead><TableHead>التاريخ</TableHead><TableHead>الوقت</TableHead><TableHead>الحالة</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>#</TableHead><TableHead>العميل</TableHead><TableHead>الخدمة</TableHead><TableHead>التاريخ</TableHead><TableHead>الوقت</TableHead><TableHead>الحالة</TableHead><TableHead>إجراء</TableHead></TableRow></TableHeader>
         <TableBody>
           {bookings.map((b) => (
             <TableRow key={b.id}>
@@ -380,9 +385,20 @@ const StationBookingsTab = ({ stationId }: { stationId: string }) => {
               <TableCell>{b.booking_date}</TableCell>
               <TableCell>{b.booking_time?.substring(0, 5) || "-"}</TableCell>
               <TableCell><Badge variant={statusColors[b.status] || "secondary"}>{statusLabels[b.status] || b.status}</Badge></TableCell>
+              <TableCell>
+                <Select value={b.status} onValueChange={(v) => updateStatus(b.id, v)}>
+                  <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">قيد الانتظار</SelectItem>
+                    <SelectItem value="confirmed">مؤكد</SelectItem>
+                    <SelectItem value="completed">مكتمل</SelectItem>
+                    <SelectItem value="cancelled">ملغي</SelectItem>
+                  </SelectContent>
+                </Select>
+              </TableCell>
             </TableRow>
           ))}
-          {bookings.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">لا توجد حجوزات</TableCell></TableRow>}
+          {bookings.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">لا توجد حجوزات</TableCell></TableRow>}
         </TableBody>
       </Table>
     </div>
