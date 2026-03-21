@@ -5,7 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AuthGuard from "@/components/AuthGuard";
 import RoleGuard from "@/components/RoleGuard";
+import MobileLayout from "@/components/MobileLayout";
 import LandingPage from "./pages/LandingPage";
+import StationsList from "./pages/StationsList";
 import Conversations from "./pages/Conversations";
 import StationPortal from "./pages/StationPortal";
 import StationsMap from "./pages/StationsMap";
@@ -54,10 +56,15 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/map" element={<StationsMap />} />
+          {/* Public pages with mobile bottom nav */}
+          <Route element={<MobileLayout />}>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/stations-list" element={<StationsList />} />
+            <Route path="/map" element={<StationsMap />} />
+          </Route>
           <Route path="/login" element={<Login />} />
           <Route path="/app/*" element={<ProtectedRoutes />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
