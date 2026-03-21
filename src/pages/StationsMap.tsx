@@ -332,7 +332,7 @@ const StationsMap = () => {
   }, [stations]);
 
   return (
-    <div className="h-screen w-full relative" dir="rtl">
+    <div className="h-[calc(100vh-5rem)] w-full relative" dir="rtl">
       {/* Back button */}
       <div className="absolute top-4 right-4 z-[1000]">
         <Button variant="secondary" className="shadow-lg gap-1" onClick={() => window.history.back()}>
