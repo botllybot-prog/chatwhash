@@ -162,7 +162,7 @@ const LandingPage = () => {
     <div className="bg-background overflow-x-hidden" dir="rtl">
 
       {/* ─── Hero Section ─── */}
-      <section ref={heroRef} className="relative min-h-screen flex items-center justify-center pt-16 overflow-hidden">
+      <section ref={heroRef} className="relative min-h-[80vh] flex items-center justify-center pt-8 overflow-hidden">
         {/* Background gradient */}
         <div className="absolute inset-0 bg-gradient-to-b from-ocean-50 via-background to-background" />
 
