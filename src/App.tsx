@@ -28,7 +28,7 @@ const ProtectedRoutes = () => (
     <Routes>
       <Route path="/" element={<Navigate to="/app/admin/stations" replace />} />
       <Route path="/conversations" element={<Conversations />} />
-      <Route path="/admin" element={<AdminLayout />}>
+      <Route path="/admin" element={<RoleGuard allowedRoles={["admin"]} fallbackPath="/app/station-portal"><AdminLayout /></RoleGuard>}>
         <Route index element={<Navigate to="stations" replace />} />
         <Route path="stations" element={<AdminStations />} />
         <Route path="services" element={<AdminServices />} />
@@ -39,7 +39,7 @@ const ProtectedRoutes = () => (
         <Route path="reports" element={<AdminReports />} />
         <Route path="settings" element={<AdminSettings />} />
       </Route>
-      <Route path="/station-portal" element={<StationPortal />} />
+      <Route path="/station-portal" element={<RoleGuard allowedRoles={["station_owner"]} fallbackPath="/app/admin/stations"><StationPortal /></RoleGuard>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   </AuthGuard>
