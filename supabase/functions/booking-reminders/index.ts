@@ -146,6 +146,7 @@ Deno.serve(async (req) => {
               content: personalizedMsg,
               message_type: "text",
               status: "sent",
+              platform: "whatsapp",
             });
 
             await supabase

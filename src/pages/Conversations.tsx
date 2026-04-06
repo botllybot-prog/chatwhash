@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { Settings, Send, MessageCircle, Check, CheckCheck, User, LogOut, Volume2, VolumeX, Bot } from "lucide-react";
+import PlatformIcon from "@/components/PlatformIcon";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useNotificationSound } from "@/hooks/use-notification-sound";
@@ -201,14 +202,19 @@ const Conversations = () => {
                 )}
               >
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="relative h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <User className="h-5 w-5 text-primary" />
+                    <span className="absolute -bottom-0.5 -left-0.5">
+                      <PlatformIcon platform={(conv as any).platform || "whatsapp"} size="sm" />
+                    </span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-foreground truncate">
                       {conv.customer_name || conv.customer_phone}
                     </p>
-                    <p className="text-xs text-muted-foreground">{conv.customer_phone}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs text-muted-foreground">{conv.customer_phone}</p>
+                    </div>
                   </div>
                   {conv.last_message_at && (
                     <span className="text-xs text-muted-foreground shrink-0">
@@ -227,13 +233,19 @@ const Conversations = () => {
         {selectedConv ? (
           <>
             <div className="p-4 border-b border-border bg-card flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <div className="relative h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
                 <User className="h-5 w-5 text-primary" />
+                <span className="absolute -bottom-0.5 -left-0.5">
+                  <PlatformIcon platform={(selectedConv as any).platform || "whatsapp"} size="sm" />
+                </span>
               </div>
               <div>
-                <p className="font-bold text-foreground">
-                  {selectedConv.customer_name || selectedConv.customer_phone}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-foreground">
+                    {selectedConv.customer_name || selectedConv.customer_phone}
+                  </p>
+                  <PlatformIcon platform={(selectedConv as any).platform || "whatsapp"} size="sm" showLabel />
+                </div>
                 <p className="text-xs text-muted-foreground">{selectedConv.customer_phone}</p>
               </div>
             </div>

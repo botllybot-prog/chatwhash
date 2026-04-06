@@ -112,6 +112,7 @@ async function saveBotMessage(supabase: any, convId: string, content: string, wa
     message_type: "text",
     whatsapp_message_id: waMessageId,
     status: "sent",
+    platform: "whatsapp",
   });
   await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", convId);
 }
@@ -965,7 +966,7 @@ Deno.serve(async (req) => {
               } else {
                 const { data: newConv, error: newConvErr } = await supabase
                   .from("conversations")
-                  .insert({ customer_phone: phone, customer_name: contactName, status: "open", last_message_at: now })
+                  .insert({ customer_phone: phone, customer_name: contactName, status: "open", last_message_at: now, platform: "whatsapp" })
                   .select("id").single();
 
                 if (newConvErr || !newConv) {
@@ -987,6 +988,7 @@ Deno.serve(async (req) => {
                 whatsapp_message_id: msg.id,
                 status: "delivered",
                 media_url: mediaUrl,
+                platform: "whatsapp",
               });
 
               // Handle bot logic (only for text messages)
