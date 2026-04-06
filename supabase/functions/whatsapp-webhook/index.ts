@@ -112,6 +112,7 @@ async function saveBotMessage(supabase: any, convId: string, content: string, wa
     message_type: "text",
     whatsapp_message_id: waMessageId,
     status: "sent",
+    platform: "whatsapp",
   });
   await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", convId);
 }
