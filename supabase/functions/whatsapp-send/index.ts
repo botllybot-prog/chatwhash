@@ -126,6 +126,7 @@ Deno.serve(async (req) => {
         message_type: "text",
         whatsapp_message_id: waMessageId,
         status: "sent",
+        platform: "whatsapp",
       })
       .select()
       .single();
