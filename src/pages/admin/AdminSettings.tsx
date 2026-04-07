@@ -71,7 +71,7 @@ const AdminSettings = () => {
 
   if (loading) return <p className="text-muted-foreground text-center py-12">جاري التحميل...</p>;
 
-  const webhookUrl = `https://snnajdsrvufjynzblkmd.supabase.co/functions/v1/whatsapp-webhook`;
+  const webhookUrl = `https://yhklvtzonvgzkodysawu.supabase.co/functions/v1/whatsapp-webhook`;
 
   return (
     <div className="space-y-6 max-w-3xl">
