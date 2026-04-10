@@ -123,7 +123,8 @@ async function getOrCreateSession(supabase: any, phone: string) {
   if (data && new Date(data.expires_at) > new Date()) return data;
   const sessionData = {
     customer_phone: phone, current_step: "idle",
-    selected_station_id: null, selected_service_id: null, selected_date: null, pending_booking_id: null,
+    selected_station_id: null, selected_service_id: null, selected_date: null,
+    selected_time: null, vehicle_details: null, pending_booking_id: null,
     expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(), updated_at: new Date().toISOString(),
   };
   if (data) {
@@ -810,6 +811,45 @@ async function handleCustomerLogic(
   // Awaiting time
   if (step === "awaiting_time") return await handleTimeSelection(supabase, phone, convId, settings, session, input);
 
+  // ── Car details choice (buttons: add or skip) ──
+  if (step === "awaiting_car_choice" || input === "car_add" || input === "car_skip") {
+    if (input === "car_skip") {
+      // Proceed immediately with "لم يُحدد"
+      return await createBookingAndNotifyOwner(
+        supabase, phone, convId, settings,
+        session.selected_station_id, session.selected_service_id,
+        session.selected_date, session.selected_time,
+        "لم يُحدد"
+      );
+    }
+    if (input === "car_add") {
+      const promptWaId = await sendAndSave(supabase, convId, phone,
+        "🚗 اكتب نوع السيارة ورقم اللوحة\nمثال: تويوتا كورولا / ب-١٢٣-أ", settings);
+      updateSession(supabase, phone, { current_step: "awaiting_car_details" });
+      return true;
+    }
+    // Fallback: re-show the two buttons
+    const waId = await sendWhatsAppInteractive(phone,
+      "🚗 هل ترغب بإضافة نوع السيارة ورقم اللوحة؟",
+      [
+        { id: "car_add", title: "🚗 إضافة معلومات السيارة" },
+        { id: "car_skip", title: "⏭️ تخطي للتأكيد" },
+      ], settings);
+    saveBotMessage(supabase, convId, "خيار السيارة", waId);
+    return true;
+  }
+
+  // ── Car details text input ──
+  if (step === "awaiting_car_details") {
+    const vehicleDetails = input.trim() || "لم يُحدد";
+    return await createBookingAndNotifyOwner(
+      supabase, phone, convId, settings,
+      session.selected_station_id, session.selected_service_id,
+      session.selected_date, session.selected_time,
+      vehicleDetails
+    );
+  }
+
   // Unknown step - send DB unknown message
   const unknownMsg = settings.BOT_UNKNOWN_MESSAGE || "عذراً، لم أفهم رسالتك.";
   await sendAndSave(supabase, convId, phone, unknownMsg + "\nأرسل 0 للعودة", settings);
@@ -1059,7 +1099,7 @@ async function handleServiceSelection(supabase: any, phone: string, convId: stri
         return true;
       }
     }
-    return await createBookingAndNotifyOwner(supabase, phone, convId, settings, stationId, service.id, new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().split("T")[0], null);
+    return await askCarDetails(supabase, phone, convId, settings, stationId, service.id, new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().split("T")[0], null);
   }
 
   // Daily — show day picker as list
@@ -1120,7 +1160,7 @@ async function handleDaySelection(supabase: any, phone: string, convId: string, 
   d.setUTCDate(d.getUTCDate() + idx);
   const selectedDate = d.toISOString().split("T")[0];
 
-  return await createBookingAndNotifyOwner(supabase, phone, convId, settings, session.selected_station_id, session.selected_service_id, selectedDate, null);
+  return await askCarDetails(supabase, phone, convId, settings, session.selected_station_id, session.selected_service_id, selectedDate, null);
 }
 
 async function handleTimeSelection(supabase: any, phone: string, convId: string, settings: Record<string, string>, session: any, input: string) {
@@ -1130,14 +1170,39 @@ async function handleTimeSelection(supabase: any, phone: string, convId: string,
     return await showCustomerWelcome(supabase, phone, convId, settings);
   }
 
-  return await createBookingAndNotifyOwner(supabase, phone, convId, settings, session.selected_station_id, session.selected_service_id, session.selected_date, timeMatch[1]);
+  return await askCarDetails(supabase, phone, convId, settings, session.selected_station_id, session.selected_service_id, session.selected_date, timeMatch[1]);
+}
+
+// ==================== CAR DETAILS PROMPT ====================
+
+async function askCarDetails(
+  supabase: any, phone: string, convId: string, settings: Record<string, string>,
+  stationId: string, serviceId: string, bookingDate: string, bookingTime: string | null
+) {
+  // Save all booking params into session so they survive the extra step
+  updateSession(supabase, phone, {
+    current_step: "awaiting_car_choice",
+    selected_station_id: stationId,
+    selected_service_id: serviceId,
+    selected_date: bookingDate,
+    selected_time: bookingTime,
+    vehicle_details: null,
+  });
+  const msg = "🚗 لتأكيد الحجز وتسهيل خدمتك عند الوصول، هل ترغب بإضافة نوع السيارة ورقم اللوحة؟";
+  const waId = await sendWhatsAppInteractive(phone, msg, [
+    { id: "car_add", title: "🚘 إضافة معلومات السيارة" },
+    { id: "car_skip", title: "⏩ تخطي للتأكيد" },
+  ], settings);
+  saveBotMessage(supabase, convId, msg, waId);
+  return true;
 }
 
 // ==================== CREATE BOOKING & NOTIFY OWNER ====================
 
 async function createBookingAndNotifyOwner(
   supabase: any, phone: string, convId: string, settings: Record<string, string>,
-  stationId: string, serviceId: string, bookingDate: string, bookingTime: string | null
+  stationId: string, serviceId: string, bookingDate: string, bookingTime: string | null,
+  vehicleDetails: string | null = null
 ) {
   // Fetch station, service, and customer name in parallel
   const [stationResult, serviceResult, customerName] = await Promise.all([
@@ -1152,6 +1217,7 @@ async function createBookingAndNotifyOwner(
     customer_phone: phone, customer_name: customerName,
     station_id: stationId, service_id: serviceId,
     booking_date: bookingDate, status: "pending",
+    vehicle_details: vehicleDetails || null,
   };
   if (bookingTime) insertData.booking_time = bookingTime;
 
@@ -1171,7 +1237,7 @@ async function createBookingAndNotifyOwner(
 
   // Send customer message and update session in parallel
   const custSend = sendAndSave(supabase, convId, phone, custMsg, settings);
-  updateSession(supabase, phone, { current_step: "awaiting_owner_response", selected_station_id: null, selected_service_id: null, selected_date: null });
+  updateSession(supabase, phone, { current_step: "awaiting_owner_response", selected_station_id: null, selected_service_id: null, selected_date: null, selected_time: null, vehicle_details: null });
 
   // Notify station owner (fire-and-forget, don't block customer response)
   if (booking) {
@@ -1187,7 +1253,8 @@ async function createBookingAndNotifyOwner(
         const ownerPhone = normalizePhone(owner.owner_phone);
         console.log(`[OWNER_NOTIFY] Sending to normalized phone=${ownerPhone}`);
         const ownerConvId = await getOrCreateConvForPhone(supabase, ownerPhone, owner.owner_name);
-        const ownerMsg = `📢 طلب حجز جديد!\n\n🔢 رقم الحجز: #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n⏰ الوقت: " + to12Hour(bookingTime) : ""}\n\nهل توافق على الحجز؟`;
+        const vehicleLine = vehicleDetails && vehicleDetails !== "لم يُحدد" ? `\n🚗 السيارة: ${vehicleDetails}` : `\n🚗 السيارة: لم يُحدد`;
+        const ownerMsg = `📢 طلب حجز جديد!\n\n🔢 رقم الحجز: #${booking.booking_number}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n⏰ الوقت: " + to12Hour(bookingTime) : ""}${vehicleLine}\n\nهل توافق على الحجز؟`;
 
         const ownerButtons = [
           { id: "approve_yes", title: "✅ موافق" },
