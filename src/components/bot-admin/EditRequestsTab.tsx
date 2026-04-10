@@ -24,7 +24,7 @@ const EditRequestsTab = () => {
 
   const handleAction = async (req: any, action: "approved" | "rejected") => {
     // Update edit_request status
-    await supabase
+    const { error } = await supabase
       .from("edit_requests")
       .update({
         status: action,
@@ -32,6 +32,11 @@ const EditRequestsTab = () => {
         reviewed_at: new Date().toISOString(),
       })
       .eq("id", req.id);
+
+    if (error) {
+      toast({ title: "حدث خطأ", description: error.message, variant: "destructive" });
+      return;
+    }
 
     // If approved, apply the change to the stations table
     if (action === "approved") {
@@ -51,7 +56,7 @@ const EditRequestsTab = () => {
     });
 
     toast({ title: action === "approved" ? "تم القبول والتطبيق" : "تم الرفض" });
-    load();
+    await load();
   };
 
   const fieldLabels: Record<string, string> = {

@@ -32,21 +32,28 @@ const AdminServices = () => {
   const handleSave = async () => {
     if (!form.name.trim()) { toast({ title: "الاسم مطلوب", variant: "destructive" }); return; }
     const payload = { ...form, price: Number(form.price), duration_minutes: Number(form.duration_minutes), sort_order: Number(form.sort_order), station_id: form.station_id || null };
-    if (editing) {
-      await supabase.from("services").update(payload).eq("id", editing.id);
-    } else {
-      await supabase.from("services").insert(payload);
+    const wasEditing = editing;
+    const { error } = editing
+      ? await supabase.from("services").update(payload).eq("id", editing.id)
+      : await supabase.from("services").insert(payload);
+    if (error) {
+      toast({ title: "حدث خطأ", description: error.message, variant: "destructive" });
+      return;
     }
     setDialogOpen(false);
     setEditing(null);
     setForm({ name: "", price: 0, duration_minutes: 30, station_id: "", is_active: true, sort_order: 0 });
-    load();
-    toast({ title: editing ? "تم التحديث" : "تمت الإضافة" });
+    await load();
+    toast({ title: wasEditing ? "تم التحديث" : "تمت الإضافة" });
   };
 
   const handleDelete = async (id: string) => {
-    await supabase.from("services").delete().eq("id", id);
-    load();
+    const { error } = await supabase.from("services").delete().eq("id", id);
+    if (error) {
+      toast({ title: "حدث خطأ", description: error.message, variant: "destructive" });
+      return;
+    }
+    await load();
     toast({ title: "تم الحذف" });
   };
 

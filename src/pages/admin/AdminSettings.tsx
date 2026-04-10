@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { Bot, Bell, MessageSquare, Link2, Eye, EyeOff, Save } from "lucide-react";
+import { Bot, Bell, MessageSquare, Link2, Eye, EyeOff, Save, ShieldCheck } from "lucide-react";
 
 const ALL_KEYS = [
   "BOT_ENABLED", "BOT_WELCOME_MESSAGE", "BOT_UNKNOWN_MESSAGE",
@@ -17,6 +17,7 @@ const ALL_KEYS = [
   "BOT_AFTER_HOURS_ENABLED", "BOT_AFTER_HOURS_MESSAGE",
   "BOT_FULLY_BOOKED_MESSAGE", "BOT_THANK_YOU_ENABLED", "BOT_THANK_YOU_MESSAGE",
   "WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_APP_SECRET",
+  "ADMIN_WHATSAPP_PHONE", "ADMIN_TELEGRAM_CHAT_ID",
 ];
 
 const DEFAULTS: Record<string, string> = {
@@ -166,6 +167,36 @@ const AdminSettings = () => {
               <Switch checked={values.BOT_THANK_YOU_ENABLED === "true"} onCheckedChange={() => toggle("BOT_THANK_YOU_ENABLED")} />
             </div>
             <Textarea value={values.BOT_THANK_YOU_MESSAGE || ""} onChange={(e) => set("BOT_THANK_YOU_MESSAGE", e.target.value)} rows={2} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Admin Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary" />إشعارات المسؤول</CardTitle>
+          <CardDescription>استلام نسخة من جميع الحجوزات الجديدة على هاتفك</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-1">
+            <Label>رقم واتساب المسؤول (مع رمز الدولة)</Label>
+            <Input
+              value={values.ADMIN_WHATSAPP_PHONE || ""}
+              onChange={(e) => set("ADMIN_WHATSAPP_PHONE", e.target.value)}
+              placeholder="964750XXXXXXX"
+              dir="ltr"
+            />
+            <p className="text-xs text-muted-foreground">سيتم إرسال إشعار بكل حجز جديد لهذا الرقم عبر واتساب</p>
+          </div>
+          <div className="space-y-1">
+            <Label>Chat ID تلقرام المسؤول</Label>
+            <Input
+              value={values.ADMIN_TELEGRAM_CHAT_ID || ""}
+              onChange={(e) => set("ADMIN_TELEGRAM_CHAT_ID", e.target.value)}
+              placeholder="123456789"
+              dir="ltr"
+            />
+            <p className="text-xs text-muted-foreground">سيتم إرسال إشعار بكل حجز جديد لهذا الحساب عبر تلقرام</p>
           </div>
         </CardContent>
       </Card>

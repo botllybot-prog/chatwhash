@@ -23,6 +23,7 @@ import AdminEditRequests from "./pages/admin/AdminEditRequests";
 import AdminSubscriptions from "./pages/admin/AdminSubscriptions";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminCustomers from "./pages/admin/AdminCustomers";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const ProtectedRoutes = () => (
         <Route path="subscriptions" element={<AdminSubscriptions />} />
         <Route path="reports" element={<AdminReports />} />
         <Route path="settings" element={<AdminSettings />} />
+        <Route path="customers" element={<AdminCustomers />} />
       </Route>
       <Route path="/station-portal" element={<RoleGuard allowedRoles={["station_owner"]} fallbackPath="/app/admin/stations"><StationPortal /></RoleGuard>} />
       <Route path="*" element={<NotFound />} />

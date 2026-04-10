@@ -37,20 +37,24 @@ Deno.serve(async (req) => {
 
     const accessToken = settings.WHATSAPP_ACCESS_TOKEN;
     const phoneNumberId = settings.WHATSAPP_PHONE_NUMBER_ID;
+    const telegramToken = settings.TELEGRAM_BOT_TOKEN;
+    const hasWhatsApp = !!(accessToken && phoneNumberId);
+    const hasTelegram = !!telegramToken;
 
-    if (!accessToken || !phoneNumberId) {
-      console.error("WhatsApp not configured");
+    if (!hasWhatsApp && !hasTelegram) {
+      console.error("No messaging platform configured");
       return new Response(
-        JSON.stringify({ error: "WhatsApp not configured" }),
+        JSON.stringify({ error: "No messaging platform configured" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const reminderMessage = settings.REMINDER_MESSAGE || "تذكير: لديك حجز غسيل سيارة خلال ساعة. نتطلع لخدمتك! 🚗✨";
+    const reminderHours = parseInt(settings.REMINDER_HOURS_BEFORE || "1") || 1;
 
-    // Find bookings in the next hour that haven't been reminded
+    // Find bookings within the reminder window that haven't been reminded
     const now = new Date();
-    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+    const oneHourLater = new Date(now.getTime() + reminderHours * 60 * 60 * 1000);
     const today = now.toISOString().split("T")[0];
     const todayPlus1 = oneHourLater.toISOString().split("T")[0];
 
@@ -104,62 +108,70 @@ Deno.serve(async (req) => {
         .replace("{date}", booking.booking_date)
         .replace("{booking_number}", String(booking.booking_number));
 
-      // Send WhatsApp message directly
+      // Detect platform from conversation
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("id, platform")
+        .eq("customer_phone", booking.customer_phone)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const platform = conv?.platform || "whatsapp";
+      let sendOk = false;
+
       try {
-        const waResponse = await fetch(
-          `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
-          {
+        if (platform === "telegram" && hasTelegram) {
+          // Send via Telegram
+          const tgRes = await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              to: booking.customer_phone,
-              type: "text",
-              text: { body: personalizedMsg },
-            }),
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: booking.customer_phone, text: personalizedMsg, parse_mode: "HTML" }),
+          });
+          const tgData = await tgRes.json();
+          sendOk = tgData.ok === true;
+
+          if (sendOk && conv) {
+            await supabase.from("messages").insert({
+              conversation_id: conv.id, direction: "outbound", content: personalizedMsg,
+              message_type: "text", whatsapp_message_id: String(tgData.result?.message_id || ""),
+              status: "sent", platform: "telegram",
+            });
           }
-        );
+        } else if (hasWhatsApp) {
+          // Send via WhatsApp
+          const waResponse = await fetch(
+            `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
+            {
+              method: "POST",
+              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ messaging_product: "whatsapp", to: booking.customer_phone, type: "text", text: { body: personalizedMsg } }),
+            }
+          );
+          sendOk = waResponse.ok;
 
-        if (waResponse.ok) {
-          // Mark as reminded
-          await supabase
-            .from("bookings")
-            .update({ reminder_sent: true })
-            .eq("id", booking.id);
+          if (!sendOk) {
+            const errData = await waResponse.json();
+            console.error(`Failed to send WhatsApp reminder to ${booking.customer_phone}:`, errData);
+          }
 
-          // Also save to messages if conversation exists
-          const { data: conv } = await supabase
-            .from("conversations")
-            .select("id")
-            .eq("customer_phone", booking.customer_phone)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          if (sendOk && conv) {
+            await supabase.from("messages").insert({
+              conversation_id: conv.id, direction: "outbound", content: personalizedMsg,
+              message_type: "text", status: "sent", platform: "whatsapp",
+            });
+          }
+        }
+
+        if (sendOk) {
+          await supabase.from("bookings").update({ reminder_sent: true }).eq("id", booking.id);
 
           if (conv) {
-            await supabase.from("messages").insert({
-              conversation_id: conv.id,
-              direction: "outbound",
-              content: personalizedMsg,
-              message_type: "text",
-              status: "sent",
-              platform: "whatsapp",
-            });
-
-            await supabase
-              .from("conversations")
-              .update({ last_message_at: new Date().toISOString() })
-              .eq("id", conv.id);
+            await supabase.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conv.id);
           }
 
           sent++;
-          console.log(`Reminder sent to ${booking.customer_phone} for booking #${booking.booking_number}`);
-        } else {
-          const errData = await waResponse.json();
-          console.error(`Failed to send reminder to ${booking.customer_phone}:`, errData);
+          console.log(`Reminder sent via ${platform} to ${booking.customer_phone} for booking #${booking.booking_number}`);
         }
       } catch (e) {
         console.error(`Error sending reminder to ${booking.customer_phone}:`, e);

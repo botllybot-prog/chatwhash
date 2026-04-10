@@ -82,13 +82,18 @@ const SubscriptionsTab = () => {
   const handlePayment = async () => {
     if (!payForm.amount || !selectedSubId) return;
     setLoading(true);
-    await supabase.from("payments").insert({
+    const { error: payErr } = await supabase.from("payments").insert({
       subscription_id: selectedSubId,
       amount: Number(payForm.amount),
       method: payForm.method,
       notes: payForm.notes || null,
       status: "paid" as any,
     });
+    if (payErr) {
+      setLoading(false);
+      toast({ title: "خطأ في تسجيل الدفعة", description: payErr.message, variant: "destructive" });
+      return;
+    }
     // Extend subscription by 30 days
     const sub = subscriptions.find(s => s.id === selectedSubId);
     if (sub) {
@@ -104,12 +109,16 @@ const SubscriptionsTab = () => {
     toast({ title: "تم تسجيل الدفعة وتمديد الاشتراك" });
     setPayDialogOpen(false);
     setPayForm({ amount: "", method: "cash", notes: "" });
-    load();
+    await load();
   };
 
   const updateStatus = async (id: string, status: string) => {
-    await supabase.from("subscriptions").update({ status: status as any, updated_at: new Date().toISOString() }).eq("id", id);
-    load();
+    const { error } = await supabase.from("subscriptions").update({ status: status as any, updated_at: new Date().toISOString() }).eq("id", id);
+    if (error) {
+      toast({ title: "حدث خطأ", description: error.message, variant: "destructive" });
+      return;
+    }
+    await load();
     toast({ title: "تم تحديث الحالة" });
   };
 

@@ -28,8 +28,12 @@ const AdminBookings = () => {
   const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = { pending: "secondary", confirmed: "default", completed: "outline", cancelled: "destructive" };
 
   const updateStatus = async (id: string, status: string) => {
-    await supabase.from("bookings").update({ status: status as any }).eq("id", id);
-    load();
+    const { error } = await supabase.from("bookings").update({ status: status as any }).eq("id", id);
+    if (error) {
+      toast({ title: "حدث خطأ", description: error.message, variant: "destructive" });
+      return;
+    }
+    await load();
     toast({ title: "تم تحديث الحالة" });
   };
 

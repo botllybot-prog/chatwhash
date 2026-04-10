@@ -112,9 +112,11 @@ const StationsTab = () => {
       image_url: form.image_url,
     };
     if (editing) {
-      await supabase.from("stations").update(payload).eq("id", editing.id);
+      const { error } = await supabase.from("stations").update(payload).eq("id", editing.id);
+      if (error) { toast({ title: "فشل التحديث", description: error.message, variant: "destructive" }); return; }
     } else {
-      await supabase.from("stations").insert(payload);
+      const { error } = await supabase.from("stations").insert(payload);
+      if (error) { toast({ title: "فشل الإضافة", description: error.message, variant: "destructive" }); return; }
     }
     setDialogOpen(false);
     setEditing(null);
@@ -124,7 +126,8 @@ const StationsTab = () => {
   };
 
   const handleDelete = async (id: string) => {
-    await supabase.from("stations").delete().eq("id", id);
+    const { error } = await supabase.from("stations").delete().eq("id", id);
+    if (error) { toast({ title: "فشل الحذف", description: error.message, variant: "destructive" }); return; }
     load();
     toast({ title: "تم الحذف" });
   };

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   Store, Wrench, CalendarCheck, Users, FileEdit,
-  CreditCard, BarChart3, Settings, MessageCircle, LogOut, Car, LayoutDashboard
+  CreditCard, BarChart3, Settings, MessageCircle, LogOut, Car, LayoutDashboard, UserCheck
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -19,6 +19,7 @@ const items = [
   { title: "الخدمات", url: "/app/admin/services", icon: Wrench, badgeKey: null },
   { title: "الحجوزات", url: "/app/admin/bookings", icon: CalendarCheck, badgeKey: "bookings" as const },
   { title: "الحسابات", url: "/app/admin/owners", icon: Users, badgeKey: null },
+  { title: "عملاء البوت", url: "/app/admin/customers", icon: UserCheck, badgeKey: null },
   { title: "طلبات التعديل", url: "/app/admin/edit-requests", icon: FileEdit, badgeKey: "editRequests" as const },
   { title: "الاشتراكات", url: "/app/admin/subscriptions", icon: CreditCard, badgeKey: null },
   { title: "التقارير", url: "/app/admin/reports", icon: BarChart3, badgeKey: null },
