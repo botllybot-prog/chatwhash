@@ -277,6 +277,26 @@ async function handleOwnerLogic(
       return await showOwnerMenu(supabase, phone, convId, settings, owner);
     }
 
+    if (input === "approve_reschedule") {
+      const [, bkResult] = await Promise.all([
+        supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId),
+        supabase.from("bookings").select("customer_phone, booking_number").eq("id", bookingId).single(),
+      ]);
+      const bk = bkResult.data;
+      const rescheduleMsg = "✅ تم إبلاغ صاحب المغسلة لتعديل الموعد.\n\nأرسل أي رسالة لعرض القائمة.";
+      const promises: Promise<any>[] = [sendAndSave(supabase, convId, phone, rescheduleMsg, settings)];
+      if (bk) {
+        const custConvId = await getOrCreateConvForPhone(supabase, bk.customer_phone);
+        if (custConvId) {
+          const custMsg = `⚠️ عذراً، طلب صاحب المغسلة تعديل موعد حجزك #${bk.booking_number}.\n\nالرجاء إعادة الحجز باختيار موعد آخر. أرسل أي رسالة للبدء.`;
+          promises.push(sendAndSave(supabase, custConvId, bk.customer_phone, custMsg, settings));
+        }
+      }
+      await Promise.all(promises);
+      updateSession(supabase, phone, { current_step: "owner_idle", pending_booking_id: null });
+      return true;
+    }
+
     if (input === "موافق" || input === "approve_yes") {
       updateSession(supabase, phone, { current_step: "owner_offer" });
       const msg = "✅ تمت الموافقة!\n\nهل يوجد عرض خاص ترغب بإرفاقه للعميل اليوم؟\n(اكتب العرض أو أرسل \"لا\" للتخطي)";
@@ -308,8 +328,13 @@ async function handleOwnerLogic(
       return true;
     }
 
-    const msg = "❌ أرسل \"موافق\" أو \"رفض\"";
-    await sendAndSave(supabase, convId, phone, msg, settings);
+    const fallbackMsg = "يرجى اختيار أحد الخيارات:";
+    const fbWaId = await sendWhatsAppInteractive(phone, fallbackMsg, [
+      { id: "approve_yes", title: "✅ موافق" },
+      { id: "approve_no", title: "❌ غير موافق" },
+      { id: "approve_reschedule", title: "📅 تعديل الموعد" },
+    ], settings);
+    saveBotMessage(supabase, convId, fallbackMsg, fbWaId);
     return true;
   }
 
@@ -392,8 +417,13 @@ async function handleOwnerLogic(
     const b = pendingBookings[idx];
     updateSession(supabase, phone, { current_step: "owner_approve_reject", pending_booking_id: b.id });
 
-    const msg = `📋 تفاصيل الحجز #${b.booking_number}:\n\n📱 العميل: ${b.customer_name || b.customer_phone}\n🧽 الخدمة: ${b.services?.name} - ${b.services?.price} د.ع\n📅 التاريخ: ${b.booking_date}${b.booking_time ? "\n⏰ الوقت: " + b.booking_time.substring(0, 5) : ""}\n\nهل توافق على الحجز؟\nأرسل "موافق" أو "رفض"`;
-    await sendAndSave(supabase, convId, phone, msg, settings);
+    const detailMsg = `📋 تفاصيل الحجز #${b.booking_number}:\n\n📱 العميل: ${b.customer_name || b.customer_phone}\n🧽 الخدمة: ${b.services?.name} - ${b.services?.price} د.ع\n📅 التاريخ: ${b.booking_date}${b.booking_time ? "\n⏰ الوقت: " + b.booking_time.substring(0, 5) : ""}\n\nهل توافق على الحجز؟`;
+    const waId = await sendWhatsAppInteractive(phone, detailMsg, [
+      { id: "approve_yes", title: "✅ موافق" },
+      { id: "approve_no", title: "❌ غير موافق" },
+      { id: "approve_reschedule", title: "📅 تعديل الموعد" },
+    ], settings);
+    saveBotMessage(supabase, convId, detailMsg, waId);
     return true;
   }
 
@@ -717,7 +747,7 @@ async function handleServiceSelection(supabase: any, phone: string, convId: stri
   // After-hours check for instant booking
   if (station.scheduling_type === "instant") {
     if (settings.BOT_AFTER_HOURS_ENABLED === "true" && station.working_hours_start && station.working_hours_end) {
-      const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+      const nowMin = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours() * 60 + new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCMinutes();
       const [sh, sm] = station.working_hours_start.split(":").map(Number);
       const [eh, em] = station.working_hours_end.split(":").map(Number);
       if (nowMin < sh * 60 + sm || nowMin > eh * 60 + em) {
@@ -726,14 +756,15 @@ async function handleServiceSelection(supabase: any, phone: string, convId: stri
         return true;
       }
     }
-    return await createBookingAndNotifyOwner(supabase, phone, convId, settings, stationId, service.id, new Date().toISOString().split("T")[0], null);
+    return await createBookingAndNotifyOwner(supabase, phone, convId, settings, stationId, service.id, new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().split("T")[0], null);
   }
 
   // Daily
   if (station.scheduling_type === "daily") {
     const days = [];
     for (let i = 0; i < 7; i++) {
-      const d = new Date(); d.setDate(d.getDate() + i);
+      const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
+      d.setUTCDate(d.getUTCDate() + i);
       const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", month: "short", day: "numeric" });
       days.push(label);
     }
@@ -746,12 +777,13 @@ async function handleServiceSelection(supabase: any, phone: string, convId: stri
   }
 
   // Slots
-  const today = new Date().toISOString().split("T")[0];
+  const iraqNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  const today = iraqNow.toISOString().split("T")[0];
   const allSlots = generateTimeSlots(station.working_hours_start, station.working_hours_end, station.slot_duration_minutes);
   const { data: booked } = await supabase.from("bookings").select("booking_time")
     .eq("station_id", stationId).eq("booking_date", today).in("status", ["pending", "confirmed"]);
   const bookedSet = new Set((booked || []).map((b: any) => b.booking_time?.substring(0, 5)));
-  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const nowMin = iraqNow.getUTCHours() * 60 + iraqNow.getUTCMinutes();
   const available = allSlots.filter(s => {
     const [h, m] = s.split(":").map(Number);
     return h * 60 + m > nowMin && !bookedSet.has(s);
@@ -773,7 +805,11 @@ async function handleServiceSelection(supabase: any, phone: string, convId: stri
 
 async function handleDaySelection(supabase: any, phone: string, convId: string, settings: Record<string, string>, session: any, input: string) {
   const days = [];
-  for (let i = 0; i < 7; i++) { const d = new Date(); d.setDate(d.getDate() + i); days.push(d.toISOString().split("T")[0]); }
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
+    d.setUTCDate(d.getUTCDate() + i);
+    days.push(d.toISOString().split("T")[0]);
+  }
 
   const idx = parseInt(input) - 1;
   if (isNaN(idx) || idx < 0 || idx >= days.length) {
@@ -797,8 +833,9 @@ async function handleTimeSelection(supabase: any, phone: string, convId: string,
 
   const allSlots = generateTimeSlots(station.working_hours_start, station.working_hours_end, station.slot_duration_minutes);
   const bookedSet = new Set((booked || []).map((b: any) => b.booking_time?.substring(0, 5)));
-  const isToday = bookingDate === new Date().toISOString().split("T")[0];
-  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const iraqNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  const isToday = bookingDate === iraqNow.toISOString().split("T")[0];
+  const nowMin = iraqNow.getUTCHours() * 60 + iraqNow.getUTCMinutes();
   const available = allSlots.filter(s => {
     const [h, m] = s.split(":").map(Number);
     if (isToday && h * 60 + m <= nowMin) return false;
@@ -861,9 +898,15 @@ async function createBookingAndNotifyOwner(
       .then(async ({ data: owner }: any) => {
         if (owner?.owner_phone) {
           const ownerConvId = await getOrCreateConvForPhone(supabase, owner.owner_phone, owner.owner_name);
-          const ownerMsg = `📢 طلب حجز جديد!\n\n🔢 رقم الحجز: #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n⏰ الوقت: " + bookingTime : ""}\n\nهل توافق على الحجز؟\nأرسل "موافق" أو "رفض"`;
+          const ownerMsg = `📢 طلب حجز جديد!\n\n🔢 رقم الحجز: #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n⏰ الوقت: " + bookingTime : ""}\n\nهل توافق على الحجز؟`;
 
-          const ownerWaId = await sendWhatsAppMessage(owner.owner_phone, ownerMsg, settings);
+          const ownerButtons = [
+            { id: "approve_yes", title: "✅ موافق" },
+            { id: "approve_no", title: "❌ غير موافق" },
+            { id: "approve_reschedule", title: "📅 تعديل الموعد" },
+          ];
+
+          const ownerWaId = await sendWhatsAppInteractive(owner.owner_phone, ownerMsg, ownerButtons, settings);
           if (ownerConvId) {
             saveBotMessage(supabase, ownerConvId, ownerMsg, ownerWaId);
             await getOrCreateSession(supabase, owner.owner_phone);

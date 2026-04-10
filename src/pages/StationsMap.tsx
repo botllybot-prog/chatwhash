@@ -75,6 +75,15 @@ const FlyToStation = ({ lat, lng }: { lat: number; lng: number }) => {
   return null;
 };
 
+// Fit map to station bounds without over-zooming
+const FitBounds = ({ bounds }: { bounds: L.LatLngBounds }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.fitBounds(bounds, { maxZoom: 13, padding: [40, 40] });
+  }, [bounds, map]);
+  return null;
+};
+
 // Station detail card
 const StationCard = ({ station, onClose }: { station: Station; onClose: () => void }) => {
   const [services, setServices] = useState<any[]>([]);
@@ -397,7 +406,6 @@ const StationsMap = () => {
         zoom={6}
         className="h-full w-full"
         zoomControl={false}
-        bounds={bounds || undefined}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -423,6 +431,7 @@ const StationsMap = () => {
         ))}
 
         {flyTo && <FlyToStation lat={flyTo.lat} lng={flyTo.lng} />}
+        {bounds && !flyTo && <FitBounds bounds={bounds} />}
       </MapContainer>
 
       {/* Station Detail Card */}

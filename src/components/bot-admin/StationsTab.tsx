@@ -217,7 +217,7 @@ const StationsTab = () => {
                   <Label className="flex items-center gap-1"><MapPin className="h-4 w-4" />الموقع على الخريطة</Label>
                   <p className="text-xs text-muted-foreground mb-2">انقر على الخريطة لتحديد موقع المحطة</p>
                   <div className="h-64 rounded-lg overflow-hidden border border-border">
-                    <MapContainer center={mapCenter} zoom={13} style={{ height: "100%", width: "100%" }} key={`${editing?.id || "new"}-${dialogOpen}`}>
+                    <MapContainer center={mapCenter} zoom={editing ? 14 : 11} style={{ height: "100%", width: "100%" }} key={`${editing?.id || "new"}-${dialogOpen}`}>
                       <TileLayer
                         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
