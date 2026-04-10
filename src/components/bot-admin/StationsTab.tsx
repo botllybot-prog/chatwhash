@@ -10,18 +10,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Upload, MapPin } from "lucide-react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { Plus, Pencil, Trash2, Upload, MapPin, LocateFixed } from "lucide-react";
+import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 
-// Fix leaflet default marker icon
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-});
+const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 
 interface StationForm {
   name: string;
@@ -51,17 +43,6 @@ const defaultForm: StationForm = {
   image_url: null,
 };
 
-// Erbil center
-const ERBIL_CENTER: [number, number] = [36.191, 44.009];
-
-function LocationPicker({ position, onChange }: { position: [number, number]; onChange: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click(e) {
-      onChange(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return <Marker position={position} />;
-}
 
 const StationsTab = () => {
   const [stations, setStations] = useState<any[]>([]);
@@ -69,7 +50,30 @@ const StationsTab = () => {
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<StationForm>({ ...defaultForm });
   const [uploading, setUploading] = useState(false);
+  const [locating, setLocating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_KEY });
+
+  const handleLocateMe = () => {
+    if (!navigator.geolocation) {
+      toast({ title: "المتصفح لا يدعم تحديد الموقع", variant: "destructive" });
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm((f) => ({ ...f, latitude: pos.coords.latitude, longitude: pos.coords.longitude }));
+        setLocating(false);
+        toast({ title: "✅ تم تحديد موقعك الحالي" });
+      },
+      () => {
+        setLocating(false);
+        toast({ title: "تعذّر تحديد الموقع", variant: "destructive" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("stations").select("*").order("created_at");
@@ -143,8 +147,8 @@ const StationsTab = () => {
       slot_duration_minutes: s.slot_duration_minutes,
       scheduling_type: s.scheduling_type,
       is_active: s.is_active,
-      latitude: s.latitude || ERBIL_CENTER[0],
-      longitude: s.longitude || ERBIL_CENTER[1],
+      latitude: s.latitude || ERBIL_CENTER.lat,
+      longitude: s.longitude || ERBIL_CENTER.lng,
       image_url: s.image_url || null,
     });
     setDialogOpen(true);
@@ -157,7 +161,7 @@ const StationsTab = () => {
 
   const schedulingLabels: Record<string, string> = { slots: "فترات ثابتة", instant: "حجز فوري", daily: "يومي" };
 
-  const mapCenter: [number, number] = [form.latitude || ERBIL_CENTER[0], form.longitude || ERBIL_CENTER[1]];
+  const mapCenter = { lat: form.latitude || ERBIL_CENTER.lat, lng: form.longitude || ERBIL_CENTER.lng };
 
   return (
     <div className="space-y-4">
@@ -215,18 +219,35 @@ const StationsTab = () => {
                 {/* Map */}
                 <div>
                   <Label className="flex items-center gap-1"><MapPin className="h-4 w-4" />الموقع على الخريطة</Label>
-                  <p className="text-xs text-muted-foreground mb-2">انقر على الخريطة لتحديد موقع المحطة</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-muted-foreground">انقر على الخريطة لتحديد موقع المحطة</p>
+                    <Button type="button" variant="outline" size="sm" onClick={handleLocateMe} disabled={locating} className="gap-1.5 text-xs h-7">
+                      <LocateFixed className="h-3.5 w-3.5" />
+                      {locating ? "جاري التحديد..." : "موقعي الحالي"}
+                    </Button>
+                  </div>
                   <div className="h-64 rounded-lg overflow-hidden border border-border">
-                    <MapContainer center={mapCenter} zoom={editing ? 14 : 11} style={{ height: "100%", width: "100%" }} key={`${editing?.id || "new"}-${dialogOpen}`}>
-                      <TileLayer
-                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      />
-                      <LocationPicker
-                        position={mapCenter}
-                        onChange={(lat, lng) => setForm({ ...form, latitude: lat, longitude: lng })}
-                      />
-                    </MapContainer>
+                    {isLoaded ? (
+                      <GoogleMap
+                        mapContainerStyle={{ height: "100%", width: "100%" }}
+                        center={mapCenter}
+                        zoom={editing ? 15 : 12}
+                        onClick={(e) => {
+                          if (e.latLng) setForm((f) => ({ ...f, latitude: e.latLng!.lat(), longitude: e.latLng!.lng() }));
+                        }}
+                        options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+                      >
+                        <Marker
+                          position={mapCenter}
+                          draggable
+                          onDragEnd={(e) => {
+                            if (e.latLng) setForm((f) => ({ ...f, latitude: e.latLng!.lat(), longitude: e.latLng!.lng() }));
+                          }}
+                        />
+                      </GoogleMap>
+                    ) : (
+                      <div className="h-full flex items-center justify-center bg-muted text-sm text-muted-foreground">جاري تحميل الخريطة...</div>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <div><Label className="text-xs">خط العرض</Label><Input type="number" step="any" value={form.latitude || ""} onChange={(e) => setForm({ ...form, latitude: parseFloat(e.target.value) || null })} className="h-8 text-xs" /></div>
