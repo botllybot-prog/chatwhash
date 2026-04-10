@@ -7,6 +7,13 @@ const corsHeaders = {
 
 // ==================== HELPERS ====================
 
+function normalizePhone(phone: string): string {
+  const cleaned = phone.replace(/^\+/, "").replace(/\s+/g, "");
+  // Iraqi local → international: 07XXXXXXXXX (11 digits) → 9647XXXXXXXXX
+  if (/^07\d{9}$/.test(cleaned)) return "964" + cleaned.substring(1);
+  return cleaned;
+}
+
 async function getSettings(supabase: any) {
   const { data } = await supabase.from("app_settings").select("key, value");
   const settings: Record<string, string> = {};
@@ -251,10 +258,18 @@ function notifyAdmin(supabase: any, settings: Record<string, string>, message: s
 // ==================== CHECK IF OWNER ====================
 
 async function checkIfOwner(supabase: any, phone: string) {
-  const { data } = await supabase.from("station_owners")
-    .select("id, owner_name, station_id, stations(name)")
-    .eq("owner_phone", phone).maybeSingle();
-  return data;
+  // Try exact match first, then alternative format (local ↔ international)
+  const alts = [phone];
+  if (/^9647\d{8}$/.test(phone)) alts.push("0" + phone.substring(3)); // intl → local
+  else if (/^07\d{9}$/.test(phone)) alts.push("964" + phone.substring(1)); // local → intl
+
+  for (const p of alts) {
+    const { data } = await supabase.from("station_owners")
+      .select("id, owner_name, station_id, stations(name)")
+      .eq("owner_phone", p).maybeSingle();
+    if (data) return data;
+  }
+  return null;
 }
 
 // ==================== OWNER BOT LOGIC ====================
@@ -946,7 +961,8 @@ async function createBookingAndNotifyOwner(
       .select("owner_phone, owner_name").eq("station_id", stationId).maybeSingle()
       .then(async ({ data: owner }: any) => {
         if (owner?.owner_phone) {
-          const ownerConvId = await getOrCreateConvForPhone(supabase, owner.owner_phone, owner.owner_name);
+          const ownerPhone = normalizePhone(owner.owner_phone);
+          const ownerConvId = await getOrCreateConvForPhone(supabase, ownerPhone, owner.owner_name);
           const ownerMsg = `📢 طلب حجز جديد!\n\n🔢 رقم الحجز: #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n⏰ الوقت: " + to12Hour(bookingTime) : ""}\n\nهل توافق على الحجز؟`;
 
           const ownerButtons = [
@@ -955,11 +971,11 @@ async function createBookingAndNotifyOwner(
             { id: "approve_reschedule", title: "📅 تعديل الموعد" },
           ];
 
-          const ownerWaId = await sendWhatsAppInteractive(owner.owner_phone, ownerMsg, ownerButtons, settings);
+          const ownerWaId = await sendWhatsAppInteractive(ownerPhone, ownerMsg, ownerButtons, settings);
           if (ownerConvId) {
             saveBotMessage(supabase, ownerConvId, ownerMsg, ownerWaId);
-            await getOrCreateSession(supabase, owner.owner_phone);
-            updateSession(supabase, owner.owner_phone, {
+            await getOrCreateSession(supabase, ownerPhone);
+            updateSession(supabase, ownerPhone, {
               current_step: "owner_approve_reject", pending_booking_id: booking.id, selected_station_id: stationId,
             });
           }
@@ -1071,7 +1087,7 @@ Deno.serve(async (req) => {
             // Incoming messages
             if (value.messages) {
               for (const msg of value.messages) {
-                const phone = msg.from;
+                const phone = normalizePhone(msg.from);
                 const contactName = value.contacts?.[0]?.profile?.name || phone;
                 const messageType = msg.type || "text";
 
