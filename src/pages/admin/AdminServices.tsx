@@ -4,23 +4,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Clock, Banknote, Globe } from "lucide-react";
+
+const emptyForm = { name: "", price: 0, duration_minutes: 30, station_id: null as string | null, is_active: true, sort_order: 0 };
 
 const AdminServices = () => {
   const [services, setServices] = useState<any[]>([]);
   const [stations, setStations] = useState<any[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", price: 0, duration_minutes: 30, station_id: "" as string | null, is_active: true, sort_order: 0 });
+  const [form, setForm] = useState({ ...emptyForm });
 
   const load = useCallback(async () => {
     const [{ data: svc }, { data: st }] = await Promise.all([
-      supabase.from("services").select("*, stations(name)").order("sort_order"),
+      supabase.from("services").select("*").order("sort_order"),
       supabase.from("stations").select("id, name").order("created_at"),
     ]);
     if (svc) setServices(svc);
@@ -29,9 +30,27 @@ const AdminServices = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  const openAdd = (stationId: string | null) => {
+    setEditing(null);
+    setForm({ ...emptyForm, station_id: stationId });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (s: any) => {
+    setEditing(s);
+    setForm({ name: s.name, price: s.price, duration_minutes: s.duration_minutes, station_id: s.station_id, is_active: s.is_active, sort_order: s.sort_order });
+    setDialogOpen(true);
+  };
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditing(null);
+    setForm({ ...emptyForm });
+  };
+
   const handleSave = async () => {
-    if (!form.name.trim()) { toast({ title: "الاسم مطلوب", variant: "destructive" }); return; }
-    const payload = { ...form, price: Number(form.price), duration_minutes: Number(form.duration_minutes), sort_order: Number(form.sort_order), station_id: form.station_id || null };
+    if (!form.name.trim()) { toast({ title: "اسم الخدمة مطلوب", variant: "destructive" }); return; }
+    const payload = { ...form, price: Number(form.price), duration_minutes: Number(form.duration_minutes), sort_order: Number(form.sort_order) };
     const wasEditing = editing;
     const { error } = editing
       ? await supabase.from("services").update(payload).eq("id", editing.id)
@@ -40,86 +59,141 @@ const AdminServices = () => {
       toast({ title: "حدث خطأ", description: error.message, variant: "destructive" });
       return;
     }
-    setDialogOpen(false);
-    setEditing(null);
-    setForm({ name: "", price: 0, duration_minutes: 30, station_id: "", is_active: true, sort_order: 0 });
+    closeDialog();
     await load();
     toast({ title: wasEditing ? "تم التحديث" : "تمت الإضافة" });
   };
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from("services").delete().eq("id", id);
-    if (error) {
-      toast({ title: "حدث خطأ", description: error.message, variant: "destructive" });
-      return;
-    }
+    if (error) { toast({ title: "حدث خطأ", description: error.message, variant: "destructive" }); return; }
     await load();
     toast({ title: "تم الحذف" });
   };
 
-  const openEdit = (s: any) => {
-    setEditing(s);
-    setForm({ name: s.name, price: s.price, duration_minutes: s.duration_minutes, station_id: s.station_id || "", is_active: s.is_active, sort_order: s.sort_order });
-    setDialogOpen(true);
-  };
+  // Group services: null station_id = global, else by station
+  const globalServices = services.filter((s) => !s.station_id);
+  const stationName = (id: string) => stations.find((s) => s.id === id)?.name ?? id;
+
+  const ServiceCard = ({ svc }: { svc: any }) => (
+    <div className="flex items-center justify-between rounded-lg border bg-card px-4 py-3 gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm">{svc.name}</span>
+            {!svc.is_active && <Badge variant="outline" className="text-xs">معطّلة</Badge>}
+          </div>
+          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><Banknote className="h-3 w-3" />{Number(svc.price).toLocaleString()} د.ع</span>
+            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{svc.duration_minutes} دقيقة</span>
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-1 shrink-0">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(svc)}><Pencil className="h-3.5 w-3.5" /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(svc.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" dir="rtl">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-foreground">الخدمات</h3>
-        <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setEditing(null); setForm({ name: "", price: 0, duration_minutes: 30, station_id: "", is_active: true, sort_order: 0 }); } }}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="h-4 w-4 ml-1" />إضافة خدمة</Button>
-          </DialogTrigger>
-          <DialogContent dir="rtl">
-            <DialogHeader><DialogTitle>{editing ? "تعديل خدمة" : "إضافة خدمة جديدة"}</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>اسم الخدمة</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="غسيل خارجي" /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>السعر (دينار عراقي)</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></div>
-                <div><Label>المدة (دقائق)</Label><Input type="number" value={form.duration_minutes} onChange={(e) => setForm({ ...form, duration_minutes: Number(e.target.value) })} /></div>
-              </div>
-              <div><Label>المحطة (اتركه فارغاً للكل)</Label>
-                <Select value={form.station_id || "all"} onValueChange={(v) => setForm({ ...form, station_id: v === "all" ? null : v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">جميع المحطات</SelectItem>
-                    {stations.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div><Label>الترتيب</Label><Input type="number" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })} /></div>
-              <div className="flex items-center gap-2">
-                <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
-                <Label>مفعّلة</Label>
-              </div>
-              <Button onClick={handleSave} className="w-full">{editing ? "تحديث" : "إضافة"}</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button size="sm" variant="outline" onClick={() => openAdd(null)}>
+          <Globe className="h-4 w-4 ml-1" />خدمة عامة لكل المحطات
+        </Button>
       </div>
 
-      <Table>
-        <TableHeader><TableRow><TableHead>الخدمة</TableHead><TableHead>السعر</TableHead><TableHead>المدة</TableHead><TableHead>المحطة</TableHead><TableHead>الحالة</TableHead><TableHead>إجراءات</TableHead></TableRow></TableHeader>
-        <TableBody>
-          {services.map((s) => (
-            <TableRow key={s.id}>
-              <TableCell className="font-medium">{s.name}</TableCell>
-              <TableCell>{s.price} د.ع</TableCell>
-              <TableCell>{s.duration_minutes} دقيقة</TableCell>
-              <TableCell>{(s as any).stations?.name || "الكل"}</TableCell>
-              <TableCell><Badge variant={s.is_active ? "default" : "outline"}>{s.is_active ? "مفعّلة" : "معطلة"}</Badge></TableCell>
-              <TableCell>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-          {services.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">لا توجد خدمات بعد</TableCell></TableRow>}
-        </TableBody>
-      </Table>
+      {/* Global services card */}
+      <Card>
+        <CardHeader className="pb-3 pt-4 px-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              خدمات مشتركة لجميع المحطات
+              <Badge variant="secondary" className="text-xs">{globalServices.length}</Badge>
+            </CardTitle>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openAdd(null)}>
+              <Plus className="h-3.5 w-3.5 ml-1" />إضافة
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-2">
+          {globalServices.length === 0
+            ? <p className="text-xs text-muted-foreground text-center py-3">لا توجد خدمات مشتركة</p>
+            : globalServices.map((s) => <ServiceCard key={s.id} svc={s} />)
+          }
+        </CardContent>
+      </Card>
+
+      {/* Per-station cards */}
+      {stations.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-4">لا توجد محطات — أضف محطة أولاً من قسم المحطات</p>
+      )}
+      {stations.map((station) => {
+        const stationServices = services.filter((s) => s.station_id === station.id);
+        return (
+          <Card key={station.id}>
+            <CardHeader className="pb-3 pt-4 px-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  {station.name}
+                  <Badge variant="secondary" className="text-xs">{stationServices.length} خدمة</Badge>
+                </CardTitle>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openAdd(station.id)}>
+                  <Plus className="h-3.5 w-3.5 ml-1" />إضافة خدمة
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-2">
+              {stationServices.length === 0
+                ? <p className="text-xs text-muted-foreground text-center py-3">لا توجد خدمات خاصة بهذه المحطة — تستخدم الخدمات المشتركة</p>
+                : stationServices.map((s) => <ServiceCard key={s.id} svc={s} />)
+              }
+            </CardContent>
+          </Card>
+        );
+      })}
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) closeDialog(); }}>
+        <DialogContent dir="rtl" className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{editing ? "تعديل خدمة" : "إضافة خدمة"}</DialogTitle>
+            {form.station_id && (
+              <p className="text-sm text-muted-foreground">المحطة: <span className="font-medium text-foreground">{stationName(form.station_id)}</span></p>
+            )}
+            {!form.station_id && (
+              <p className="text-sm text-muted-foreground">مشتركة لجميع المحطات</p>
+            )}
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>اسم الخدمة</Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="غسيل خارجي" autoFocus />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>السعر (د.ع)</Label>
+                <Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} />
+              </div>
+              <div>
+                <Label>المدة (دقيقة)</Label>
+                <Input type="number" value={form.duration_minutes} onChange={(e) => setForm({ ...form, duration_minutes: Number(e.target.value) })} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+              <Label className="cursor-pointer">تفعيل الخدمة</Label>
+              <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleSave} className="flex-1">{editing ? "تحديث" : "إضافة"}</Button>
+              <Button variant="outline" onClick={closeDialog}>إلغاء</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
