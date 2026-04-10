@@ -150,6 +150,15 @@ function generateTimeSlots(start: string, end: string, durationMin: number): str
   return slots;
 }
 
+function to12Hour(time24: string): string {
+  const parts = time24.split(":");
+  const h = parseInt(parts[0]);
+  const m = parseInt(parts[1]);
+  const period = h < 12 ? "صباحاً" : "مساءً";
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -380,14 +389,14 @@ async function handleOwnerLogic(
         const templateVars = {
           booking_number: String(booking.booking_number), station: booking.stations?.name || "",
           service: booking.services?.name || "", price: String(booking.services?.price || ""),
-          date: booking.booking_date, time: booking.booking_time ? booking.booking_time.substring(0, 5) : "",
+          date: booking.booking_date, time: booking.booking_time ? to12Hour(booking.booking_time.substring(0, 5)) : "",
           offer: booking.owner_offer || "", note: note || booking.owner_note || "",
         };
         let custMsg = replaceTemplateVars(
           settings.BOT_THANK_YOU_MESSAGE || "✅ تم تأكيد حجزك بنجاح!\n\n🔢 #{booking_number}\n🏪 {station}\n🧽 {service} - {price} د.ع\n📅 {date}",
           templateVars
         );
-        if (booking.booking_time) custMsg += `\n⏰ الوقت: ${booking.booking_time.substring(0, 5)}`;
+        if (booking.booking_time) custMsg += `\n⏰ الوقت: ${to12Hour(booking.booking_time.substring(0, 5))}`;
         if (booking.owner_offer) custMsg += `\n\n🎁 عرض خاص لك اليوم: ${booking.owner_offer}`;
         if (note) custMsg += `\n📝 ملاحظة من الإدارة: ${note}`;
         else if (booking.owner_note) custMsg += `\n📝 ملاحظة من الإدارة: ${booking.owner_note}`;
@@ -417,7 +426,7 @@ async function handleOwnerLogic(
     const b = pendingBookings[idx];
     updateSession(supabase, phone, { current_step: "owner_approve_reject", pending_booking_id: b.id });
 
-    const detailMsg = `📋 تفاصيل الحجز #${b.booking_number}:\n\n📱 العميل: ${b.customer_name || b.customer_phone}\n🧽 الخدمة: ${b.services?.name} - ${b.services?.price} د.ع\n📅 التاريخ: ${b.booking_date}${b.booking_time ? "\n⏰ الوقت: " + b.booking_time.substring(0, 5) : ""}\n\nهل توافق على الحجز؟`;
+    const detailMsg = `📋 تفاصيل الحجز #${b.booking_number}:\n\n📱 العميل: ${b.customer_name || b.customer_phone}\n🧽 الخدمة: ${b.services?.name} - ${b.services?.price} د.ع\n📅 التاريخ: ${b.booking_date}${b.booking_time ? "\n⏰ الوقت: " + to12Hour(b.booking_time.substring(0, 5)) : ""}\n\nهل توافق على الحجز؟`;
     const waId = await sendWhatsAppInteractive(phone, detailMsg, [
       { id: "approve_yes", title: "✅ موافق" },
       { id: "approve_no", title: "❌ غير موافق" },
@@ -444,7 +453,7 @@ async function showOwnerMenu(supabase: any, phone: string, convId: string, setti
   } else {
     msg += `📋 لديك ${pendingBookings.length} حجز معلق:\n\n`;
     pendingBookings.forEach((b: any, i: number) => {
-      msg += `${i + 1}. #${b.booking_number} - ${b.customer_name || b.customer_phone} - ${b.services?.name} - ${b.booking_date}${b.booking_time ? " " + b.booking_time.substring(0, 5) : ""}\n`;
+      msg += `${i + 1}. #${b.booking_number} - ${b.customer_name || b.customer_phone} - ${b.services?.name} - ${b.booking_date}${b.booking_time ? " " + to12Hour(b.booking_time.substring(0, 5)) : ""}\n`;
     });
     msg += "\nأرسل رقم الحجز للموافقة أو الرفض";
   }
@@ -796,7 +805,7 @@ async function handleServiceSelection(supabase: any, phone: string, convId: stri
   }
 
   let msg = `✅ اخترت: ${service.name} - ${service.price} د.ع\n\nالمواعيد المتاحة اليوم:\n`;
-  available.forEach((s, i) => { msg += `${i + 1}. ${s}\n`; });
+  available.forEach((s, i) => { msg += `${i + 1}. ${to12Hour(s)}\n`; });
   msg += "\nأرسل رقم الموعد\nأرسل 0 للعودة";
   await sendAndSave(supabase, convId, phone, msg, settings);
   updateSession(supabase, phone, { current_step: "awaiting_time", selected_service_id: service.id, selected_date: today });
@@ -884,7 +893,7 @@ async function createBookingAndNotifyOwner(
   };
   const confirmTemplate = settings.BOT_CONFIRMATION_MESSAGE || "⏳ جاري تأكيد حجزك...\n\n🏪 {station}\n🧽 {service} - {price} د.ع\n📅 {date}\n🔢 #{booking_number}";
   let custMsg = replaceTemplateVars(confirmTemplate, templateVars);
-  if (bookingTime) custMsg += `\n⏰ ${bookingTime}`;
+  if (bookingTime) custMsg += `\n⏰ ${to12Hour(bookingTime)}`;
   custMsg += "\n\nسنعلمك بالتفاصيل خلال لحظات... ⏳";
 
   // Send customer message and update session in parallel
@@ -898,7 +907,7 @@ async function createBookingAndNotifyOwner(
       .then(async ({ data: owner }: any) => {
         if (owner?.owner_phone) {
           const ownerConvId = await getOrCreateConvForPhone(supabase, owner.owner_phone, owner.owner_name);
-          const ownerMsg = `📢 طلب حجز جديد!\n\n🔢 رقم الحجز: #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n⏰ الوقت: " + bookingTime : ""}\n\nهل توافق على الحجز؟`;
+          const ownerMsg = `📢 طلب حجز جديد!\n\n🔢 رقم الحجز: #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n⏰ الوقت: " + to12Hour(bookingTime) : ""}\n\nهل توافق على الحجز؟`;
 
           const ownerButtons = [
             { id: "approve_yes", title: "✅ موافق" },
@@ -944,7 +953,7 @@ async function showMyBookings(supabase: any, phone: string, convId: string, sett
   let msg = "📋 حجوزاتك النشطة:\n\n";
   bookings.forEach((b: any) => {
     const label = b.status === "confirmed" ? "مؤكد ✅" : "قيد الانتظار ⏳";
-    msg += `🔢 #${b.booking_number} - ${label}\n   🏪 ${b.stations?.name}\n   🧽 ${b.services?.name} - ${b.services?.price} د.ع\n   📅 ${b.booking_date}${b.booking_time ? " ⏰ " + b.booking_time.substring(0, 5) : ""}\n\n`;
+    msg += `🔢 #${b.booking_number} - ${label}\n   🏪 ${b.stations?.name}\n   🧽 ${b.services?.name} - ${b.services?.price} د.ع\n   📅 ${b.booking_date}${b.booking_time ? " ⏰ " + to12Hour(b.booking_time.substring(0, 5)) : ""}\n\n`;
   });
   msg += `لإلغاء حجز أرسل: إلغاء #رقم_الحجز`;
 
