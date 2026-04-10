@@ -386,20 +386,21 @@ async function handleOwnerLogic(
     if (booking) {
       const custConvId = await getOrCreateConvForPhone(supabase, booking.customer_phone);
       if (custConvId) {
+        const timeLabel2 = booking.booking_time ? to12Hour(booking.booking_time.substring(0, 5)) : "";
         const templateVars = {
           booking_number: String(booking.booking_number), station: booking.stations?.name || "",
           service: booking.services?.name || "", price: String(booking.services?.price || ""),
-          date: booking.booking_date, time: booking.booking_time ? to12Hour(booking.booking_time.substring(0, 5)) : "",
+          date: booking.booking_date, time: timeLabel2,
           offer: booking.owner_offer || "", note: note || booking.owner_note || "",
         };
+        const defaultThankYou = `✅ تم تأكيد حجزك!\n\n🏪 ${booking.stations?.name || ""}\n🧽 ${booking.services?.name} - ${booking.services?.price} د.ع\n📅 ${booking.booking_date}${timeLabel2 ? "\n⏰ " + timeLabel2 : ""}\n🔢 رقم الحجز: #${booking.booking_number}`;
         let custMsg = replaceTemplateVars(
-          settings.BOT_THANK_YOU_MESSAGE || "✅ تم تأكيد حجزك بنجاح!\n\n🔢 #{booking_number}\n🏪 {station}\n🧽 {service} - {price} د.ع\n📅 {date}",
+          settings.BOT_THANK_YOU_MESSAGE || defaultThankYou,
           templateVars
         );
-        if (booking.booking_time) custMsg += `\n⏰ الوقت: ${to12Hour(booking.booking_time.substring(0, 5))}`;
         if (booking.owner_offer) custMsg += `\n\n🎁 عرض خاص لك اليوم: ${booking.owner_offer}`;
-        if (note) custMsg += `\n📝 ملاحظة من الإدارة: ${note}`;
-        else if (booking.owner_note) custMsg += `\n📝 ملاحظة من الإدارة: ${booking.owner_note}`;
+        if (note) custMsg += `\n📝 ملاحظة: ${note}`;
+        else if (booking.owner_note) custMsg += `\n📝 ملاحظة: ${booking.owner_note}`;
         custMsg += "\n\nنتمنى لك تجربة رائعة! 🚗✨";
         sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings);
       }
@@ -884,17 +885,17 @@ async function createBookingAndNotifyOwner(
 
   const { data: booking } = await supabase.from("bookings").insert(insertData).select("id, booking_number").single();
 
-  // Tell customer - use DB confirmation message
+  // Tell customer - pending confirmation message
   const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const timeLabel = bookingTime ? to12Hour(bookingTime) : "";
   const templateVars = {
     station: station?.name || "", service: service?.name || "", price: String(service?.price || ""),
-    date: dateLabel, time: bookingTime || "", booking_number: String(booking?.booking_number || "---"),
+    date: dateLabel, time: timeLabel, booking_number: String(booking?.booking_number || "---"),
     customer: customerName || phone,
   };
-  const confirmTemplate = settings.BOT_CONFIRMATION_MESSAGE || "⏳ جاري تأكيد حجزك...\n\n🏪 {station}\n🧽 {service} - {price} د.ع\n📅 {date}\n🔢 #{booking_number}";
-  let custMsg = replaceTemplateVars(confirmTemplate, templateVars);
-  if (bookingTime) custMsg += `\n⏰ ${to12Hour(bookingTime)}`;
-  custMsg += "\n\nسنعلمك بالتفاصيل خلال لحظات... ⏳";
+  const defaultPendingMsg = `📩 تم استلام طلب حجزك!\n\n🏪 ${station?.name || ""}\n🧽 ${service?.name} - ${service?.price} د.ع\n📅 ${dateLabel}${timeLabel ? "\n⏰ " + timeLabel : ""}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\n⏳ في انتظار تأكيد صاحب المغسلة...\nسنعلمك فور التأكيد.`;
+  const confirmTemplate = settings.BOT_CONFIRMATION_MESSAGE || defaultPendingMsg;
+  const custMsg = replaceTemplateVars(confirmTemplate, templateVars);
 
   // Send customer message and update session in parallel
   const custSend = sendAndSave(supabase, convId, phone, custMsg, settings);
