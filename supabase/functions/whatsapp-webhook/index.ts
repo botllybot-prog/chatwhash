@@ -175,7 +175,8 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 function estimateMinutes(distKm: number): number {
-  return Math.max(1, Math.round(distKm / 40 * 60));
+  // ~30 km/h average city speed, minimum 2 minutes
+  return Math.max(2, Math.round(distKm / 30 * 60));
 }
 
 function replaceTemplateVars(template: string, vars: Record<string, string>): string {
@@ -721,27 +722,60 @@ async function handleLocationMessage(supabase: any, phone: string, convId: strin
   }
 
   const MAX_RADIUS_KM = 30;
+
+  // Calculate distance for all stations that have coordinates
   const withDist = stations
-    .filter((s: any) => s.latitude && s.longitude)
-    .map((s: any) => ({ ...s, distance: haversineDistance(loc.latitude, loc.longitude, s.latitude, s.longitude) }))
-    .filter((s: any) => s.distance <= MAX_RADIUS_KM)
+    .filter((s: any) => s.latitude != null && s.longitude != null)
+    .map((s: any) => ({
+      ...s,
+      distance: haversineDistance(loc.latitude, loc.longitude, parseFloat(s.latitude), parseFloat(s.longitude)),
+    }))
+    .filter((s: any) => s.distance < MAX_RADIUS_KM)
     .sort((a: any, b: any) => a.distance - b.distance);
 
   if (withDist.length === 0) {
-    await sendAndSave(supabase, convId, phone, `📍 لا توجد مغاسل ضمن ${MAX_RADIUS_KM} كم من موقعك.\nأرسل \"قائمة\" لعرض جميع المغاسل أو 0 للعودة.`, settings);
+    // Fall back: show the closest station even if it's beyond the radius
+    const allWithDist = stations
+      .filter((s: any) => s.latitude != null && s.longitude != null)
+      .map((s: any) => ({
+        ...s,
+        distance: haversineDistance(loc.latitude, loc.longitude, parseFloat(s.latitude), parseFloat(s.longitude)),
+      }))
+      .sort((a: any, b: any) => a.distance - b.distance);
+
+    if (allWithDist.length === 0) {
+      // No stations have coordinates — show text list
+      await sendAndSave(supabase, convId, phone, `📍 لا توجد مغاسل بإحداثيات محددة ضمن ${MAX_RADIUS_KM} كم.\nأرسل "قائمة" لعرض جميع المغاسل.`, settings);
+      return true;
+    }
+
+    const closest = allWithDist[0];
+    const distStr = closest.distance >= 1 ? `${closest.distance.toFixed(1)} كم` : `${Math.round(closest.distance * 1000)} م`;
+    const waId = await sendWhatsAppInteractive(phone,
+      `📍 لا توجد مغاسل ضمن ${MAX_RADIUS_KM} كم من موقعك.\n\nأقرب مغسلة إليك هي *${closest.name}* على بُعد ${distStr}.`,
+      [
+        { id: `sid_${closest.id}`, title: `🏪 ${closest.name}`.substring(0, 20) },
+        { id: "btn_menu", title: "🔍 عرض كل المغاسل" },
+      ], settings);
+    saveBotMessage(supabase, convId, `أقرب مغسلة: ${closest.name}`, waId);
+    updateSession(supabase, phone, { current_step: "awaiting_station" });
     return true;
   }
 
-  // Use WhatsApp list message for nearby stations (up to 10)
+  // Format distance: meters if < 1km, km otherwise
+  function fmtDist(km: number): string {
+    return km < 1 ? `${Math.round(km * 1000)} م` : `${km.toFixed(1)} كم`;
+  }
+
   const nearby = withDist.slice(0, 10);
   const rows = nearby.map((s: any) => ({
     id: `sid_${s.id}`,
     title: s.name.substring(0, 24),
-    description: `📏 ${s.distance.toFixed(1)} كم ≈ ${estimateMinutes(s.distance)} دقيقة`.substring(0, 72),
+    description: `📍 ${fmtDist(s.distance)} • ⏱ ${estimateMinutes(s.distance)} د${s.address ? " • " + s.address.substring(0, 30) : ""}`.substring(0, 72),
   }));
+  rows.push({ id: "btn_menu", title: "🔍 عرض جميع المغاسل" });
 
-  const body = `📍 المغاسل القريبة (${nearby.length}) ضمن ${MAX_RADIUS_KM} كم:\n\n` +
-    nearby.map((s: any) => `🏪 ${s.name}\n   📏 ${s.distance.toFixed(1)} كم ≈ ${estimateMinutes(s.distance)} دقيقة`).join("\n");
+  const body = `📍 وجدنا *${nearby.length}* مغسلة قريبة منك (ضمن ${MAX_RADIUS_KM} كم)\nمرتبة من الأقرب إلى الأبعد:`;
 
   const waId = await sendWhatsAppList(phone, body, "اختر مغسلة", [{ title: "المغاسل القريبة", rows }], settings);
   saveBotMessage(supabase, convId, body, waId);
