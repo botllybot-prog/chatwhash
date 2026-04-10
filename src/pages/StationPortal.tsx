@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
@@ -271,7 +271,7 @@ const StationInfoTab = ({ stationId }: { stationId: string }) => {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent dir="rtl">
-          <DialogHeader><DialogTitle>طلب تعديل: {editField ? fieldLabels[editField] : ""}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>طلب تعديل: {editField ? fieldLabels[editField] : ""}</DialogTitle><DialogDescription className="sr-only">طلب تعديل بيانات المحطة</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>القيمة الحالية</Label>

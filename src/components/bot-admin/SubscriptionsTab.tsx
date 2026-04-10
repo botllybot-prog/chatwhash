@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
@@ -160,7 +160,7 @@ const SubscriptionsTab = () => {
             <Button size="sm"><Plus className="h-4 w-4 ml-1" />اشتراك جديد</Button>
           </DialogTrigger>
           <DialogContent dir="rtl">
-            <DialogHeader><DialogTitle>إنشاء اشتراك</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>إنشاء اشتراك</DialogTitle><DialogDescription className="sr-only">إنشاء اشتراك جديد للمحطة</DialogDescription></DialogHeader>
             <div className="space-y-4">
               <div>
                 <Label>المحطة</Label>
@@ -228,7 +228,7 @@ const SubscriptionsTab = () => {
       {/* Payment Dialog */}
       <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
         <DialogContent dir="rtl">
-          <DialogHeader><DialogTitle>تسجيل دفعة</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>تسجيل دفعة</DialogTitle><DialogDescription className="sr-only">تسجيل دفعة اشتراك</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div><Label>المبلغ (د.ع)</Label><Input type="number" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} /></div>
             <div>

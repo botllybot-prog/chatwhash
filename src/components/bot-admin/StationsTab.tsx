@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
@@ -168,7 +168,7 @@ const StationsTab = () => {
             <Button size="sm"><Plus className="h-4 w-4 ml-1" />إضافة محطة</Button>
           </DialogTrigger>
           <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh]">
-            <DialogHeader><DialogTitle>{editing ? "تعديل محطة" : "إضافة محطة جديدة"}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{editing ? "تعديل محطة" : "إضافة محطة جديدة"}</DialogTitle><DialogDescription className="sr-only">{editing ? "تعديل بيانات المحطة" : "إضافة محطة جديدة"}</DialogDescription></DialogHeader>
             <ScrollArea className="max-h-[75vh] pr-4">
               <div className="space-y-4 pb-2">
                 <div><Label>اسم المحطة</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="محطة أربيل - عينكاوا" /></div>
