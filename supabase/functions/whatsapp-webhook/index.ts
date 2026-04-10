@@ -256,6 +256,19 @@ function notifyAdmin(supabase: any, settings: Record<string, string>, message: s
   })();
 }
 
+// ==================== CHECK IF ADMIN ====================
+
+function checkIfAdmin(phone: string, settings: Record<string, string>): boolean {
+  const adminPhone = settings.ADMIN_WHATSAPP_PHONE;
+  if (!adminPhone) return false;
+  const normalizedAdmin = normalizePhone(adminPhone.trim());
+  // Build both formats of admin phone to compare
+  const adminAlts = [normalizedAdmin];
+  if (/^9647\d{9}$/.test(normalizedAdmin)) adminAlts.push("0" + normalizedAdmin.substring(3));
+  else if (/^07\d{9}$/.test(normalizedAdmin)) adminAlts.push("964" + normalizedAdmin.substring(1));
+  return adminAlts.includes(phone);
+}
+
 // ==================== CHECK IF OWNER ====================
 
 async function checkIfOwner(supabase: any, phone: string) {
@@ -512,6 +525,145 @@ async function showOwnerMenu(supabase: any, phone: string, convId: string, setti
   const waId = await sendWhatsAppList(phone, body, "اعرض الحجوزات", [{ title: "الحجوزات المعلقة", rows }], settings);
   saveBotMessage(supabase, convId, body, waId);
   updateSession(supabase, phone, { current_step: "owner_view_pending", selected_station_id: owner.station_id });
+  return true;
+}
+
+// ==================== ADMIN BOT LOGIC ====================
+
+async function handleAdminLogic(
+  supabase: any, phone: string, input: string, convId: string, settings: Record<string, string>
+): Promise<boolean> {
+  // Iraq timezone: UTC+3
+  const nowIraq = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  const todayStr = nowIraq.toISOString().split("T")[0]; // YYYY-MM-DD
+
+  // Start of current week (Saturday = first day in Iraq, use Sunday for simplicity)
+  const dayOfWeek = nowIraq.getUTCDay(); // 0=Sun
+  const weekStartMs = nowIraq.getTime() - dayOfWeek * 24 * 60 * 60 * 1000;
+  const weekStartStr = new Date(weekStartMs).toISOString().split("T")[0];
+
+  // Start of current month
+  const monthStartStr = `${nowIraq.getUTCFullYear()}-${String(nowIraq.getUTCMonth() + 1).padStart(2, "0")}-01`;
+
+  // ── حجوزات اليوم ──
+  if (input === "admin_bookings_today") {
+    const { data: bookings } = await supabase.from("bookings")
+      .select("booking_number, customer_name, customer_phone, status, booking_time, stations(name), services(name, price)")
+      .eq("booking_date", todayStr).order("booking_time");
+
+    if (!bookings || bookings.length === 0) {
+      const waId = await sendWhatsAppInteractive(phone,
+        `📊 حجوزات اليوم (${todayStr})\n\nلا توجد حجوزات اليوم.`,
+        [{ id: "admin_menu", title: "🔙 القائمة" }], settings);
+      saveBotMessage(supabase, convId, "لا توجد حجوزات اليوم", waId);
+      return true;
+    }
+
+    const pending = bookings.filter((b: any) => b.status === "pending").length;
+    const confirmed = bookings.filter((b: any) => b.status === "confirmed").length;
+    const cancelled = bookings.filter((b: any) => b.status === "cancelled").length;
+
+    let msg = `📊 حجوزات اليوم (${todayStr})\n\nإجمالي: ${bookings.length} حجز\n⏳ انتظار: ${pending}   ✅ مؤكد: ${confirmed}   ❌ ملغى: ${cancelled}\n\n`;
+    const slice = bookings.slice(0, 10);
+    for (const b of slice) {
+      const timeLabel = b.booking_time ? to12Hour(b.booking_time.substring(0, 5)) : "";
+      const icon = b.status === "confirmed" ? "✅" : b.status === "cancelled" ? "❌" : "⏳";
+      msg += `${icon} #${b.booking_number} | ${b.stations?.name || ""}\n   🧽 ${b.services?.name || ""}${timeLabel ? " | ⏰ " + timeLabel : ""}\n   👤 ${b.customer_name || b.customer_phone}\n`;
+    }
+    if (bookings.length > 10) msg += `\n... و${bookings.length - 10} حجوزات أخرى`;
+
+    const waId = await sendWhatsAppInteractive(phone, msg,
+      [{ id: "admin_menu", title: "🔙 القائمة" }], settings);
+    saveBotMessage(supabase, convId, msg, waId);
+    return true;
+  }
+
+  // ── مبيعات اليوم ──
+  if (input === "admin_sales_today") {
+    const { data: bookings } = await supabase.from("bookings")
+      .select("services(price)").eq("booking_date", todayStr).in("status", ["confirmed"]);
+    const total = (bookings || []).reduce((s: number, b: any) => s + (b.services?.price || 0), 0);
+    const count = bookings?.length || 0;
+    const msg = `💰 مبيعات اليوم (${todayStr})\n\n✅ حجوزات مؤكدة: ${count}\n💵 الإجمالي: ${total.toLocaleString("ar-IQ")} د.ع`;
+    const waId = await sendWhatsAppInteractive(phone, msg, [
+      { id: "admin_sales_week", title: "📈 مبيعات الأسبوع" },
+      { id: "admin_menu", title: "🔙 القائمة" },
+    ], settings);
+    saveBotMessage(supabase, convId, msg, waId);
+    return true;
+  }
+
+  // ── مبيعات الأسبوع ──
+  if (input === "admin_sales_week") {
+    const { data: bookings } = await supabase.from("bookings")
+      .select("services(price)").gte("booking_date", weekStartStr).lte("booking_date", todayStr).in("status", ["confirmed"]);
+    const total = (bookings || []).reduce((s: number, b: any) => s + (b.services?.price || 0), 0);
+    const count = bookings?.length || 0;
+    const msg = `📈 مبيعات الأسبوع\n(${weekStartStr} – ${todayStr})\n\n✅ حجوزات مؤكدة: ${count}\n💵 الإجمالي: ${total.toLocaleString("ar-IQ")} د.ع`;
+    const waId = await sendWhatsAppInteractive(phone, msg, [
+      { id: "admin_sales_month", title: "📅 مبيعات الشهر" },
+      { id: "admin_menu", title: "🔙 القائمة" },
+    ], settings);
+    saveBotMessage(supabase, convId, msg, waId);
+    return true;
+  }
+
+  // ── مبيعات الشهر ──
+  if (input === "admin_sales_month") {
+    const { data: bookings } = await supabase.from("bookings")
+      .select("services(price)").gte("booking_date", monthStartStr).lte("booking_date", todayStr).in("status", ["confirmed"]);
+    const total = (bookings || []).reduce((s: number, b: any) => s + (b.services?.price || 0), 0);
+    const count = bookings?.length || 0;
+    const msg = `📅 مبيعات الشهر\n(${monthStartStr} – ${todayStr})\n\n✅ حجوزات مؤكدة: ${count}\n💵 الإجمالي: ${total.toLocaleString("ar-IQ")} د.ع`;
+    const waId = await sendWhatsAppInteractive(phone, msg,
+      [{ id: "admin_menu", title: "🔙 القائمة" }], settings);
+    saveBotMessage(supabase, convId, msg, waId);
+    return true;
+  }
+
+  // ── المحطات الشغالة ──
+  if (input === "admin_stations_active") {
+    const { data: stations } = await supabase.from("stations")
+      .select("name").eq("is_active", true).order("name");
+    const count = stations?.length || 0;
+    let msg = `🏪 المحطات الشغالة\n\nعدد المحطات النشطة: ${count}\n\n`;
+    (stations || []).forEach((s: any) => { msg += `• ${s.name}\n`; });
+    const waId = await sendWhatsAppInteractive(phone, msg,
+      [{ id: "admin_menu", title: "🔙 القائمة" }], settings);
+    saveBotMessage(supabase, convId, msg, waId);
+    return true;
+  }
+
+  // ── Default: show admin menu ──
+  const menuWaId = await sendWhatsAppList(
+    phone,
+    `👋 مرحباً بك في لوحة بيانات الإدارة\n📅 اليوم: ${todayStr}\n\nاختر التقرير المطلوب:`,
+    "📊 عرض التقارير",
+    [
+      {
+        title: "الحجوزات",
+        rows: [
+          { id: "admin_bookings_today", title: "📊 حجوزات اليوم", description: "عدد الحجوزات ومعلوماتها" },
+        ],
+      },
+      {
+        title: "المبيعات",
+        rows: [
+          { id: "admin_sales_today", title: "💰 مبيعات اليوم", description: "إجمالي المبيعات المؤكدة اليوم" },
+          { id: "admin_sales_week", title: "📈 مبيعات الأسبوع", description: "إجمالي هذا الأسبوع" },
+          { id: "admin_sales_month", title: "📅 مبيعات الشهر", description: "إجمالي هذا الشهر" },
+        ],
+      },
+      {
+        title: "المحطات",
+        rows: [
+          { id: "admin_stations_active", title: "🏪 المحطات الشغالة", description: "قائمة المحطات النشطة" },
+        ],
+      },
+    ],
+    settings
+  );
+  saveBotMessage(supabase, convId, "قائمة الإدارة", menuWaId);
   return true;
 }
 
@@ -1025,26 +1177,32 @@ async function createBookingAndNotifyOwner(
   if (booking) {
     supabase.from("station_owners")
       .select("owner_phone, owner_name").eq("station_id", stationId).maybeSingle()
-      .then(async ({ data: owner }: any) => {
-        if (owner?.owner_phone) {
-          const ownerPhone = normalizePhone(owner.owner_phone);
-          const ownerConvId = await getOrCreateConvForPhone(supabase, ownerPhone, owner.owner_name);
-          const ownerMsg = `📢 طلب حجز جديد!\n\n🔢 رقم الحجز: #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n⏰ الوقت: " + to12Hour(bookingTime) : ""}\n\nهل توافق على الحجز؟`;
+      .then(async ({ data: owner, error: ownerErr }: any) => {
+        if (ownerErr) console.error("station_owners query error:", ownerErr);
+        if (!owner?.owner_phone) {
+          console.log(`[OWNER_NOTIFY] No owner found in station_owners for station_id=${stationId}. Booking #${booking.booking_number} needs manual attention.`);
+          return;
+        }
+        console.log(`[OWNER_NOTIFY] Found owner ${owner.owner_name} phone=${owner.owner_phone} for station_id=${stationId}`);
+        const ownerPhone = normalizePhone(owner.owner_phone);
+        console.log(`[OWNER_NOTIFY] Sending to normalized phone=${ownerPhone}`);
+        const ownerConvId = await getOrCreateConvForPhone(supabase, ownerPhone, owner.owner_name);
+        const ownerMsg = `📢 طلب حجز جديد!\n\n🔢 رقم الحجز: #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n⏰ الوقت: " + to12Hour(bookingTime) : ""}\n\nهل توافق على الحجز؟`;
 
-          const ownerButtons = [
-            { id: "approve_yes", title: "✅ موافق" },
-            { id: "approve_no", title: "❌ غير موافق" },
-            { id: "approve_reschedule", title: "📅 تعديل الموعد" },
-          ];
+        const ownerButtons = [
+          { id: "approve_yes", title: "✅ موافق" },
+          { id: "approve_no", title: "❌ غير موافق" },
+          { id: "approve_reschedule", title: "📅 تعديل الموعد" },
+        ];
 
-          const ownerWaId = await sendWhatsAppInteractive(ownerPhone, ownerMsg, ownerButtons, settings);
-          if (ownerConvId) {
-            saveBotMessage(supabase, ownerConvId, ownerMsg, ownerWaId);
-            await getOrCreateSession(supabase, ownerPhone);
-            updateSession(supabase, ownerPhone, {
-              current_step: "owner_approve_reject", pending_booking_id: booking.id, selected_station_id: stationId,
-            });
-          }
+        const ownerWaId = await sendWhatsAppInteractive(ownerPhone, ownerMsg, ownerButtons, settings);
+        console.log(`[OWNER_NOTIFY] Message sent, waId=${ownerWaId}`);
+        if (ownerConvId) {
+          saveBotMessage(supabase, ownerConvId, ownerMsg, ownerWaId);
+          await getOrCreateSession(supabase, ownerPhone);
+          updateSession(supabase, ownerPhone, {
+            current_step: "owner_approve_reject", pending_booking_id: booking.id, selected_station_id: stationId,
+          });
         }
       }).catch((e: any) => console.error("Owner notify error:", e));
   }
@@ -1214,13 +1372,18 @@ Deno.serve(async (req) => {
                 // Auto-register bot customer (fire-and-forget)
                 upsertBotCustomer(supabase, phone, contactName !== phone ? contactName : null, "whatsapp");
 
-                // === ROUTING: Owner or Customer? ===
+                // === ROUTING: Owner, Admin, or Customer? ===
                 const owner = await checkIfOwner(supabase, phone);
+                const isAdmin = checkIfAdmin(phone, settings);
 
                 if (owner) {
                   const buttonId = msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id;
                   const actualInput = buttonId || content;
                   await handleOwnerLogic(supabase, phone, actualInput, convId, settings, owner);
+                } else if (isAdmin) {
+                  const buttonId = msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id;
+                  const actualInput = buttonId || content;
+                  await handleAdminLogic(supabase, phone, actualInput, convId, settings);
                 } else if (messageType === "text" || messageType === "location" || messageType === "interactive") {
                   const buttonId = msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id;
                   const actualInput = buttonId || content;
