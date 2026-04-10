@@ -261,8 +261,8 @@ function notifyAdmin(supabase: any, settings: Record<string, string>, message: s
 async function checkIfOwner(supabase: any, phone: string) {
   // Try exact match first, then alternative format (local ↔ international)
   const alts = [phone];
-  if (/^9647\d{8}$/.test(phone)) alts.push("0" + phone.substring(3)); // intl → local
-  else if (/^07\d{9}$/.test(phone)) alts.push("964" + phone.substring(1)); // local → intl
+  if (/^9647\d{9}$/.test(phone)) alts.push("0" + phone.substring(3)); // intl → local: 9647XXXXXXXXX → 07XXXXXXXXX
+  else if (/^07\d{9}$/.test(phone)) alts.push("964" + phone.substring(1)); // local → intl: 07XXXXXXXXX → 9647XXXXXXXXX
 
   for (const p of alts) {
     const { data } = await supabase.from("station_owners")
@@ -290,11 +290,37 @@ async function handleOwnerLogic(
   }
 
   // Owner idle - show menu
-  if (step === "idle" || step === "owner_idle") {
+  if (step === "idle" || step === "owner_idle" || input === "owner_refresh") {
     return await showOwnerMenu(supabase, phone, convId, settings, owner);
   }
 
-  // Owner accepting a booking
+  // Owner selects a pending booking from list (ID: pending_UUID)
+  if (step === "owner_view_pending" || input.startsWith("pending_")) {
+    const pendingMatch = input.match(/^pending_([a-f0-9-]+)$/i);
+    if (!pendingMatch) {
+      return await showOwnerMenu(supabase, phone, convId, settings, owner);
+    }
+    const bookingId = pendingMatch[1];
+    const { data: b } = await supabase.from("bookings")
+      .select("id, booking_number, customer_name, customer_phone, booking_date, booking_time, services(name, price)")
+      .eq("id", bookingId).eq("station_id", owner.station_id).eq("status", "pending").maybeSingle();
+
+    if (!b) {
+      return await showOwnerMenu(supabase, phone, convId, settings, owner);
+    }
+
+    updateSession(supabase, phone, { current_step: "owner_approve_reject", pending_booking_id: b.id });
+    const detailMsg = `📋 تفاصيل الحجز #${b.booking_number}:\n\n📱 العميل: ${b.customer_name || b.customer_phone}\n🧽 الخدمة: ${b.services?.name} - ${b.services?.price} د.ع\n📅 التاريخ: ${b.booking_date}${b.booking_time ? "\n⏰ الوقت: " + to12Hour(b.booking_time.substring(0, 5)) : ""}\n\nهل توافق على الحجز؟`;
+    const waId = await sendWhatsAppInteractive(phone, detailMsg, [
+      { id: "approve_yes", title: "✅ موافق" },
+      { id: "approve_no", title: "❌ غير موافق" },
+      { id: "approve_reschedule", title: "📅 تعديل الموعد" },
+    ], settings);
+    saveBotMessage(supabase, convId, detailMsg, waId);
+    return true;
+  }
+
+  // Owner approving/rejecting a booking
   if (step === "owner_approve_reject") {
     const bookingId = session.pending_booking_id;
     if (!bookingId) {
@@ -308,24 +334,28 @@ async function handleOwnerLogic(
         supabase.from("bookings").select("customer_phone, booking_number").eq("id", bookingId).single(),
       ]);
       const bk = bkResult.data;
-      const rescheduleMsg = "✅ تم إبلاغ صاحب المغسلة لتعديل الموعد.\n\nأرسل أي رسالة لعرض القائمة.";
-      const promises: Promise<any>[] = [sendAndSave(supabase, convId, phone, rescheduleMsg, settings)];
       if (bk) {
         const custConvId = await getOrCreateConvForPhone(supabase, bk.customer_phone);
         if (custConvId) {
-          const custMsg = `⚠️ عذراً، طلب صاحب المغسلة تعديل موعد حجزك #${bk.booking_number}.\n\nالرجاء إعادة الحجز باختيار موعد آخر. أرسل أي رسالة للبدء.`;
-          promises.push(sendAndSave(supabase, custConvId, bk.customer_phone, custMsg, settings));
+          const custMsg = `⚠️ عذراً، طلب صاحب المغسلة تعديل موعد حجزك #${bk.booking_number}.\nالرجاء إعادة الحجز باختيار موعد آخر.`;
+          const custWaId = await sendWhatsAppInteractive(bk.customer_phone, custMsg, [
+            { id: "btn_menu", title: "🔄 حجز جديد" },
+          ], settings);
+          saveBotMessage(supabase, custConvId, custMsg, custWaId);
+          updateSession(supabase, bk.customer_phone, { current_step: "idle" });
         }
       }
-      await Promise.all(promises);
       updateSession(supabase, phone, { current_step: "owner_idle", pending_booking_id: null });
-      return true;
+      return await showOwnerMenu(supabase, phone, convId, settings, owner);
     }
 
     if (input === "موافق" || input === "approve_yes") {
+      const waId = await sendWhatsAppInteractive(phone, "✅ تمت الموافقة!\n\nهل يوجد عرض خاص ترغب بإرفاقه للعميل;", [
+        { id: "owner_offer_skip", title: "⏭️ لا يوجد" },
+        { id: "owner_offer_add", title: "➕ أضافة عرض" },
+      ], settings);
+      saveBotMessage(supabase, convId, "سؤال عن العرض", waId);
       updateSession(supabase, phone, { current_step: "owner_offer" });
-      const msg = "✅ تمت الموافقة!\n\nهل يوجد عرض خاص ترغب بإرفاقه للعميل اليوم؟\n(اكتب العرض أو أرسل \"لا\" للتخطي)";
-      await sendAndSave(supabase, convId, phone, msg, settings);
       return true;
     }
 
@@ -336,21 +366,20 @@ async function handleOwnerLogic(
       ]);
       const booking = bookingResult.data;
 
-      // Notify customer and owner in parallel
-      const ownerMsg = "✅ تم رفض الحجز وإبلاغ العميل.\n\nأرسل أي رسالة لعرض القائمة.";
-      const promises: Promise<any>[] = [sendAndSave(supabase, convId, phone, ownerMsg, settings)];
-
       if (booking) {
         const custConvId = await getOrCreateConvForPhone(supabase, booking.customer_phone);
         if (custConvId) {
-          const custMsg = `❌ عذراً، تم رفض حجزك #${booking.booking_number} في ${booking.stations?.name}.\n\nيمكنك حجز موعد آخر بإرسال أي رسالة.`;
-          promises.push(sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings));
+          const custMsg = `❌ عذراً، تم رفض حجزك #${booking.booking_number} في ${booking.stations?.name}.\nيمكنك حجز موعد آخر من القائمة.`;
+          const custWaId = await sendWhatsAppInteractive(booking.customer_phone, custMsg, [
+            { id: "btn_menu", title: "🔄 حجز جديد" },
+          ], settings);
+          saveBotMessage(supabase, custConvId, custMsg, custWaId);
+          updateSession(supabase, booking.customer_phone, { current_step: "idle" });
         }
       }
 
-      await Promise.all(promises);
       updateSession(supabase, phone, { current_step: "owner_idle", pending_booking_id: null });
-      return true;
+      return await showOwnerMenu(supabase, phone, convId, settings, owner);
     }
 
     const fallbackMsg = "يرجى اختيار أحد الخيارات:";
@@ -363,22 +392,47 @@ async function handleOwnerLogic(
     return true;
   }
 
-  // Owner adding offer
+  // Owner offer step — button or typed offer
   if (step === "owner_offer") {
     const bookingId = session.pending_booking_id;
-    const offer = (input === "لا" || input === "no") ? null : input;
-    if (offer) supabase.from("bookings").update({ owner_offer: offer }).eq("id", bookingId).then(() => {}).catch(() => {});
-
+    if (input === "owner_offer_skip" || input === "لا" || input === "no") {
+      // No offer — go straight to note question
+      const waId = await sendWhatsAppInteractive(phone, "هل توجد ملاحظة إضافية للعميل;", [
+        { id: "owner_note_skip", title: "⏭️ لا يوجد" },
+        { id: "owner_note_add", title: "➕ إضافة ملاحظة" },
+      ], settings);
+      saveBotMessage(supabase, convId, "سؤال عن الملاحظة", waId);
+      updateSession(supabase, phone, { current_step: "owner_note" });
+      return true;
+    }
+    if (input === "owner_offer_add") {
+      await sendAndSave(supabase, convId, phone, "اكتب العرض الخاص للعميل:", settings);
+      return true;
+    }
+    // Typed offer text
+    supabase.from("bookings").update({ owner_offer: input }).eq("id", bookingId).then(() => {}).catch(() => {});
+    const waId = await sendWhatsAppInteractive(phone, "هل توجد ملاحظة إضافية للعميل;", [
+      { id: "owner_note_skip", title: "⏭️ لا يوجد" },
+      { id: "owner_note_add", title: "➕ إضافة ملاحظة" },
+    ], settings);
+    saveBotMessage(supabase, convId, "سؤال عن الملاحظة", waId);
     updateSession(supabase, phone, { current_step: "owner_note" });
-    const msg = "هل توجد ملاحظة إضافية للعميل؟\n(اكتب الملاحظة أو أرسل \"لا\" للتخطي)";
-    await sendAndSave(supabase, convId, phone, msg, settings);
     return true;
   }
 
-  // Owner adding note
+  // Owner note step — button or typed note
   if (step === "owner_note") {
     const bookingId = session.pending_booking_id;
-    const note = (input === "لا" || input === "no") ? null : input;
+    let note: string | null = null;
+
+    if (input === "owner_note_skip" || input === "لا" || input === "no") {
+      note = null;
+    } else if (input === "owner_note_add") {
+      await sendAndSave(supabase, convId, phone, "اكتب الملاحظة للعميل:", settings);
+      return true;
+    } else {
+      note = input;
+    }
 
     // Update note + confirm booking in parallel
     const updates: Promise<any>[] = [
@@ -394,9 +448,9 @@ async function handleOwnerLogic(
     ]);
     const booking = bookingResult.data;
 
-    // Confirm to owner immediately
-    const ownerMsg = "✅ تم تأكيد الحجز وإرسال التفاصيل للعميل.\n\nأرسل أي رسالة لعرض القائمة.";
-    const ownerSend = sendAndSave(supabase, convId, phone, ownerMsg, settings);
+    // Confirm to owner immediately + show menu
+    const ownerConfirmMsg = `✅ تم تأكيد الحجز #${booking?.booking_number || ""} وإرسال التفاصيل للعميل.`;
+    const ownerSend = sendAndSave(supabase, convId, phone, ownerConfirmMsg, settings);
 
     // Send final confirmation to customer in parallel
     if (booking) {
@@ -424,32 +478,7 @@ async function handleOwnerLogic(
 
     await ownerSend;
     updateSession(supabase, phone, { current_step: "owner_idle", pending_booking_id: null });
-    return true;
-  }
-
-  // Owner viewing pending bookings
-  if (step === "owner_view_pending") {
-    const { data: pendingBookings } = await supabase.from("bookings")
-      .select("id, booking_number, customer_phone, customer_name, booking_date, booking_time, services(name, price)")
-      .eq("station_id", owner.station_id).eq("status", "pending").order("created_at");
-
-    const idx = parseInt(input) - 1;
-    if (isNaN(idx) || !pendingBookings || idx < 0 || idx >= pendingBookings.length) {
-      const msg = `❌ اختيار غير صحيح. أرسل رقم من 1 إلى ${pendingBookings?.length || 0}\nأرسل 0 للعودة`;
-      await sendAndSave(supabase, convId, phone, msg, settings);
-      return true;
-    }
-
-    const b = pendingBookings[idx];
-    updateSession(supabase, phone, { current_step: "owner_approve_reject", pending_booking_id: b.id });
-
-    const detailMsg = `📋 تفاصيل الحجز #${b.booking_number}:\n\n📱 العميل: ${b.customer_name || b.customer_phone}\n🧽 الخدمة: ${b.services?.name} - ${b.services?.price} د.ع\n📅 التاريخ: ${b.booking_date}${b.booking_time ? "\n⏰ الوقت: " + to12Hour(b.booking_time.substring(0, 5)) : ""}\n\nهل توافق على الحجز؟`;
-    const waId = await sendWhatsAppInteractive(phone, detailMsg, [
-      { id: "approve_yes", title: "✅ موافق" },
-      { id: "approve_no", title: "❌ غير موافق" },
-      { id: "approve_reschedule", title: "📅 تعديل الموعد" },
-    ], settings);
-    saveBotMessage(supabase, convId, detailMsg, waId);
+    await showOwnerMenu(supabase, phone, convId, settings, owner);
     return true;
   }
 
@@ -459,27 +488,30 @@ async function handleOwnerLogic(
 
 async function showOwnerMenu(supabase: any, phone: string, convId: string, settings: Record<string, string>, owner: any) {
   const { data: pendingBookings } = await supabase.from("bookings")
-    .select("id, booking_number, customer_name, customer_phone, booking_date, booking_time, services(name)")
+    .select("id, booking_number, customer_name, customer_phone, booking_date, booking_time, services(name, price)")
     .eq("station_id", owner.station_id).eq("status", "pending").order("created_at");
 
   const stationName = owner.stations?.name || "محطتك";
-  let msg = `مرحباً ${owner.owner_name} 👋\nلوحة إدارة ${stationName}\n\n`;
 
   if (!pendingBookings || pendingBookings.length === 0) {
-    msg += "✅ لا توجد حجوزات معلقة حالياً.\n";
-  } else {
-    msg += `📋 لديك ${pendingBookings.length} حجز معلق:\n\n`;
-    pendingBookings.forEach((b: any, i: number) => {
-      msg += `${i + 1}. #${b.booking_number} - ${b.customer_name || b.customer_phone} - ${b.services?.name} - ${b.booking_date}${b.booking_time ? " " + to12Hour(b.booking_time.substring(0, 5)) : ""}\n`;
-    });
-    msg += "\nأرسل رقم الحجز للموافقة أو الرفض";
+    const waId = await sendWhatsAppInteractive(phone,
+      `مرحباً ${owner.owner_name} 👋\nلوحة إدارة ${stationName}\n\n✅ لا توجد حجوزات معلقة حالياً.`,
+      [{ id: "owner_refresh", title: "🔄 تحديث" }], settings);
+    saveBotMessage(supabase, convId, `لوحة ${stationName} - لا توجد حجوزات`, waId);
+    updateSession(supabase, phone, { current_step: "owner_idle", selected_station_id: owner.station_id });
+    return true;
   }
 
-  await sendAndSave(supabase, convId, phone, msg, settings);
-  updateSession(supabase, phone, {
-    current_step: pendingBookings && pendingBookings.length > 0 ? "owner_view_pending" : "owner_idle",
-    selected_station_id: owner.station_id,
-  });
+  const rows = pendingBookings.slice(0, 10).map((b: any) => ({
+    id: `pending_${b.id}`,
+    title: `#${b.booking_number} - ${(b.customer_name || b.customer_phone).substring(0, 16)}`.substring(0, 24),
+    description: `${b.services?.name} | ${b.booking_date}${b.booking_time ? " " + to12Hour(b.booking_time.substring(0, 5)) : ""}`.substring(0, 72),
+  }));
+
+  const body = `مرحباً ${owner.owner_name} 👋\nلوحة إدارة ${stationName}\n\n📋 لديك ${pendingBookings.length} حجز معلق\nاختر حجزاً للموافقة أو الرفض:`;
+  const waId = await sendWhatsAppList(phone, body, "اعرض الحجوزات", [{ title: "الحجوزات المعلقة", rows }], settings);
+  saveBotMessage(supabase, convId, body, waId);
+  updateSession(supabase, phone, { current_step: "owner_view_pending", selected_station_id: owner.station_id });
   return true;
 }
 
