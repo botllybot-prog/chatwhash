@@ -24,6 +24,10 @@ import AdminSubscriptions from "./pages/admin/AdminSubscriptions";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminCustomers from "./pages/admin/AdminCustomers";
+import AdminEmployees from "./pages/admin/AdminEmployees";
+import AdminBroadcast from "./pages/admin/AdminBroadcast";
+import EmployeeLayout from "./components/EmployeeLayout";
+import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 
 const queryClient = new QueryClient();
 
@@ -44,8 +48,13 @@ const ProtectedRoutes = () => (
         <Route path="reports" element={<AdminReports />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="customers" element={<AdminCustomers />} />
+        <Route path="employees" element={<AdminEmployees />} />
+        <Route path="broadcast" element={<AdminBroadcast />} />
       </Route>
       <Route path="/station-portal" element={<RoleGuard allowedRoles={["station_owner"]} fallbackPath="/app/admin/stations"><StationPortal /></RoleGuard>} />
+      <Route path="/employee" element={<RoleGuard allowedRoles={["employee"]} fallbackPath="/login"><EmployeeLayout /></RoleGuard>}>
+        <Route index element={<EmployeeDashboard />} />
+      </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
   </AuthGuard>

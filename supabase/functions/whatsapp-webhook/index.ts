@@ -244,11 +244,23 @@ function incrementCustomerBookings(supabase: any, phone: string, platform: strin
 
 // ==================== ADMIN NOTIFICATION ====================
 
-function notifyAdmin(supabase: any, settings: Record<string, string>, message: string) {
+function notifyAdmin(supabase: any, settings: Record<string, string>, message: string, bookingId?: string) {
   const adminPhone = settings.ADMIN_WHATSAPP_PHONE;
-  if (!adminPhone) return;
-  // Fire-and-forget: send admin a copy
+  // Fire-and-forget: send WhatsApp + insert DB notification
   (async () => {
+    try {
+      // Insert into notifications table for bell icon
+      await supabase.from("notifications").insert({
+        title: "حجز جديد",
+        body: message,
+        type: "new_booking",
+        is_read: false,
+        reference_id: bookingId || null,
+        user_id: null,
+      });
+    } catch (e) { console.error("DB notify error:", e); }
+
+    if (!adminPhone) return;
     try {
       const convId = await getOrCreateConvForPhone(supabase, adminPhone, "المسؤول");
       await sendWhatsAppMessage(adminPhone, message, settings);
@@ -280,7 +292,7 @@ async function checkIfOwner(supabase: any, phone: string) {
 
   for (const p of alts) {
     const { data } = await supabase.from("station_owners")
-      .select("id, owner_name, station_id, stations(name)")
+      .select("id, owner_name, station_id, is_active, stations(name)")
       .eq("owner_phone", p).maybeSingle();
     if (data) return data;
   }
@@ -292,6 +304,16 @@ async function checkIfOwner(supabase: any, phone: string) {
 async function handleOwnerLogic(
   supabase: any, phone: string, content: string, convId: string, settings: Record<string, string>, owner: any
 ): Promise<boolean> {
+  // ── Check if owner account is suspended ──────────────────────────
+  if (owner.is_active === false) {
+    const zain = settings.PAYMENT_ZAIN_CASH || "غير محدد";
+    const superKey = settings.PAYMENT_SUPER_KEY || "غير محدد";
+    const nas = settings.PAYMENT_NAS_WALLET || "غير محدد";
+    const blockedMsg = `⚠️ تم إيقاف حسابك مؤقتاً بسبب عدم سداد الاشتراك.\n\nللاستمرار في استخدام الخدمة، يرجى تسديد المبلغ المستحق إلى أحد الحسابات التالية:\n\n💚 زين كاش: ${zain}\n🔵 سوبر كي: ${superKey}\n🟠 ناس وولت: ${nas}\n\nبعد الدفع، تواصل مع الإدارة لتفعيل حسابك.`;
+    await sendAndSave(supabase, convId, phone, blockedMsg, settings);
+    return true;
+  }
+
   const session = await getOrCreateSession(supabase, phone);
   if (!session) return false;
   const input = content.trim();
@@ -1247,7 +1269,7 @@ async function createBookingAndNotifyOwner(
   // Notify admin (fire-and-forget)
   if (booking) {
     const adminMsg = `🔔 حجز جديد!\n\n🔢 #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🏪 المحطة: ${station?.name}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 ${dateLabel}${bookingTime ? "\n⏰ " + bookingTime : ""}`;
-    notifyAdmin(supabase, settings, adminMsg);
+    notifyAdmin(supabase, settings, adminMsg, booking.id);
     incrementCustomerBookings(supabase, phone, "whatsapp");
   }
 

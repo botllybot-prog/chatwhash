@@ -51,8 +51,12 @@ const AuthGuard = ({ children }: { children: React.ReactNode }) => {
       if (!path.startsWith("/app/station-portal")) {
         navigate("/app/station-portal", { replace: true });
       }
+    } else if (role === "employee") {
+      if (!path.startsWith("/app/employee")) {
+        navigate("/app/employee", { replace: true });
+      }
     } else if (role === "admin") {
-      if (path.startsWith("/app/station-portal")) {
+      if (path.startsWith("/app/station-portal") || path.startsWith("/app/employee")) {
         navigate("/app/admin/dashboard", { replace: true });
       }
     }

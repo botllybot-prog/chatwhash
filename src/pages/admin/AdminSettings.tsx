@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { Bot, Bell, MessageSquare, Link2, Eye, EyeOff, Save, ShieldCheck } from "lucide-react";
+import { Bot, Bell, MessageSquare, Link2, Eye, EyeOff, Save, ShieldCheck, Wallet } from "lucide-react";
 
 const ALL_KEYS = [
   "BOT_ENABLED", "BOT_WELCOME_MESSAGE", "BOT_UNKNOWN_MESSAGE",
@@ -18,6 +18,7 @@ const ALL_KEYS = [
   "BOT_FULLY_BOOKED_MESSAGE", "BOT_THANK_YOU_ENABLED", "BOT_THANK_YOU_MESSAGE",
   "WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_APP_SECRET",
   "ADMIN_WHATSAPP_PHONE", "ADMIN_TELEGRAM_CHAT_ID",
+  "PAYMENT_ZAIN_CASH", "PAYMENT_SUPER_KEY", "PAYMENT_NAS_WALLET",
 ];
 
 const DEFAULTS: Record<string, string> = {
@@ -245,6 +246,55 @@ const AdminSettings = () => {
             <div className="bg-muted rounded-md p-3 font-mono text-sm break-all text-foreground">{webhookUrl}</div>
             <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(webhookUrl); toast({ title: "تم نسخ الرابط" }); }}>نسخ الرابط</Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Payment Accounts */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Wallet className="h-5 w-5 text-primary" />حسابات الدفع</CardTitle>
+          <CardDescription>تظهر هذه الحسابات لصاحب المغسلة عند إيقاف حسابه مؤقتاً</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-green-500"></span>
+              زين كاش — رقم الحساب
+            </Label>
+            <Input
+              value={values.PAYMENT_ZAIN_CASH || ""}
+              onChange={(e) => set("PAYMENT_ZAIN_CASH", e.target.value)}
+              placeholder="07XXXXXXXXX"
+              dir="ltr"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-blue-500"></span>
+              سوبر كي — رقم الحساب
+            </Label>
+            <Input
+              value={values.PAYMENT_SUPER_KEY || ""}
+              onChange={(e) => set("PAYMENT_SUPER_KEY", e.target.value)}
+              placeholder="07XXXXXXXXX"
+              dir="ltr"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full bg-orange-500"></span>
+              ناس وولت — رقم الحساب
+            </Label>
+            <Input
+              value={values.PAYMENT_NAS_WALLET || ""}
+              onChange={(e) => set("PAYMENT_NAS_WALLET", e.target.value)}
+              placeholder="07XXXXXXXXX"
+              dir="ltr"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground pt-1">
+            عند إيقاف حساب صاحب مغسلة مؤقتاً ← صفحة أصحاب المحطات
+          </p>
         </CardContent>
       </Card>
 

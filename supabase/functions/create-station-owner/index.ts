@@ -28,10 +28,18 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Check admin role
-    const { data: roleData } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", caller.id).eq("role", "admin").maybeSingle();
-    if (!roleData) {
-      return new Response(JSON.stringify({ error: "Forbidden: Admin only" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // Check admin or employee role
+    const { data: roleData } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", caller.id).maybeSingle();
+    if (!roleData || !["admin", "employee"].includes(roleData.role)) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // If employee, verify they have can_create_owners permission
+    if (roleData.role === "employee") {
+      const { data: empData } = await supabaseAdmin.from("employees").select("can_create_owners").eq("user_id", caller.id).maybeSingle();
+      if (!empData?.can_create_owners) {
+        return new Response(JSON.stringify({ error: "لا تملك صلاحية إنشاء الحسابات" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     }
 
     const { email, password, owner_name, owner_phone, station_id } = await req.json();
@@ -62,6 +70,7 @@ Deno.serve(async (req) => {
       station_id,
       owner_name,
       owner_phone: owner_phone || null,
+      created_by: caller.id,
     });
 
     return new Response(JSON.stringify({ success: true, user_id: userId }), {

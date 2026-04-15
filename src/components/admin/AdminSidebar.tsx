@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   Store, Wrench, CalendarCheck, Users, FileEdit,
-  CreditCard, BarChart3, Settings, MessageCircle, LogOut, Car, LayoutDashboard, UserCheck
+  CreditCard, BarChart3, Settings, MessageCircle, LogOut, Car, LayoutDashboard, UserCheck, Briefcase, Megaphone
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -24,6 +24,8 @@ const items = [
   { title: "الاشتراكات", url: "/app/admin/subscriptions", icon: CreditCard, badgeKey: null },
   { title: "التقارير", url: "/app/admin/reports", icon: BarChart3, badgeKey: null },
   { title: "الإعدادات", url: "/app/admin/settings", icon: Settings, badgeKey: null },
+  { title: "الموظفون", url: "/app/admin/employees", icon: Briefcase, badgeKey: null },
+  { title: "رسائل جماعية", url: "/app/admin/broadcast", icon: Megaphone, badgeKey: null },
 ];
 
 export function AdminSidebar() {
