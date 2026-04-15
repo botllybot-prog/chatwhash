@@ -941,7 +941,7 @@ async function handleLocationMessage(supabase: any, phone: string, convId: strin
     return true;
   }
 
-  const MAX_RADIUS_KM = 30;
+  const MAX_RADIUS_KM = 15;
 
   // Calculate distance for all stations that have coordinates
   const withDist = stations
