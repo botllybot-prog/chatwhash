@@ -821,6 +821,92 @@ async function handleCustomerLogic(
     return true;
   }
 
+  // ── Conflict: customer has a pending booking ──
+  if (step === "conflict_pending") {
+    const bookingId = session.conflict_booking_id;
+    if (input === "conflict_cancel") {
+      // Cancel the old booking and restart flow
+      if (bookingId) await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId);
+      updateSession(supabase, phone, { current_step: "idle", conflict_booking_id: null });
+      return await showCustomerWelcome(supabase, phone, convId, settings, contactName);
+    }
+    if (input === "conflict_reschedule") {
+      // Jump directly to time slots for the same station+service
+      const { data: oldBooking } = await supabase.from("bookings")
+        .select("station_id, service_id, stations(scheduling_type, working_hours_start, working_hours_end, slot_duration_minutes, name)")
+        .eq("id", bookingId).single();
+      if (!oldBooking) {
+        updateSession(supabase, phone, { current_step: "idle", conflict_booking_id: null });
+        return await showCustomerWelcome(supabase, phone, convId, settings, contactName);
+      }
+      // Cancel old booking first
+      await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId);
+      updateSession(supabase, phone, { conflict_booking_id: null });
+
+      const st = oldBooking.stations as any;
+      const sType = st?.scheduling_type || "slots";
+
+      if (sType === "instant" || sType === "daily") {
+        // Daily — jump to day picker
+        const dayRows: any[] = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
+          d.setUTCDate(d.getUTCDate() + i);
+          const lbl = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", month: "short", day: "numeric" });
+          dayRows.push({ id: `day_${i}`, title: lbl });
+        }
+        dayRows.push({ id: "day_back", title: "🔙 رجوع" });
+        const waId = await sendWhatsAppList(phone, "📅 اختر يوماً جديداً للحجز:", "اختر اليوم", [{ title: "الأيام المتاحة", rows: dayRows }], settings);
+        saveBotMessage(supabase, convId, "اختيار يوم جديد", waId);
+        updateSession(supabase, phone, { current_step: "awaiting_day", selected_station_id: oldBooking.station_id, selected_service_id: oldBooking.service_id });
+        return true;
+      } else {
+        // Slots — jump directly to time picker for today
+        const iraqNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
+        const today = iraqNow.toISOString().split("T")[0];
+        const allSlots = generateTimeSlots(st?.working_hours_start, st?.working_hours_end, st?.slot_duration_minutes);
+        const { data: booked } = await supabase.from("bookings").select("booking_time")
+          .eq("station_id", oldBooking.station_id).eq("booking_date", today).in("status", ["pending", "confirmed"]);
+        const bookedSet = new Set((booked || []).map((b: any) => b.booking_time?.substring(0, 5)));
+        const nowMin = iraqNow.getUTCHours() * 60 + iraqNow.getUTCMinutes();
+        const available = allSlots.filter((s: string) => {
+          const [h, m] = s.split(":").map(Number);
+          return h * 60 + m > nowMin && !bookedSet.has(s);
+        });
+        if (available.length === 0) {
+          // No slots today — fall back to day picker
+          const dayRows2: any[] = [];
+          for (let i = 1; i < 7; i++) {
+            const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
+            d.setUTCDate(d.getUTCDate() + i);
+            dayRows2.push({ id: `day_${i}`, title: i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", month: "short", day: "numeric" }) });
+          }
+          dayRows2.push({ id: "day_back", title: "🔙 رجوع" });
+          const waId2 = await sendWhatsAppList(phone, `⚠️ لا توجد مواعيد اليوم في ${st?.name || "المغسلة"}.
+📅 اختر يوماً آخر:`, "اختر اليوم", [{ title: "الأيام المتاحة", rows: dayRows2 }], settings);
+          saveBotMessage(supabase, convId, "لا مواعيد اليوم", waId2);
+          updateSession(supabase, phone, { current_step: "awaiting_day", selected_station_id: oldBooking.station_id, selected_service_id: oldBooking.service_id });
+          return true;
+        }
+        const timeRows = available.slice(0, 9).map((s: string) => ({ id: `time_${s}`, title: to12Hour(s) }));
+        timeRows.push({ id: "time_back", title: "🔙 رجوع" });
+        const waId3 = await sendWhatsAppList(phone, `📅 اختر موعداً جديداً في ${st?.name || "المغسلة"}:`, "اختر موعداً", [{ title: "المواعيد المتاحة", rows: timeRows }], settings);
+        saveBotMessage(supabase, convId, "اختيار موعد جديد", waId3);
+        updateSession(supabase, phone, { current_step: "awaiting_time", selected_station_id: oldBooking.station_id, selected_service_id: oldBooking.service_id, selected_date: today });
+        return true;
+      }
+    }
+    // Fallback: resend conflict buttons
+    const { data: cb } = await supabase.from("bookings").select("booking_number, stations(name)").eq("id", bookingId).single();
+    const stName = (cb?.stations as any)?.name || "المغسلة";
+    const fbWaId = await sendWhatsAppInteractive(phone,
+      `لديك حجز قيد الانتظار في مغسلة ${stName}. ماذا تود أن تفعل؟`,
+      [{ id: "conflict_cancel", title: "🗑️ إلغاء والبدء من جديد" }, { id: "conflict_reschedule", title: "📅 تعديل وقت الحجز" }],
+      settings);
+    saveBotMessage(supabase, convId, "تعارض حجز", fbWaId);
+    return true;
+  }
+
   // Idle - welcome with location request
   if (step === "idle") {
     return await showCustomerWelcome(supabase, phone, convId, settings, contactName);
@@ -1176,6 +1262,29 @@ async function createBookingAndNotifyOwner(
   stationId: string, serviceId: string, bookingDate: string, bookingTime: string | null,
   vehicleDetails: string | null = null
 ) {
+  // ── Anti-spam: check if customer already has a pending booking ──
+  const { data: existingPending } = await supabase.from("bookings")
+    .select("id, booking_number, stations(name)")
+    .eq("customer_phone", phone)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (existingPending) {
+    const stName = (existingPending.stations as any)?.name || "المغسلة";
+    const conflictWaId = await sendWhatsAppInteractive(
+      phone,
+      `⚠️ لديك حجز قيد الانتظار حالياً في مغسلة ${stName} (رقم #${existingPending.booking_number}).\nماذا تود أن تفعل؟`,
+      [
+        { id: "conflict_cancel", title: "🗑️ إلغاء والبدء من جديد" },
+        { id: "conflict_reschedule", title: "📅 تعديل وقت الحجز" },
+      ],
+      settings
+    );
+    saveBotMessage(supabase, convId, "تعارض حجز معلق", conflictWaId);
+    updateSession(supabase, phone, { current_step: "conflict_pending", conflict_booking_id: existingPending.id });
+    return true;
+  }
+
   // Fetch station, service, and customer name in parallel
   const [stationResult, serviceResult, customerName] = await Promise.all([
     supabase.from("stations").select("name").eq("id", stationId).single(),
