@@ -457,7 +457,7 @@ async function handleOwnerLogic(
     const [, bookingResult] = await Promise.all([
       Promise.all(updates),
       supabase.from("bookings")
-        .select("booking_number, customer_phone, booking_date, booking_time, owner_offer, owner_note, stations(name), services(name, price)")
+        .select("booking_number, customer_phone, booking_date, booking_time, owner_offer, owner_note, stations(name, address, latitude, longitude), services(name, price)")
         .eq("id", bookingId).single(),
     ]);
     const booking = bookingResult.data;
@@ -488,6 +488,23 @@ async function handleOwnerLogic(
         custMsg += "\n\nنتمنى لك تجربة رائعة! 🚗✨";
         // Send confirmation text then action buttons
         await sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings);
+
+        // Build and send Google Maps link
+        const station = booking.stations as any;
+        const lat = station?.latitude ? parseFloat(station.latitude) : null;
+        const lng = station?.longitude ? parseFloat(station.longitude) : null;
+        const stationAddress = station?.address || "";
+        if (lat && lng) {
+          const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+          const locationMsg = `📍 موقع المغسلة على الخريطة:\n${stationAddress ? stationAddress + "\n" : ""}${mapsUrl}`;
+          await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings);
+        } else if (stationAddress) {
+          const encoded = encodeURIComponent(stationAddress);
+          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
+          const locationMsg = `📍 موقع المغسلة:\n${stationAddress}\n${mapsUrl}`;
+          await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings);
+        }
+
         const custFollowWaId = await sendWhatsAppInteractive(
           booking.customer_phone, "ماذا تريد أن تفعل؟",
           [
