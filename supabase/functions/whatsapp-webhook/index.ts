@@ -299,6 +299,73 @@ async function checkIfOwner(supabase: any, phone: string) {
   return null;
 }
 
+// ==================== CONFIRM BOOKING & NOTIFY CUSTOMER ====================
+
+async function confirmBookingAndNotifyCustomer(
+  supabase: any, ownerPhone: string, ownerConvId: string,
+  settings: Record<string, string>, owner: any,
+  bookingId: string, offer: string | null, note: string | null
+) {
+  // Confirm booking in DB
+  const updateData: any = { status: "confirmed" };
+  if (offer) updateData.owner_offer = offer;
+  if (note) updateData.owner_note = note;
+  await supabase.from("bookings").update(updateData).eq("id", bookingId);
+
+  // Fetch full booking details
+  const { data: booking } = await supabase.from("bookings")
+    .select("booking_number, customer_phone, booking_date, booking_time, owner_offer, owner_note, stations(name, address, latitude, longitude), services(name, price)")
+    .eq("id", bookingId).single();
+
+  // Notify owner immediately
+  const ownerConfirmMsg = `✅ تم تأكيد الحجز #${booking?.booking_number || ""} وإرسال التفاصيل للعميل.`;
+  await sendAndSave(supabase, ownerConvId, ownerPhone, ownerConfirmMsg, settings);
+  updateSession(supabase, ownerPhone, { current_step: "owner_idle", pending_booking_id: null });
+  await showOwnerMenu(supabase, ownerPhone, ownerConvId, settings, owner);
+
+  // Send full confirmation to customer
+  if (booking) {
+    const custConvId = await getOrCreateConvForPhone(supabase, booking.customer_phone);
+    if (custConvId) {
+      const timeLabel = booking.booking_time ? to12Hour(booking.booking_time.substring(0, 5)) : "-";
+      const dateFormatted = new Date(booking.booking_date).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
+
+      let custMsg = `✅ تم تأكيد حجزك!\n\n📍 المحطة: ${(booking.stations as any)?.name || ""}\n🔧 الخدمة: ${booking.services?.name || ""}\n💰 السعر: ${booking.services?.price || ""} د.ع\n📅 التاريخ: ${dateFormatted}\n🕐 الوقت: ${timeLabel}\n📋 رقم الحجز: #${booking.booking_number}`;
+      const finalOffer = offer || booking.owner_offer;
+      const finalNote = note || booking.owner_note;
+      if (finalOffer) custMsg += `\n\n🎁 عرض خاص: ${finalOffer}`;
+      if (finalNote) custMsg += `\n📝 ملاحظة: ${finalNote}`;
+      custMsg += "\n\nنتمنى لك تجربة رائعة! 🚗✨";
+
+      await sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings);
+
+      // Google Maps link
+      const stationData = booking.stations as any;
+      const lat = stationData?.latitude ? parseFloat(stationData.latitude) : null;
+      const lng = stationData?.longitude ? parseFloat(stationData.longitude) : null;
+      const stationAddress = stationData?.address || "";
+      if (lat && lng) {
+        const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        const locationMsg = `📍 موقع المغسلة على الخريطة:\n${stationAddress ? stationAddress + "\n" : ""}${mapsUrl}`;
+        await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings);
+      } else if (stationAddress) {
+        const encoded = encodeURIComponent(stationAddress);
+        const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
+        const locationMsg = `📍 موقع المغسلة:\n${stationAddress}\n${mapsUrl}`;
+        await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings);
+      }
+
+      // Follow-up buttons for customer
+      const followWaId = await sendWhatsAppInteractive(booking.customer_phone, "ماذا تريد أن تفعل؟", [
+        { id: "btn_bookings", title: "📋 حجوزاتي" },
+        { id: "btn_menu", title: "🏠 القائمة الرئيسية" },
+      ], settings);
+      saveBotMessage(supabase, custConvId, "أزرار بعد التأكيد", followWaId);
+      updateSession(supabase, booking.customer_phone, { current_step: "idle" });
+    }
+  }
+}
+
 // ==================== OWNER BOT LOGIC ====================
 
 async function handleOwnerLogic(
@@ -364,184 +431,97 @@ async function handleOwnerLogic(
       return await showOwnerMenu(supabase, phone, convId, settings, owner);
     }
 
+    // ── تغيير الموعد ──
     if (input === "approve_reschedule") {
       const [, bkResult] = await Promise.all([
         supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId),
-        supabase.from("bookings").select("customer_phone, booking_number").eq("id", bookingId).single(),
+        supabase.from("bookings").select("customer_phone, booking_number, stations(name), services(name), booking_date, booking_time").eq("id", bookingId).single(),
       ]);
       const bk = bkResult.data;
       if (bk) {
         const custConvId = await getOrCreateConvForPhone(supabase, bk.customer_phone);
         if (custConvId) {
-          const custMsg = `⚠️ عذراً، طلب صاحب المغسلة تعديل موعد حجزك #${bk.booking_number}.\nالرجاء إعادة الحجز باختيار موعد آخر.`;
+          const custMsg = `📅 طلب تغيير موعد\n\nعذراً، يطلب صاحب المغسلة تغيير موعد حجزك:\n📋 رقم الحجز: #${bk.booking_number}\n📍 المحطة: ${bk.stations?.name || ""}\n🔧 الخدمة: ${bk.services?.name || ""}\n\nيرجى إعادة الحجز باختيار موعد جديد.`;
           const custWaId = await sendWhatsAppInteractive(bk.customer_phone, custMsg, [
-            { id: "btn_menu", title: "🔄 حجز جديد" },
+            { id: "btn_menu", title: "🔄 حجز موعد جديد" },
           ], settings);
           saveBotMessage(supabase, custConvId, custMsg, custWaId);
           updateSession(supabase, bk.customer_phone, { current_step: "idle" });
         }
+        // Notify owner of action
+        const ownerAckMsg = `📅 تم إلغاء الحجز #${bk.booking_number} وإبلاغ العميل بتغيير الموعد.`;
+        await sendAndSave(supabase, convId, phone, ownerAckMsg, settings);
       }
       updateSession(supabase, phone, { current_step: "owner_idle", pending_booking_id: null });
-      return await showOwnerMenu(supabase, phone, convId, settings, owner);
+      await showOwnerMenu(supabase, phone, convId, settings, owner);
+      return true;
     }
 
-    if (input === "موافق" || input === "approve_yes") {
-      const waId = await sendWhatsAppInteractive(phone, "✅ تمت الموافقة!\n\nهل يوجد عرض خاص ترغب بإرفاقه للعميل;", [
-        { id: "owner_offer_skip", title: "⏭️ لا يوجد" },
-        { id: "owner_offer_add", title: "➕ أضافة عرض" },
+    // ── تأكيد ──
+    if (input === "تأكيد" || input === "approve_yes" || input === "موافق") {
+      // Ask for optional offer/note before sending confirmation
+      const waId = await sendWhatsAppInteractive(phone, "✅ ممتاز!\n\nهل تريد إضافة عرض أو ملاحظة للعميل؟", [
+        { id: "owner_offer_skip", title: "⏭️ لا، أرسل التأكيد" },
+        { id: "owner_offer_add", title: "💬 إضافة عرض/ملاحظة" },
       ], settings);
       saveBotMessage(supabase, convId, "سؤال عن العرض", waId);
       updateSession(supabase, phone, { current_step: "owner_offer" });
       return true;
     }
 
-    if (input === "رفض" || input === "approve_no") {
+    // ── رفض ──
+    if (input === "رفض" || input === "approve_no" || input === "غير موافق") {
       const [, bookingResult] = await Promise.all([
         supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId),
-        supabase.from("bookings").select("customer_phone, booking_number, stations(name)").eq("id", bookingId).single(),
+        supabase.from("bookings").select("customer_phone, booking_number, booking_date, booking_time, stations(name), services(name)").eq("id", bookingId).single(),
       ]);
       const booking = bookingResult.data;
 
       if (booking) {
         const custConvId = await getOrCreateConvForPhone(supabase, booking.customer_phone);
         if (custConvId) {
-          const custMsg = `❌ عذراً، تم رفض حجزك #${booking.booking_number} في ${booking.stations?.name}.\nيمكنك حجز موعد آخر من القائمة.`;
+          const custMsg = `❌ تم رفض الحجز\n\n📋 رقم الحجز: #${booking.booking_number}\n📍 المحطة: ${booking.stations?.name || ""}\n🔧 الخدمة: ${booking.services?.name || ""}\n\nعذراً على الإزعاج. يمكنك الحجز في وقت آخر.`;
           const custWaId = await sendWhatsAppInteractive(booking.customer_phone, custMsg, [
-            { id: "btn_menu", title: "🔄 حجز جديد" },
+            { id: "btn_menu", title: "🔄 حجز موعد جديد" },
           ], settings);
           saveBotMessage(supabase, custConvId, custMsg, custWaId);
           updateSession(supabase, booking.customer_phone, { current_step: "idle" });
         }
+        // Notify owner of action
+        const ownerAckMsg = `❌ تم رفض الحجز #${booking.booking_number} وإبلاغ العميل.`;
+        await sendAndSave(supabase, convId, phone, ownerAckMsg, settings);
       }
 
       updateSession(supabase, phone, { current_step: "owner_idle", pending_booking_id: null });
-      return await showOwnerMenu(supabase, phone, convId, settings, owner);
+      await showOwnerMenu(supabase, phone, convId, settings, owner);
+      return true;
     }
 
+    // Fallback: أعد إرسال الأزرار
     const fallbackMsg = "يرجى اختيار أحد الخيارات:";
     const fbWaId = await sendWhatsAppInteractive(phone, fallbackMsg, [
-      { id: "approve_yes", title: "✅ موافق" },
-      { id: "approve_no", title: "❌ غير موافق" },
-      { id: "approve_reschedule", title: "📅 تعديل الموعد" },
+      { id: "approve_yes", title: "✅ تأكيد" },
+      { id: "approve_no", title: "❌ رفض" },
+      { id: "approve_reschedule", title: "📅 تغيير الموعد" },
     ], settings);
     saveBotMessage(supabase, convId, fallbackMsg, fbWaId);
     return true;
   }
 
-  // Owner offer step — button or typed offer
+  // Owner offer step — skip or type offer/note
   if (step === "owner_offer") {
     const bookingId = session.pending_booking_id;
-    if (input === "owner_offer_skip" || input === "لا" || input === "no") {
-      // No offer — go straight to note question
-      const waId = await sendWhatsAppInteractive(phone, "هل توجد ملاحظة إضافية للعميل;", [
-        { id: "owner_note_skip", title: "⏭️ لا يوجد" },
-        { id: "owner_note_add", title: "➕ إضافة ملاحظة" },
-      ], settings);
-      saveBotMessage(supabase, convId, "سؤال عن الملاحظة", waId);
-      updateSession(supabase, phone, { current_step: "owner_note" });
+    if (input === "owner_offer_skip") {
+      // No offer — confirm directly
+      await confirmBookingAndNotifyCustomer(supabase, phone, convId, settings, owner, bookingId, null, null);
       return true;
     }
     if (input === "owner_offer_add") {
-      await sendAndSave(supabase, convId, phone, "اكتب العرض الخاص للعميل:", settings);
+      await sendAndSave(supabase, convId, phone, "✏️ اكتب العرض أو الملاحظة للعميل:", settings);
       return true;
     }
-    // Typed offer text
-    supabase.from("bookings").update({ owner_offer: input }).eq("id", bookingId).then(() => {}).catch(() => {});
-    const waId = await sendWhatsAppInteractive(phone, "هل توجد ملاحظة إضافية للعميل;", [
-      { id: "owner_note_skip", title: "⏭️ لا يوجد" },
-      { id: "owner_note_add", title: "➕ إضافة ملاحظة" },
-    ], settings);
-    saveBotMessage(supabase, convId, "سؤال عن الملاحظة", waId);
-    updateSession(supabase, phone, { current_step: "owner_note" });
-    return true;
-  }
-
-  // Owner note step — button or typed note
-  if (step === "owner_note") {
-    const bookingId = session.pending_booking_id;
-    let note: string | null = null;
-
-    if (input === "owner_note_skip" || input === "لا" || input === "no") {
-      note = null;
-    } else if (input === "owner_note_add") {
-      await sendAndSave(supabase, convId, phone, "اكتب الملاحظة للعميل:", settings);
-      return true;
-    } else {
-      note = input;
-    }
-
-    // Update note + confirm booking in parallel
-    const updates: Promise<any>[] = [
-      supabase.from("bookings").update({ status: "confirmed", ...(note ? { owner_note: note } : {}) }).eq("id", bookingId),
-    ];
-    if (note) updates.push(supabase.from("bookings").update({ owner_note: note }).eq("id", bookingId));
-
-    const [, bookingResult] = await Promise.all([
-      Promise.all(updates),
-      supabase.from("bookings")
-        .select("booking_number, customer_phone, booking_date, booking_time, owner_offer, owner_note, stations(name, address, latitude, longitude), services(name, price)")
-        .eq("id", bookingId).single(),
-    ]);
-    const booking = bookingResult.data;
-
-    // Confirm to owner immediately + show menu
-    const ownerConfirmMsg = `✅ تم تأكيد الحجز #${booking?.booking_number || ""} وإرسال التفاصيل للعميل.`;
-    const ownerSend = sendAndSave(supabase, convId, phone, ownerConfirmMsg, settings);
-
-    // Send final confirmation to customer in parallel
-    if (booking) {
-      const custConvId = await getOrCreateConvForPhone(supabase, booking.customer_phone);
-      if (custConvId) {
-        const timeLabel2 = booking.booking_time ? to12Hour(booking.booking_time.substring(0, 5)) : "";
-        const templateVars = {
-          booking_number: String(booking.booking_number), station: booking.stations?.name || "",
-          service: booking.services?.name || "", price: String(booking.services?.price || ""),
-          date: booking.booking_date, time: timeLabel2,
-          offer: booking.owner_offer || "", note: note || booking.owner_note || "",
-        };
-        const defaultThankYou = `✅ تم تأكيد حجزك!\n📍 المحطة: ${booking.stations?.name || ""}\n🔧 الخدمة: ${booking.services?.name || ""}\n📅 التاريخ: ${booking.booking_date}\n🕐 الوقت: ${timeLabel2 || "-"}\n📋 رقم الحجز: #${booking.booking_number}`;
-        let custMsg = replaceTemplateVars(
-          settings.BOT_THANK_YOU_MESSAGE || defaultThankYou,
-          templateVars
-        );
-        if (booking.owner_offer) custMsg += `\n\n🎁 عرض خاص لك اليوم: ${booking.owner_offer}`;
-        if (note) custMsg += `\n📝 ملاحظة: ${note}`;
-        else if (booking.owner_note) custMsg += `\n📝 ملاحظة: ${booking.owner_note}`;
-        custMsg += "\n\nنتمنى لك تجربة رائعة! 🚗✨";
-        // Send confirmation text then action buttons
-        await sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings);
-
-        // Build and send Google Maps link
-        const station = booking.stations as any;
-        const lat = station?.latitude ? parseFloat(station.latitude) : null;
-        const lng = station?.longitude ? parseFloat(station.longitude) : null;
-        const stationAddress = station?.address || "";
-        if (lat && lng) {
-          const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-          const locationMsg = `📍 موقع المغسلة على الخريطة:\n${stationAddress ? stationAddress + "\n" : ""}${mapsUrl}`;
-          await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings);
-        } else if (stationAddress) {
-          const encoded = encodeURIComponent(stationAddress);
-          const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
-          const locationMsg = `📍 موقع المغسلة:\n${stationAddress}\n${mapsUrl}`;
-          await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings);
-        }
-
-        const custFollowWaId = await sendWhatsAppInteractive(
-          booking.customer_phone, "ماذا تريد أن تفعل؟",
-          [
-            { id: "btn_bookings", title: "📋 حجوزاتي" },
-            { id: "btn_menu", title: "🏠 القائمة الرئيسية" },
-          ], settings);
-        saveBotMessage(supabase, custConvId, "أزرار بعد التأكيد", custFollowWaId);
-        // Reset customer session to idle
-        updateSession(supabase, booking.customer_phone, { current_step: "idle" });
-      }
-    }
-
-    await ownerSend;
-    updateSession(supabase, phone, { current_step: "owner_idle", pending_booking_id: null });
-    await showOwnerMenu(supabase, phone, convId, settings, owner);
+    // Typed offer/note text
+    await confirmBookingAndNotifyCustomer(supabase, phone, convId, settings, owner, bookingId, null, input);
     return true;
   }
 
@@ -1215,47 +1195,39 @@ async function createBookingAndNotifyOwner(
 
   const { data: booking } = await supabase.from("bookings").insert(insertData).select("id, booking_number").single();
 
-  // Tell customer - pending confirmation message
+  // ── رسالة الزبون: دائماً "في انتظار التأكيد" - لا نستخدم BOT_CONFIRMATION_MESSAGE هنا ──
   const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const timeLabel = bookingTime ? to12Hour(bookingTime) : "";
-  const templateVars = {
-    station: station?.name || "", service: service?.name || "", price: String(service?.price || ""),
-    date: dateLabel, time: timeLabel, booking_number: String(booking?.booking_number || "---"),
-    customer: customerName || phone,
-  };
-  const defaultPendingMsg = `📩 تم استلام طلب حجزك!\n\n🏪 ${station?.name || ""}\n🧽 ${service?.name} - ${service?.price} د.ع\n📅 ${dateLabel}${timeLabel ? "\n⏰ " + timeLabel : ""}\n🔢 رقم الحجز: #${booking?.booking_number || "---"}\n\n⏳ في انتظار تأكيد صاحب المغسلة...\nسنعلمك فور التأكيد.`;
-  const confirmTemplate = settings.BOT_CONFIRMATION_MESSAGE || defaultPendingMsg;
-  const custMsg = replaceTemplateVars(confirmTemplate, templateVars);
+  const pendingMsg = `📩 تم استلام طلب حجزك!\n\n📍 المحطة: ${station?.name || ""}\n🔧 الخدمة: ${service?.name || ""}\n💰 السعر: ${service?.price || ""} د.ع\n📅 التاريخ: ${dateLabel}${timeLabel ? "\n🕐 الوقت: " + timeLabel : ""}\n📋 رقم الحجز: #${booking?.booking_number || "---"}\n\n⏳ في انتظار تأكيد صاحب المغسلة...\nسنعلمك فور الرد.`;
 
-  // Send customer message and update session in parallel
-  const custSend = sendAndSave(supabase, convId, phone, custMsg, settings);
+  // إرسال رسالة الزبون + تحديث الجلسة معاً
+  const custSend = sendAndSave(supabase, convId, phone, pendingMsg, settings);
   updateSession(supabase, phone, { current_step: "awaiting_owner_response", selected_station_id: null, selected_service_id: null, selected_date: null, selected_time: null, vehicle_details: null });
 
-  // Notify station owner (fire-and-forget, don't block customer response)
+  // ── إشعار صاحب المغسلة (fire-and-forget) ──
   if (booking) {
     supabase.from("station_owners")
-      .select("owner_phone, owner_name").eq("station_id", stationId).maybeSingle()
+      .select("owner_phone, owner_name, stations(name)").eq("station_id", stationId).maybeSingle()
       .then(async ({ data: owner, error: ownerErr }: any) => {
         if (ownerErr) console.error("station_owners query error:", ownerErr);
         if (!owner?.owner_phone) {
-          console.log(`[OWNER_NOTIFY] No owner found in station_owners for station_id=${stationId}. Booking #${booking.booking_number} needs manual attention.`);
+          console.log(`[OWNER_NOTIFY] No owner found for station_id=${stationId}. Booking #${booking.booking_number} needs manual attention.`);
           return;
         }
-        console.log(`[OWNER_NOTIFY] Found owner ${owner.owner_name} phone=${owner.owner_phone} for station_id=${stationId}`);
         const ownerPhone = normalizePhone(owner.owner_phone);
-        console.log(`[OWNER_NOTIFY] Sending to normalized phone=${ownerPhone}`);
+        const stationName = (owner.stations as any)?.name || station?.name || "محطتك";
         const ownerConvId = await getOrCreateConvForPhone(supabase, ownerPhone, owner.owner_name);
-        const vehicleLine = vehicleDetails && vehicleDetails !== "لم يُحدد" ? `\n🚗 السيارة: ${vehicleDetails}` : `\n🚗 السيارة: لم يُحدد`;
-        const ownerMsg = `📢 طلب حجز جديد!\n\n🔢 رقم الحجز: #${booking.booking_number}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n⏰ الوقت: " + to12Hour(bookingTime) : ""}${vehicleLine}\n\nهل توافق على الحجز؟`;
+
+        const ownerMsg = `📢 طلب حجز جديد!\n\n📍 محطتك: ${stationName}\n🔧 الخدمة: ${service?.name || ""}\n💰 السعر: ${service?.price || ""} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n🕐 الوقت: " + to12Hour(bookingTime) : ""}\n📋 رقم الحجز: #${booking.booking_number}\n👤 العميل: ${customerName || phone}\n\nاختر أحد الأزرار:`;
 
         const ownerButtons = [
-          { id: "approve_yes", title: "✅ موافق" },
-          { id: "approve_no", title: "❌ غير موافق" },
-          { id: "approve_reschedule", title: "📅 تعديل الموعد" },
+          { id: "approve_yes", title: "✅ تأكيد" },
+          { id: "approve_no", title: "❌ رفض" },
+          { id: "approve_reschedule", title: "📅 تغيير الموعد" },
         ];
 
         const ownerWaId = await sendWhatsAppInteractive(ownerPhone, ownerMsg, ownerButtons, settings);
-        console.log(`[OWNER_NOTIFY] Message sent, waId=${ownerWaId}`);
+        console.log(`[OWNER_NOTIFY] Sent to ${ownerPhone}, waId=${ownerWaId}`);
         if (ownerConvId) {
           saveBotMessage(supabase, ownerConvId, ownerMsg, ownerWaId);
           await getOrCreateSession(supabase, ownerPhone);
@@ -1266,21 +1238,14 @@ async function createBookingAndNotifyOwner(
       }).catch((e: any) => console.error("Owner notify error:", e));
   }
 
-  // Notify admin (fire-and-forget)
+  // ── إشعار الأدمن (fire-and-forget) ──
   if (booking) {
-    const adminMsg = `🔔 حجز جديد!\n\n🔢 #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🏪 المحطة: ${station?.name}\n🧽 الخدمة: ${service?.name} - ${service?.price} د.ع\n📅 ${dateLabel}${bookingTime ? "\n⏰ " + bookingTime : ""}`;
+    const adminMsg = `🔔 حجز جديد!\n\n📋 #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🏪 المحطة: ${station?.name}\n🔧 الخدمة: ${service?.name} — ${service?.price} د.ع\n📅 ${dateLabel}${bookingTime ? "\n🕐 " + to12Hour(bookingTime) : ""}`;
     notifyAdmin(supabase, settings, adminMsg, booking.id);
     incrementCustomerBookings(supabase, phone, "whatsapp");
   }
 
   await custSend;
-
-  // Send follow-up action buttons
-  const followWaId = await sendWhatsAppInteractive(phone, "ماذا تريد أن تفعل؟", [
-    { id: "btn_bookings", title: "📋 حجوزاتي" },
-    { id: "btn_menu", title: "🏠 القائمة" },
-  ], settings);
-  saveBotMessage(supabase, convId, "أزرار ما بعد الحجز", followWaId);
   return true;
 }
 
