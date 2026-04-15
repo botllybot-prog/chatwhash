@@ -60,28 +60,31 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { conversation_id, to, message } = body;
+    const { conversation_id, to: toField, phone, message } = body;
+    const to = toField || phone;
 
-    if (!conversation_id || !to || !message) {
+    if (!to || !message) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: conversation_id, to, message" }),
+        JSON.stringify({ error: "Missing required fields: to (or phone), message" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Verify conversation exists
-    const { data: convCheck, error: convErr } = await supabase
-      .from("conversations")
-      .select("id")
-      .eq("id", conversation_id)
-      .maybeSingle();
+    // Verify conversation exists (only if conversation_id provided)
+    if (conversation_id) {
+      const { data: convCheck, error: convErr } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("id", conversation_id)
+        .maybeSingle();
 
-    if (convErr || !convCheck) {
-      console.error("Conversation not found:", conversation_id, convErr);
-      return new Response(
-        JSON.stringify({ error: "Conversation not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (convErr || !convCheck) {
+        console.error("Conversation not found:", conversation_id, convErr);
+        return new Response(
+          JSON.stringify({ error: "Conversation not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Send via WhatsApp Cloud API
@@ -115,6 +118,14 @@ Deno.serve(async (req) => {
 
     const waMessageId = waData.messages?.[0]?.id || null;
     console.log(`WhatsApp message sent, ID: ${waMessageId}`);
+
+    // Save to DB only if conversation_id provided
+    if (!conversation_id) {
+      return new Response(
+        JSON.stringify({ success: true, whatsapp_message_id: waMessageId }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Save to DB
     const { data: msgData, error: dbError } = await supabase
