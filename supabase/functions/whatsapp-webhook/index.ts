@@ -477,7 +477,7 @@ async function handleOwnerLogic(
           date: booking.booking_date, time: timeLabel2,
           offer: booking.owner_offer || "", note: note || booking.owner_note || "",
         };
-        const defaultThankYou = `✅ تم تأكيد حجزك!\n\n🏪 ${booking.stations?.name || ""}\n🧽 ${booking.services?.name} - ${booking.services?.price} د.ع\n📅 ${booking.booking_date}${timeLabel2 ? "\n⏰ " + timeLabel2 : ""}\n🔢 رقم الحجز: #${booking.booking_number}`;
+        const defaultThankYou = `✅ تم تأكيد حجزك!\n📍 المحطة: ${booking.stations?.name || ""}\n🔧 الخدمة: ${booking.services?.name || ""}\n📅 التاريخ: ${booking.booking_date}\n🕐 الوقت: ${timeLabel2 || "-"}\n📋 رقم الحجز: #${booking.booking_number}`;
         let custMsg = replaceTemplateVars(
           settings.BOT_THANK_YOU_MESSAGE || defaultThankYou,
           templateVars
