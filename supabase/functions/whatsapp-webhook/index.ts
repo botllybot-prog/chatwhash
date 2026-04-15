@@ -312,6 +312,41 @@ async function confirmBookingAndNotifyCustomer(
   if (note) updateData.owner_note = note;
   await supabase.from("bookings").update(updateData).eq("id", bookingId);
 
+  // ── Competitive punishment: cancel any OTHER pending bookings for this customer ──
+  const { data: competing } = await supabase.from("bookings")
+    .select("id, booking_number, station_id, stations(name)")
+    .eq("customer_phone", ownerPhone.replace(/^.*$/, ""))
+    .eq("status", "pending")
+    .neq("id", bookingId);
+  // Use customer_phone from booking record instead
+  const { data: confirmedBk } = await supabase.from("bookings")
+    .select("customer_phone")
+    .eq("id", bookingId).single();
+  if (confirmedBk?.customer_phone) {
+    const { data: competingBks } = await supabase.from("bookings")
+      .select("id, booking_number, station_id, stations(name)")
+      .eq("customer_phone", confirmedBk.customer_phone)
+      .eq("status", "pending")
+      .neq("id", bookingId);
+    for (const cb of competingBks || []) {
+      await supabase.from("bookings").update({ status: "cancelled" }).eq("id", cb.id);
+      // Notify the losing station owner
+      const { data: losingOwner } = await supabase.from("station_owners")
+        .select("owner_phone")
+        .eq("station_id", cb.station_id).maybeSingle();
+      if (losingOwner?.owner_phone) {
+        const losingPhone = normalizePhone(losingOwner.owner_phone);
+        const losingConvId = await getOrCreateConvForPhone(supabase, losingPhone);
+        if (losingConvId) {
+          const stName = (cb.stations as any)?.name || "محطتك";
+          const alertMsg = `⚠️ تم إلغاء الطلب رقم #${cb.booking_number} في ${stName}.\nلقد قام الزبون بالحجز في مغسلة أخرى بسبب التأخر في الرد.`;
+          await sendAndSave(supabase, losingConvId, losingPhone, alertMsg, settings);
+          updateSession(supabase, losingPhone, { current_step: "owner_idle", pending_booking_id: null });
+        }
+      }
+    }
+  }
+
   // Fetch full booking details
   const { data: booking } = await supabase.from("bookings")
     .select("booking_number, customer_phone, booking_date, booking_time, owner_offer, owner_note, stations(name, address, latitude, longitude), services(name, price)")
@@ -904,6 +939,49 @@ async function handleCustomerLogic(
       [{ id: "conflict_cancel", title: "🗑️ إلغاء والبدء من جديد" }, { id: "conflict_reschedule", title: "📅 تعديل وقت الحجز" }],
       settings);
     saveBotMessage(supabase, convId, "تعارض حجز", fbWaId);
+    return true;
+  }
+
+  // ── Timeout alert: owner didn't respond in 10 min ──
+  if (step === "timeout_alert") {
+    const bookingId = session.timeout_booking_id;
+    if (input === "timeout_wait") {
+      // Customer chose to keep waiting
+      updateSession(supabase, phone, { current_step: "awaiting_owner_response", timeout_booking_id: null });
+      const waId = await sendWhatsAppInteractive(phone,
+        "⏳ حسناً، سنستمر في الانتظار.\nسنبلغك فور رد صاحب المغسلة.",
+        [{ id: "btn_bookings", title: "📋 حجوزاتي" }, { id: "btn_menu", title: "🏠 القائمة" }],
+        settings);
+      saveBotMessage(supabase, convId, "استمرار الانتظار", waId);
+      return true;
+    }
+    if (input === "timeout_search") {
+      // Cancel timed-out booking and go to nearby stations
+      if (bookingId) {
+        const { data: tb } = await supabase.from("bookings")
+          .select("station_id, service_id")
+          .eq("id", bookingId).single();
+        await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId);
+        // Restore service selection in session so nearby list skips re-selection
+        updateSession(supabase, phone, {
+          current_step: "idle",
+          timeout_booking_id: null,
+          selected_service_id: tb?.service_id || null,
+        });
+      } else {
+        updateSession(supabase, phone, { current_step: "idle", timeout_booking_id: null });
+      }
+      return await showCustomerWelcome(supabase, phone, convId, settings, contactName);
+    }
+    // Fallback: resend buttons
+    const { data: tb2 } = await supabase.from("bookings")
+      .select("stations(name)").eq("id", bookingId).single();
+    const tStName = (tb2?.stations as any)?.name || "المغسلة";
+    const fbWaId = await sendWhatsAppInteractive(phone,
+      `مغسلة ${tStName} تأخرت في الرد. هل تود الاستمرار في الانتظار أم البحث عن مغسلة أخرى؟`,
+      [{ id: "timeout_wait", title: "⏳ الانتظار" }, { id: "timeout_search", title: "🔍 البحث عن مغسلة أخرى" }],
+      settings);
+    saveBotMessage(supabase, convId, "تنبيه انتهاء المهلة", fbWaId);
     return true;
   }
 

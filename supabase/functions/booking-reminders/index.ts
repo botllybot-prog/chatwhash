@@ -5,6 +5,31 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function sendWhatsAppInteractive(
+  phone: string, body: string,
+  buttons: { id: string; title: string }[],
+  settings: Record<string, string>
+) {
+  const token = settings.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId) return null;
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp", to: phone, type: "interactive",
+        interactive: {
+          type: "button", body: { text: body },
+          action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) },
+        },
+      }),
+    });
+    const data = await res.json();
+    return data.messages?.[0]?.id || null;
+  } catch { return null; }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -16,7 +41,7 @@ Deno.serve(async (req) => {
   );
 
   try {
-    // Check if reminders are enabled
+    // Load settings
     const { data: settingsData } = await supabase
       .from("app_settings")
       .select("key, value");
@@ -28,9 +53,41 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Timeout Alert: bookings pending > 10 minutes without owner response ──
+    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { data: timedOutBookings } = await supabase.from("bookings")
+      .select("id, booking_number, customer_phone, station_id, stations(name)")
+      .eq("status", "pending")
+      .eq("timeout_notified", false)
+      .lt("created_at", tenMinAgo);
+
+    let timeoutAlerts = 0;
+    for (const bk of timedOutBookings || []) {
+      const stName = (bk.stations as any)?.name || "المغسلة";
+      const alertMsg = `⏰ مغسلة ${stName} تأخرت في الرد على حجزك رقم #${bk.booking_number}.\n\nهل تود الاستمرار في الانتظار أم البحث عن مغسلة أخرى؟`;
+
+      const waId = await sendWhatsAppInteractive(bk.customer_phone, alertMsg, [
+        { id: "timeout_wait", title: "⏳ الانتظار" },
+        { id: "timeout_search", title: "🔍 البحث عن مغسلة أخرى" },
+      ], settings);
+
+      if (waId) {
+        // Mark booking as notified
+        await supabase.from("bookings").update({ timeout_notified: true }).eq("id", bk.id);
+        // Update customer session to timeout_alert step
+        await supabase.from("sessions").update({
+          current_step: "timeout_alert",
+          timeout_booking_id: bk.id,
+          updated_at: new Date().toISOString(),
+        }).eq("phone", bk.customer_phone);
+        timeoutAlerts++;
+        console.log(`[TIMEOUT] Sent alert to ${bk.customer_phone} for booking #${bk.booking_number}`);
+      }
+    }
+
     if (settings.REMINDERS_ENABLED !== "true") {
       return new Response(
-        JSON.stringify({ message: "Reminders disabled" }),
+        JSON.stringify({ message: "Reminders disabled", timeout_alerts: timeoutAlerts }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -179,7 +236,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, reminders_sent: sent, total_found: bookings?.length || 0 }),
+      JSON.stringify({ success: true, reminders_sent: sent, total_found: bookings?.length || 0, timeout_alerts: timeoutAlerts }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
