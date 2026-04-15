@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { UserPlus, Store, Users, Building } from "lucide-react";
+import { UserPlus, Store, Users, Building, PlusCircle, Tag } from "lucide-react";
 
 const EmployeeDashboard = () => {
   const [employee, setEmployee] = useState<any>(null);
@@ -16,8 +16,13 @@ const EmployeeDashboard = () => {
   const [stations, setStations] = useState<any[]>([]);
   const [showCreateOwner, setShowCreateOwner] = useState(false);
   const [showCreateStation, setShowCreateStation] = useState(false);
+  const [showAddService, setShowAddService] = useState(false);
+  const [showEditPrice, setShowEditPrice] = useState(false);
   const [ownerForm, setOwnerForm] = useState({ email: "", password: "", owner_name: "", owner_phone: "", station_id: "" });
   const [stationForm, setStationForm] = useState({ name: "", address: "" });
+  const [serviceForm, setServiceForm] = useState({ station_id: "", name: "", price: "" });
+  const [editPriceForm, setEditPriceForm] = useState({ service_id: "", price: "" });
+  const [services, setServices] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -33,6 +38,10 @@ const EmployeeDashboard = () => {
       if (emp) setEmployee(emp);
       if (sts) setStations(sts);
 
+      // Load services for price editing
+      const { data: svcs } = await supabase.from("services").select("id, name, price, station_id, stations(name)").order("name");
+      if (svcs) setServices(svcs);
+
       const [stRes, owRes] = await Promise.all([
         supabase.from("stations").select("id", { count: "exact", head: true }).eq("created_by", user.id),
         supabase.from("station_owners").select("id", { count: "exact", head: true }).eq("created_by", user.id),
@@ -41,6 +50,57 @@ const EmployeeDashboard = () => {
     };
     load();
   }, []);
+
+  const handleAddService = async () => {
+    if (!employee?.can_add_service) {
+      toast({ title: "عذراً، لا تملك صلاحية لهذه العملية.", variant: "destructive" });
+      return;
+    }
+    if (!serviceForm.station_id || !serviceForm.name || !serviceForm.price) {
+      toast({ title: "جميع الحقول مطلوبة", variant: "destructive" }); return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("services").insert({
+      station_id: serviceForm.station_id,
+      name: serviceForm.name,
+      price: parseFloat(serviceForm.price),
+      is_active: true,
+    });
+    setSaving(false);
+    if (error) {
+      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "تمت إضافة الخدمة بنجاح" });
+      setShowAddService(false);
+      setServiceForm({ station_id: "", name: "", price: "" });
+      const { data: svcs } = await supabase.from("services").select("id, name, price, station_id, stations(name)").order("name");
+      if (svcs) setServices(svcs);
+    }
+  };
+
+  const handleEditPrice = async () => {
+    if (!employee?.can_edit_prices) {
+      toast({ title: "عذراً، لا تملك صلاحية لهذه العملية.", variant: "destructive" });
+      return;
+    }
+    if (!editPriceForm.service_id || !editPriceForm.price) {
+      toast({ title: "جميع الحقول مطلوبة", variant: "destructive" }); return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("services")
+      .update({ price: parseFloat(editPriceForm.price) })
+      .eq("id", editPriceForm.service_id);
+    setSaving(false);
+    if (error) {
+      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "تم تحديث السعر بنجاح" });
+      setShowEditPrice(false);
+      setEditPriceForm({ service_id: "", price: "" });
+      const { data: svcs } = await supabase.from("services").select("id, name, price, station_id, stations(name)").order("name");
+      if (svcs) setServices(svcs);
+    }
+  };
 
   const handleCreateOwner = async () => {
     if (!ownerForm.email || !ownerForm.password || !ownerForm.owner_name || !ownerForm.station_id) {
@@ -132,7 +192,9 @@ const EmployeeDashboard = () => {
         <CardContent className="flex gap-3 flex-wrap">
           {employee?.can_create_owners && <Badge className="text-sm py-1 px-3">إنشاء حسابات أصحاب المغاسل</Badge>}
           {employee?.can_create_stations && <Badge className="text-sm py-1 px-3">إنشاء محطات</Badge>}
-          {!employee?.can_create_owners && !employee?.can_create_stations && (
+          {employee?.can_add_service && <Badge className="text-sm py-1 px-3">إضافة خدمات</Badge>}
+          {employee?.can_edit_prices && <Badge className="text-sm py-1 px-3">تعديل الأسعار</Badge>}
+          {!employee?.can_create_owners && !employee?.can_create_stations && !employee?.can_add_service && !employee?.can_edit_prices && (
             <p className="text-muted-foreground text-sm">لا توجد صلاحيات مفعّلة. تواصل مع الإدارة.</p>
           )}
         </CardContent>
@@ -150,7 +212,82 @@ const EmployeeDashboard = () => {
             <Store className="h-4 w-4 ml-2" /> إضافة محطة
           </Button>
         )}
+        {employee?.can_add_service && (
+          <Button variant="outline" onClick={() => setShowAddService(true)}>
+            <PlusCircle className="h-4 w-4 ml-2" /> إضافة خدمة
+          </Button>
+        )}
+        {employee?.can_edit_prices && (
+          <Button variant="outline" onClick={() => setShowEditPrice(true)}>
+            <Tag className="h-4 w-4 ml-2" /> تعديل سعر
+          </Button>
+        )}
       </div>
+
+      {/* Add Service Dialog */}
+      {employee?.can_add_service && (
+        <Dialog open={showAddService} onOpenChange={setShowAddService}>
+          <DialogContent dir="rtl" className="max-w-md">
+            <DialogHeader><DialogTitle>إضافة خدمة جديدة</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>المحطة *</Label>
+                <Select value={serviceForm.station_id} onValueChange={(v) => setServiceForm({ ...serviceForm, station_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="اختر المحطة" /></SelectTrigger>
+                  <SelectContent>{stations.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>اسم الخدمة *</Label>
+                <Input value={serviceForm.name} onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })} placeholder="غسيل خارجي، غسيل كامل..." />
+              </div>
+              <div className="space-y-1.5">
+                <Label>السعر (د.ع) *</Label>
+                <Input value={serviceForm.price} onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })} type="number" placeholder="5000" dir="ltr" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAddService(false)}>إلغاء</Button>
+              <Button onClick={handleAddService} disabled={saving}>{saving ? "جاري الإضافة..." : "إضافة"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Edit Price Dialog */}
+      {employee?.can_edit_prices && (
+        <Dialog open={showEditPrice} onOpenChange={setShowEditPrice}>
+          <DialogContent dir="rtl" className="max-w-md">
+            <DialogHeader><DialogTitle>تعديل سعر خدمة</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>اختر الخدمة *</Label>
+                <Select value={editPriceForm.service_id} onValueChange={(v) => {
+                  const svc = services.find((s) => s.id === v);
+                  setEditPriceForm({ service_id: v, price: svc?.price?.toString() || "" });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="اختر الخدمة" /></SelectTrigger>
+                  <SelectContent>
+                    {services.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {(s.stations as any)?.name} — {s.name} ({s.price} د.ع)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>السعر الجديد (د.ع) *</Label>
+                <Input value={editPriceForm.price} onChange={(e) => setEditPriceForm({ ...editPriceForm, price: e.target.value })} type="number" placeholder="5000" dir="ltr" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditPrice(false)}>إلغاء</Button>
+              <Button onClick={handleEditPrice} disabled={saving}>{saving ? "جاري الحفظ..." : "حفظ"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Create Owner Dialog */}
       <Dialog open={showCreateOwner} onOpenChange={setShowCreateOwner}>

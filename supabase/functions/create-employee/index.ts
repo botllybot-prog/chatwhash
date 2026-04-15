@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { name, email, password, can_create_owners, can_create_stations } = await req.json();
+    const { name, email, password, can_create_owners, can_create_stations, can_add_service, can_edit_prices } = await req.json();
 
     if (!name || !email || !password) {
       return new Response(JSON.stringify({ error: "البيانات ناقصة" }), {
@@ -40,6 +40,8 @@ Deno.serve(async (req) => {
       email,
       can_create_owners: can_create_owners ?? false,
       can_create_stations: can_create_stations ?? false,
+      can_add_service: can_add_service ?? false,
+      can_edit_prices: can_edit_prices ?? false,
     });
     if (empError) throw empError;
 

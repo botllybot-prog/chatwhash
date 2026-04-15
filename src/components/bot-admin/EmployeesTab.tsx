@@ -18,13 +18,15 @@ interface Employee {
   email: string;
   can_create_owners: boolean;
   can_create_stations: boolean;
+  can_add_service: boolean;
+  can_edit_prices: boolean;
   is_active: boolean;
   created_at: string;
   stations_count?: number;
   owners_count?: number;
 }
 
-const EMPTY_FORM = { name: "", email: "", password: "", can_create_owners: false, can_create_stations: false };
+const EMPTY_FORM = { name: "", email: "", password: "", can_create_owners: false, can_create_stations: false, can_add_service: false, can_edit_prices: false };
 
 export default function EmployeesTab() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -74,6 +76,8 @@ export default function EmployeesTab() {
         password: form.password,
         can_create_owners: form.can_create_owners,
         can_create_stations: form.can_create_stations,
+        can_add_service: form.can_add_service,
+        can_edit_prices: form.can_edit_prices,
       },
     });
     setSaving(false);
@@ -96,6 +100,8 @@ export default function EmployeesTab() {
         name: form.name,
         can_create_owners: form.can_create_owners,
         can_create_stations: form.can_create_stations,
+        can_add_service: form.can_add_service,
+        can_edit_prices: form.can_edit_prices,
       })
       .eq("id", editTarget.id);
     setSaving(false);
@@ -190,7 +196,7 @@ export default function EmployeesTab() {
 
   const openEdit = (emp: Employee) => {
     setEditTarget(emp);
-    setForm({ name: emp.name, email: emp.email, password: "", can_create_owners: emp.can_create_owners, can_create_stations: emp.can_create_stations });
+    setForm({ name: emp.name, email: emp.email, password: "", can_create_owners: emp.can_create_owners, can_create_stations: emp.can_create_stations, can_add_service: emp.can_add_service ?? false, can_edit_prices: emp.can_edit_prices ?? false });
     setShowEdit(true);
   };
 
@@ -243,7 +249,9 @@ export default function EmployeesTab() {
                     <div className="flex flex-wrap gap-1">
                       {emp.can_create_owners && <Badge variant="outline" className="text-[11px]">إنشاء حسابات</Badge>}
                       {emp.can_create_stations && <Badge variant="outline" className="text-[11px]">إنشاء محطات</Badge>}
-                      {!emp.can_create_owners && !emp.can_create_stations && <span className="text-muted-foreground text-xs">لا صلاحيات</span>}
+                      {emp.can_add_service && <Badge variant="outline" className="text-[11px]">إضافة خدمة</Badge>}
+                      {emp.can_edit_prices && <Badge variant="outline" className="text-[11px]">تعديل الأسعار</Badge>}
+                      {!emp.can_create_owners && !emp.can_create_stations && !emp.can_add_service && !emp.can_edit_prices && <span className="text-muted-foreground text-xs">لا صلاحيات</span>}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-center">
@@ -309,6 +317,14 @@ export default function EmployeesTab() {
                 <Checkbox id="sc" checked={form.can_create_stations} onCheckedChange={(v) => setForm({ ...form, can_create_stations: !!v })} />
                 <label htmlFor="sc" className="text-sm cursor-pointer">إنشاء محطات</label>
               </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="as" checked={form.can_add_service} onCheckedChange={(v) => setForm({ ...form, can_add_service: !!v })} />
+                <label htmlFor="as" className="text-sm cursor-pointer">إضافة خدمات للمحطات</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="ep" checked={form.can_edit_prices} onCheckedChange={(v) => setForm({ ...form, can_edit_prices: !!v })} />
+                <label htmlFor="ep" className="text-sm cursor-pointer">تعديل أسعار الخدمات</label>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -342,6 +358,14 @@ export default function EmployeesTab() {
               <div className="flex items-center gap-2">
                 <Checkbox id="sc2" checked={form.can_create_stations} onCheckedChange={(v) => setForm({ ...form, can_create_stations: !!v })} />
                 <label htmlFor="sc2" className="text-sm cursor-pointer">إنشاء محطات</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="as2" checked={form.can_add_service} onCheckedChange={(v) => setForm({ ...form, can_add_service: !!v })} />
+                <label htmlFor="as2" className="text-sm cursor-pointer">إضافة خدمات للمحطات</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox id="ep2" checked={form.can_edit_prices} onCheckedChange={(v) => setForm({ ...form, can_edit_prices: !!v })} />
+                <label htmlFor="ep2" className="text-sm cursor-pointer">تعديل أسعار الخدمات</label>
               </div>
             </div>
           </div>
