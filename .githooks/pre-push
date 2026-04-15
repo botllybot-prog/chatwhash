@@ -1,0 +1,17 @@
+#!/bin/sh
+# Pre-push hook: warn if CHANGELOG.md hasn't been updated in this push
+
+CHANGELOG="CHANGELOG.md"
+STAGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -v "^$CHANGELOG$" | wc -l)
+CHANGELOG_UPDATED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep "^$CHANGELOG$" | wc -l)
+
+if [ "$STAGED" -gt 0 ] && [ "$CHANGELOG_UPDATED" -eq 0 ]; then
+  echo ""
+  echo "⚠️  WARNING: You pushed code changes without updating CHANGELOG.md"
+  echo "   Please document your changes in CHANGELOG.md for project maintainability."
+  echo "   Format: ## [YYYY-MM-DD] - Description"
+  echo ""
+  # Allow push but warn (don't block)
+fi
+
+exit 0
