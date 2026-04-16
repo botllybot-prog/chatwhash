@@ -74,12 +74,13 @@ Deno.serve(async (req) => {
       if (waId) {
         // Mark booking as notified
         await supabase.from("bookings").update({ timeout_notified: true }).eq("id", bk.id);
-        // Update customer session to timeout_alert step
-        await supabase.from("sessions").update({
+        // Update customer session to timeout_alert step (correct table: bot_sessions, column: customer_phone)
+        await supabase.from("bot_sessions").update({
           current_step: "timeout_alert",
           timeout_booking_id: bk.id,
           updated_at: new Date().toISOString(),
-        }).eq("phone", bk.customer_phone);
+          expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        }).eq("customer_phone", bk.customer_phone);
         timeoutAlerts++;
         console.log(`[TIMEOUT] Sent alert to ${bk.customer_phone} for booking #${bk.booking_number}`);
       }

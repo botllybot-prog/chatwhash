@@ -5,6 +5,49 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-04-17] — Critical Bugfix: Status Overwrite + Phase 2 Owner Proposes Time + CSV Export
+
+### Root Cause Analysis — Why Bookings Showed as Cancelled
+
+Three bugs combined to produce the symptom "all confirmed bookings show as cancelled":
+
+1. **`approve_reschedule` immediately cancelled the booking** — This was the primary revenue killer. When an owner clicked "📅 تغيير الموعد" (Change Time), the webhook immediately ran `UPDATE bookings SET status='cancelled'`. Owners who intended to pick an alternative time were unknowingly cancelling every booking.
+
+2. **`booking-reminders` used wrong table and column** — The timeout alert session update used `supabase.from("sessions").update(...).eq("phone", ...)` but the correct table is `bot_sessions` with column `customer_phone`. This meant timeout session steps silently failed and customers were stuck in limbo.
+
+3. **`conflict_cancel` / `conflict_reschedule` had no status guard** — A customer could accidentally cancel a confirmed booking via the conflict UI if the booking was already approved by the owner.
+
+### Bug Fixes
+
+#### DB (`scripts/migrate6.cjs`)
+- Added `pending_customer_approval` to `booking_status` enum
+- Added `proposed_time TIME` column to `bookings` (owner's suggested new time)
+- Added `proposed_date DATE` column to `bookings` (owner's suggested new date)
+
+#### Backend — `whatsapp-webhook` v35
+- **`approve_reschedule` (CRITICAL FIX)**: No longer cancels immediately. Now shows the owner the available time slots for today using `sendWhatsAppList`. Owner selects a slot → new step `owner_propose_time`.
+- **New step `owner_propose_time`**: Owner selects proposed time → booking set to `pending_customer_approval` + `proposed_time` + `proposed_date`. Customer receives interactive message with 2 buttons.
+- **New customer step `awaiting_new_time_approval`**:
+  - `new_time_accept` → `confirmed`, updates `booking_time`, notifies owner ✅
+  - `new_time_reject` → `cancelled`, shows search button 🔍
+- **`conflict_cancel`**: Now uses `.eq("status", "pending")` guard — will **never** cancel a confirmed booking
+- **`conflict_reschedule`**: Same guard added
+
+#### Backend — `booking-reminders` v4 (was showing as v3 in Supabase)
+- **Fixed**: `.from("sessions")` → `.from("bot_sessions")`
+- **Fixed**: `.eq("phone", ...)` → `.eq("customer_phone", ...)`
+- Added `expires_at` update to session update query
+
+### New Feature — CSV Export (`AdminBookings.tsx`)
+- Added **date range filter** (from/to date pickers)
+- Added **"📊 تصدير CSV (مؤكد)"** button — exports only `status = confirmed` bookings
+- Filters: station + date range apply to export
+- CSV includes: رقم الحجز, اسم العميل, هاتف العميل, المحطة, الخدمة, السعر, التاريخ, الوقت, تاريخ الإنشاء
+- File name: `حجوزات_مؤكدة_{station}_{date}.csv` with UTF-8 BOM for Arabic Excel compatibility
+- Added `pending_customer_approval` as new selectable status in filter and status dropdown
+- `customer_name` now shown in bookings table (was `customer_phone` only before)
+
+
 ## [2026-04-17] — Phase 1: Fix Push Notification Race Condition & Employee RLS
 
 ### Bug 1 Fix — Push Notification (`whatsapp-webhook` v34)

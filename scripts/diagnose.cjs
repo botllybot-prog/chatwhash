@@ -1,25 +1,21 @@
 const https = require('https');
 const token = 'sbp_96107352e575c58e1f36b2ccb6a3bbea4db8d63f';
 const projectId = 'yhklvtzonvgzkodysawu';
-
 function query(sql) {
   return new Promise((res, rej) => {
     const body = JSON.stringify({ query: sql });
-    const req = https.request({
-      hostname: 'api.supabase.com',
-      path: '/v1/projects/' + projectId + '/database/query',
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + token,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body)
-      }
-    }, (r) => { let d = ''; r.on('data', c => d += c); r.on('end', () => res(JSON.parse(d))); });
-    req.on('error', rej);
-    req.write(body);
-    req.end();
+    const req = https.request({ hostname: 'api.supabase.com', path: '/v1/projects/' + projectId + '/database/query', method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, (r) => { let d = ''; r.on('data', c => d += c); r.on('end', () => res(JSON.parse(d))); });
+    req.on('error', rej); req.write(body); req.end();
   });
 }
+(async () => {
+  const cols = await query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name='bookings' ORDER BY ordinal_position");
+  console.log('=== bookings columns ===');
+  console.log(cols.map(c => c.column_name + ':' + c.data_type).join(', '));
+  const stat = await query("SELECT DISTINCT status FROM bookings LIMIT 20");
+  console.log('=== distinct statuses ===');
+  console.log(JSON.stringify(stat));
+})();
 
 (async () => {
   const cols = await query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name='station_owners' ORDER BY ordinal_position");
