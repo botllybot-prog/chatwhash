@@ -5,6 +5,23 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-04-17] — Phase 1: Fix Push Notification Race Condition & Employee RLS
+
+### Bug 1 Fix — Push Notification (`whatsapp-webhook` v34)
+- **Root cause**: Owner notification was a fire-and-forget `.then()` promise. In Deno serverless edge functions, unresolved promises are killed when the HTTP response is sent — meaning the owner never received the WhatsApp message.
+- **Fix**: Extracted owner notification into a named IIFE promise (`notifyOwnerPromise`), then `await Promise.all([custSend, notifyOwnerPromise])` before returning. Both customer confirmation and owner notification now run in parallel and are guaranteed to complete.
+- Added explicit error logging: `[OWNER_NOTIFY]` logs distinguish between DB errors, missing owner, and failed WhatsApp API calls (null `waId` indicates missing `WHATSAPP_ACCESS_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` in `app_settings`).
+- Phone format validation confirmed: `normalizePhone()` converts `07XXXXXXXXX` → `9647XXXXXXXXX` (no `+`, no `00`).
+
+### Bug 2 Fix — Employee RLS (`scripts/migrate5.cjs`)
+- **Root cause**: `stations` table only had `"Admins can insert stations"` policy. No policy existed for employees. Same for `services`. All employee INSERT/UPDATE operations were blocked at the database level.
+- **New policies applied**:
+  - `stations`: `"Employees can insert stations"` — INSERT allowed when `employees.can_create_stations = true AND is_active = true`
+  - `services`: `"Employees can insert services"` — INSERT allowed when `employees.can_add_service = true AND is_active = true`
+  - `services`: `"Employees can update service prices"` — UPDATE allowed when `employees.can_edit_prices = true AND is_active = true`
+  - `employees`: `"Employees can read own record"` — SELECT allowed for `user_id = auth.uid()` (needed for permission self-checks)
+
+
 ## [2026-04-16] — Concept 3: Granular Employee Permissions
 
 ### Database
