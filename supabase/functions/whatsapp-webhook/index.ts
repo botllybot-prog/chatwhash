@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+السيناريو 1 — الحجز الكامل الناجح (المسار الذهبي)import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -941,7 +941,7 @@ async function handleCustomerLogic(
 
   // ── Conflict: customer has a pending booking ──
   if (step === "conflict_pending") {
-    const bookingId = session.conflict_booking_id;
+    const bookingId = session.pending_booking_id;
     if (input === "conflict_cancel") {
       // Only cancel if still pending — never touch confirmed bookings
       if (bookingId) await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId).eq("status", "pending");
@@ -1084,6 +1084,78 @@ async function handleCustomerLogic(
 
   // Awaiting time
   if (step === "awaiting_time") return await handleTimeSelection(supabase, phone, convId, settings, session, input);
+
+  // ── Customer confirms or edits booking summary ──
+  if (step === "awaiting_booking_confirm") {
+    if (input === "confirm_booking") {
+      // Proceed to create booking with stored session data
+      return await createBookingAndNotifyOwner(
+        supabase, phone, convId, settings,
+        session.selected_station_id, session.selected_service_id,
+        session.selected_date, session.selected_time
+      );
+    }
+    if (input === "edit_booking") {
+      // Go back to time/day picker for same station+service
+      const { data: editSt } = await supabase.from("stations")
+        .select("scheduling_type, working_hours_start, working_hours_end, slot_duration_minutes, name")
+        .eq("id", session.selected_station_id).single();
+      if (!editSt) {
+        updateSession(supabase, phone, { current_step: "idle" });
+        return await showCustomerWelcome(supabase, phone, convId, settings, contactName);
+      }
+      if (editSt.scheduling_type === "daily") {
+        const dayRows: any[] = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
+          d.setUTCDate(d.getUTCDate() + i);
+          const label = i === 0 ? "اليوم" : i === 1 ? "غداً" : d.toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", month: "short", day: "numeric" });
+          dayRows.push({ id: `day_${i}`, title: label });
+        }
+        dayRows.push({ id: "day_back", title: "🔙 رجوع" });
+        const editWaId = await sendWhatsAppList(phone, "✏️ تعديل الحجز — اختر يوماً جديداً:", "اختر اليوم", [{ title: "الأيام المتاحة", rows: dayRows }], settings);
+        saveBotMessage(supabase, convId, "تعديل الحجز — اختيار يوم", editWaId);
+        updateSession(supabase, phone, { current_step: "awaiting_day" });
+        return true;
+      } else {
+        // slots or instant — re-show time picker
+        const iraqNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
+        const editDate = session.selected_date || iraqNow.toISOString().split("T")[0];
+        const allSlots = generateTimeSlots(editSt.working_hours_start, editSt.working_hours_end, editSt.slot_duration_minutes);
+        const { data: booked } = await supabase.from("bookings").select("booking_time")
+          .eq("station_id", session.selected_station_id).eq("booking_date", editDate)
+          .in("status", ["pending", "confirmed"]);
+        const bookedSet = new Set((booked || []).map((b: any) => b.booking_time?.substring(0, 5)));
+        const nowMin = iraqNow.getUTCHours() * 60 + iraqNow.getUTCMinutes();
+        const available = allSlots.filter((s: string) => {
+          const [h, m] = s.split(":").map(Number);
+          return h * 60 + m > nowMin && !bookedSet.has(s);
+        });
+        if (available.length === 0) {
+          const noEditWaId = await sendWhatsAppInteractive(phone, `⚠️ لا توجد مواعيد أخرى متاحة اليوم في ${editSt.name}.`, [
+            { id: "btn_menu", title: "🏠 القائمة الرئيسية" },
+          ], settings);
+          saveBotMessage(supabase, convId, "لا مواعيد أخرى لتعديل الحجز", noEditWaId);
+          updateSession(supabase, phone, { current_step: "idle" });
+          return true;
+        }
+        const editTimeRows = available.slice(0, 9).map((s: string) => ({ id: `time_${s}`, title: to12Hour(s) }));
+        editTimeRows.push({ id: "time_back", title: "🔙 رجوع" });
+        const editTimeWaId = await sendWhatsAppList(phone, `✏️ تعديل الحجز — اختر وقتاً جديداً في ${editSt.name}:`, "اختر موعداً", [{ title: "المواعيد المتاحة", rows: editTimeRows }], settings);
+        saveBotMessage(supabase, convId, "تعديل الحجز — اختيار وقت", editTimeWaId);
+        updateSession(supabase, phone, { current_step: "awaiting_time" });
+        return true;
+      }
+    }
+    // Fallback: resend summary
+    if (session.selected_station_id && session.selected_service_id && session.selected_date) {
+      return await showBookingSummary(supabase, phone, convId, settings,
+        session.selected_station_id, session.selected_service_id,
+        session.selected_date, session.selected_time);
+    }
+    updateSession(supabase, phone, { current_step: "idle" });
+    return await showCustomerWelcome(supabase, phone, convId, settings, contactName);
+  }
 
   // ── Customer confirms/rejects owner-proposed new time ──
   if (step === "awaiting_new_time_approval") {
@@ -1408,7 +1480,7 @@ async function handleServiceSelection(supabase: any, phone: string, convId: stri
         return true;
       }
     }
-    return await createBookingAndNotifyOwner(supabase, phone, convId, settings, stationId, service.id, new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().split("T")[0], null);
+    return await showBookingSummary(supabase, phone, convId, settings, stationId, service.id, new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().split("T")[0], null);
   }
 
   // Daily — show day picker as list
@@ -1469,7 +1541,7 @@ async function handleDaySelection(supabase: any, phone: string, convId: string, 
   d.setUTCDate(d.getUTCDate() + idx);
   const selectedDate = d.toISOString().split("T")[0];
 
-  return await createBookingAndNotifyOwner(supabase, phone, convId, settings, session.selected_station_id, session.selected_service_id, selectedDate, null);
+  return await showBookingSummary(supabase, phone, convId, settings, session.selected_station_id, session.selected_service_id, selectedDate, null);
 }
 
 async function handleTimeSelection(supabase: any, phone: string, convId: string, settings: Record<string, string>, session: any, input: string) {
@@ -1479,7 +1551,37 @@ async function handleTimeSelection(supabase: any, phone: string, convId: string,
     return await showCustomerWelcome(supabase, phone, convId, settings);
   }
 
-  return await createBookingAndNotifyOwner(supabase, phone, convId, settings, session.selected_station_id, session.selected_service_id, session.selected_date, timeMatch[1]);
+  return await showBookingSummary(supabase, phone, convId, settings, session.selected_station_id, session.selected_service_id, session.selected_date, timeMatch[1]);
+}
+
+// ==================== BOOKING SUMMARY (BEFORE CREATING) ====================
+
+async function showBookingSummary(
+  supabase: any, phone: string, convId: string, settings: Record<string, string>,
+  stationId: string, serviceId: string, bookingDate: string, bookingTime: string | null
+) {
+  const [stationResult, serviceResult] = await Promise.all([
+    supabase.from("stations").select("name").eq("id", stationId).single(),
+    supabase.from("services").select("name, price").eq("id", serviceId).single(),
+  ]);
+  const station = stationResult.data;
+  const service = serviceResult.data;
+  const dateFormatted = new Date(bookingDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const timeLabel = bookingTime ? to12Hour(bookingTime) : "—";
+  const summaryMsg = `📋 ملخص الحجز\n\n📍 المحطة: ${station?.name || ""}\n🔧 الخدمة: ${service?.name || ""}\n💰 السعر: ${service?.price || ""} د.ع\n📅 التاريخ: ${dateFormatted}${bookingTime ? "\n🕐 الوقت: " + timeLabel : ""}\n\nهل تريد تأكيد الحجز؟`;
+  const waId = await sendWhatsAppInteractive(phone, summaryMsg, [
+    { id: "confirm_booking", title: "✅ تأكيد الحجز" },
+    { id: "edit_booking", title: "✏️ تعديل الحجز" },
+  ], settings);
+  saveBotMessage(supabase, convId, summaryMsg, waId);
+  updateSession(supabase, phone, {
+    current_step: "awaiting_booking_confirm",
+    selected_station_id: stationId,
+    selected_service_id: serviceId,
+    selected_date: bookingDate,
+    selected_time: bookingTime,
+  });
+  return true;
 }
 
 // ==================== CREATE BOOKING & NOTIFY OWNER ====================
@@ -1508,7 +1610,7 @@ async function createBookingAndNotifyOwner(
       settings
     );
     saveBotMessage(supabase, convId, "تعارض حجز معلق", conflictWaId);
-    updateSession(supabase, phone, { current_step: "conflict_pending", conflict_booking_id: existingPending.id });
+    updateSession(supabase, phone, { current_step: "conflict_pending", pending_booking_id: existingPending.id });
     return true;
   }
 

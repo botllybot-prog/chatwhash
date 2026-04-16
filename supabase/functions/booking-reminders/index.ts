@@ -53,8 +53,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Timeout Alert: bookings pending > 10 minutes without owner response ──
-    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    // ── Timeout Alert: bookings pending > 5 minutes without owner response ──
+    const tenMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: timedOutBookings } = await supabase.from("bookings")
       .select("id, booking_number, customer_phone, station_id, stations(name)")
       .eq("status", "pending")
