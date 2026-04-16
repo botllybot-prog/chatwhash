@@ -43,20 +43,37 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Auth check: only service_role
-    const authHeader = req.headers.get("authorization") || "";
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    if (!authHeader.includes(serviceRoleKey)) {
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Auth: verify JWT and require admin role
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
+    if (!caller) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: roleData } = await supabaseAdmin
+      .from("user_roles").select("role").eq("user_id", caller.id).maybeSingle();
+    if (!roleData || !["admin", "employee"].includes(roleData.role)) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabase = supabaseAdmin;
 
     const { owner_id } = await req.json();
     if (!owner_id) {
@@ -130,8 +147,8 @@ Deno.serve(async (req) => {
     await supabase
       .from("bot_sessions")
       .upsert(
-        { phone, current_step: "owner_payment_method", updated_at: new Date().toISOString() },
-        { onConflict: "phone" }
+        { customer_phone: phone, current_step: "owner_payment_method", updated_at: new Date().toISOString() },
+        { onConflict: "customer_phone" }
       );
 
     return new Response(JSON.stringify({ success: true }), {
