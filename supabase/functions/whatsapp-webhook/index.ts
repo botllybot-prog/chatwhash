@@ -1387,52 +1387,61 @@ async function createBookingAndNotifyOwner(
   const timeLabel = bookingTime ? to12Hour(bookingTime) : "";
   const pendingMsg = `📩 تم استلام طلب حجزك!\n\n📍 المحطة: ${station?.name || ""}\n🔧 الخدمة: ${service?.name || ""}\n💰 السعر: ${service?.price || ""} د.ع\n📅 التاريخ: ${dateLabel}${timeLabel ? "\n🕐 الوقت: " + timeLabel : ""}\n📋 رقم الحجز: #${booking?.booking_number || "---"}\n\n⏳ في انتظار تأكيد صاحب المغسلة...\nسنعلمك فور الرد.`;
 
-  // إرسال رسالة الزبون + تحديث الجلسة معاً
-  const custSend = sendAndSave(supabase, convId, phone, pendingMsg, settings);
+  // إرسال رسالة الزبون + تحديث الجلسة معاً (بالتوازي مع إشعار المالك)
   updateSession(supabase, phone, { current_step: "awaiting_owner_response", selected_station_id: null, selected_service_id: null, selected_date: null, selected_time: null, vehicle_details: null });
 
-  // ── إشعار صاحب المغسلة (fire-and-forget) ──
-  if (booking) {
-    supabase.from("station_owners")
-      .select("owner_phone, owner_name, stations(name)").eq("station_id", stationId).maybeSingle()
-      .then(async ({ data: owner, error: ownerErr }: any) => {
-        if (ownerErr) console.error("station_owners query error:", ownerErr);
-        if (!owner?.owner_phone) {
-          console.log(`[OWNER_NOTIFY] No owner found for station_id=${stationId}. Booking #${booking.booking_number} needs manual attention.`);
-          return;
-        }
-        const ownerPhone = normalizePhone(owner.owner_phone);
-        const stationName = (owner.stations as any)?.name || station?.name || "محطتك";
-        const ownerConvId = await getOrCreateConvForPhone(supabase, ownerPhone, owner.owner_name);
+  // ── إشعار صاحب المغسلة (awaited — حرج لضمان الإرسال قبل انتهاء الدالة) ──
+  const notifyOwnerPromise = booking ? (async () => {
+    try {
+      const { data: owner, error: ownerErr } = await supabase.from("station_owners")
+        .select("owner_phone, owner_name, stations(name)").eq("station_id", stationId).maybeSingle();
+      if (ownerErr) console.error("[OWNER_NOTIFY] DB error:", ownerErr.message);
+      if (!owner?.owner_phone) {
+        console.error(`[OWNER_NOTIFY] No owner found for station_id=${stationId}. Booking #${booking.booking_number} orphaned.`);
+        return;
+      }
+      // تأكد أن الرقم بصيغة دولية بدون + (مثال: 9647XXXXXXXX)
+      const ownerPhone = normalizePhone(owner.owner_phone);
+      const stationName = (owner.stations as any)?.name || station?.name || "محطتك";
+      const ownerConvId = await getOrCreateConvForPhone(supabase, ownerPhone, owner.owner_name);
 
-        const ownerMsg = `📢 طلب حجز جديد!\n\n📍 محطتك: ${stationName}\n🔧 الخدمة: ${service?.name || ""}\n💰 السعر: ${service?.price || ""} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n🕐 الوقت: " + to12Hour(bookingTime) : ""}\n📋 رقم الحجز: #${booking.booking_number}\n👤 العميل: ${customerName || phone}\n\nاختر أحد الأزرار:`;
+      const ownerMsg = `📢 طلب حجز جديد!\n\n📍 محطتك: ${stationName}\n🔧 الخدمة: ${service?.name || ""}\n💰 السعر: ${service?.price || ""} د.ع\n📅 التاريخ: ${dateLabel}${bookingTime ? "\n🕐 الوقت: " + to12Hour(bookingTime) : ""}\n📋 رقم الحجز: #${booking.booking_number}\n👤 العميل: ${customerName || phone}\n\nاختر أحد الأزرار:`;
 
-        const ownerButtons = [
-          { id: "approve_yes", title: "✅ تأكيد" },
-          { id: "approve_no", title: "❌ رفض" },
-          { id: "approve_reschedule", title: "📅 تغيير الموعد" },
-        ];
+      const ownerButtons = [
+        { id: "approve_yes", title: "✅ تأكيد" },
+        { id: "approve_no", title: "❌ رفض" },
+        { id: "approve_reschedule", title: "📅 تغيير الموعد" },
+      ];
 
-        const ownerWaId = await sendWhatsAppInteractive(ownerPhone, ownerMsg, ownerButtons, settings);
-        console.log(`[OWNER_NOTIFY] Sent to ${ownerPhone}, waId=${ownerWaId}`);
-        if (ownerConvId) {
-          saveBotMessage(supabase, ownerConvId, ownerMsg, ownerWaId);
-          await getOrCreateSession(supabase, ownerPhone);
-          updateSession(supabase, ownerPhone, {
-            current_step: "owner_approve_reject", pending_booking_id: booking.id, selected_station_id: stationId,
-          });
-        }
-      }).catch((e: any) => console.error("Owner notify error:", e));
-  }
+      const ownerWaId = await sendWhatsAppInteractive(ownerPhone, ownerMsg, ownerButtons, settings);
+      if (!ownerWaId) {
+        console.error(`[OWNER_NOTIFY] sendWhatsAppInteractive returned null for ${ownerPhone}. Check WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID in app_settings.`);
+      } else {
+        console.log(`[OWNER_NOTIFY] ✅ Sent to ${ownerPhone}, waId=${ownerWaId}`);
+      }
+      if (ownerConvId) {
+        saveBotMessage(supabase, ownerConvId, ownerMsg, ownerWaId);
+        await getOrCreateSession(supabase, ownerPhone);
+        updateSession(supabase, ownerPhone, {
+          current_step: "owner_approve_reject", pending_booking_id: booking.id, selected_station_id: stationId,
+        });
+      }
+    } catch (e: any) {
+      console.error("[OWNER_NOTIFY] Unexpected error:", e?.message || e);
+    }
+  })() : Promise.resolve();
 
-  // ── إشعار الأدمن (fire-and-forget) ──
+  // ── إرسال رسالة الزبون + إشعار المالك + إشعار الأدمن معاً ──
+  const custSend = sendAndSave(supabase, convId, phone, pendingMsg, settings);
+
   if (booking) {
     const adminMsg = `🔔 حجز جديد!\n\n📋 #${booking.booking_number}\n📱 العميل: ${customerName || phone}\n🏪 المحطة: ${station?.name}\n🔧 الخدمة: ${service?.name} — ${service?.price} د.ع\n📅 ${dateLabel}${bookingTime ? "\n🕐 " + to12Hour(bookingTime) : ""}`;
     notifyAdmin(supabase, settings, adminMsg, booking.id);
     incrementCustomerBookings(supabase, phone, "whatsapp");
   }
 
-  await custSend;
+  // انتظر كلاهما: رسالة الزبون + إشعار المالك — لضمان الإرسال قبل إغلاق الدالة
+  await Promise.all([custSend, notifyOwnerPromise]);
   return true;
 }
 

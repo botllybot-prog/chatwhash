@@ -29,6 +29,13 @@ async function deploy(slug, filePath, verifyJwt = true) {
 }
 
 (async () => {
-  await deploy("create-employee", "C:/Users/al3r18y/carw/supabase/functions/create-employee/index.ts", false);
-  await deploy("delete-employee", "C:/Users/al3r18y/carw/supabase/functions/delete-employee/index.ts", false);
+  const target = process.argv[2];
+  if (target === "whatsapp-webhook") {
+    await deploy("whatsapp-webhook", "C:/Users/al3r18y/carw/supabase/functions/whatsapp-webhook/index.ts", false);
+  } else if (target === "booking-reminders") {
+    await deploy("booking-reminders", "C:/Users/al3r18y/carw/supabase/functions/booking-reminders/index.ts", false);
+  } else {
+    await deploy("create-employee", "C:/Users/al3r18y/carw/supabase/functions/create-employee/index.ts", false);
+    await deploy("delete-employee", "C:/Users/al3r18y/carw/supabase/functions/delete-employee/index.ts", false);
+  }
 })();
