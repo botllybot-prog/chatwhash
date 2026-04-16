@@ -5,6 +5,46 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-04-23] — Advanced Debt Collection, Suspension Flow & Payment Gateway
+
+### New Features
+
+#### 🔴 Interactive Suspension Flow (WhatsApp)
+When an admin suspends a station owner, the bot now sends an interactive WhatsApp message instead of a static text:
+1. **Step 1 — Payment Method Buttons:** Owner receives suspension notice with their outstanding debt amount and three buttons: `💚 زين كاش` · `🔵 سوبر كي` · `🟠 ناس وولت`
+2. **Step 2 — Invoice:** Selecting a method shows a full invoice: debt amount, chosen method, account number, and two action buttons: `✅ تم الدفع` · `⏳ تأجيل الدفع`
+3. **Step 3a — Payment Claimed:** Bot confirms to owner that admin will verify manually. Admin receives WhatsApp: *"🔔 إشعار دفع من مغسلة [name] — المبلغ: [X] دينار — يرجى التحقق وإعادة التفعيل يدوياً"*
+4. **Step 3b — Postpone:** Bot sends polite acknowledgment and session resets.
+- **No auto-unsuspend** — admin must manually re-activate via Admin Panel.
+- New bot session steps: `owner_payment_method`, `owner_payment_confirm`
+
+#### 🆕 New Edge Function: `send-suspension-notice`
+- Called automatically by `OwnersTab` when an owner is suspended from Admin Panel
+- Sends the interactive suspension WhatsApp message and sets bot session to `owner_payment_method`
+- Auth: service-role header required
+- Body: `{ owner_id: string }`
+
+#### 💰 Outstanding Debt Field (`station_owners.outstanding_debt`)
+- New `NUMERIC DEFAULT 0` column added to `station_owners` table via `scripts/migrate7.cjs`
+- Shown in the Owners table: red if > 0, green if 0
+- Editable in Edit Owner dialog with label "الذمة المالية المستحقة (دينار عراقي)"
+- Debt amount appears in WhatsApp suspension notice and invoice
+
+#### 🚫 Exclude Suspended Stations from Customer Searches
+- `showStationsPage`, `searchStations`, and `handleLocationMessage` now pre-fetch suspended station IDs and exclude them from all query results
+- Helper: `getSuspendedStationIds(supabase)` — queries `station_owners WHERE is_active = false`
+- Customers can no longer find or book a station whose owner is suspended
+
+### Files Changed
+| File | Change |
+|------|--------|
+| `supabase/functions/whatsapp-webhook/index.ts` | Interactive suspension flow, station exclusion, `outstanding_debt` in `checkIfOwner` |
+| `supabase/functions/send-suspension-notice/index.ts` | **NEW** — suspension WhatsApp sender |
+| `src/components/bot-admin/OwnersTab.tsx` | `outstanding_debt` field, suspension notification trigger |
+| `scripts/migrate7.cjs` | **NEW** — DB migration for `outstanding_debt` column |
+
+---
+
 ## [2026-04-17] — Critical Bugfix: Status Overwrite + Phase 2 Owner Proposes Time + CSV Export
 
 ### Root Cause Analysis — Why Bookings Showed as Cancelled

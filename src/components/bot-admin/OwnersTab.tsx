@@ -20,6 +20,7 @@ type Owner = {
   owner_phone: string | null;
   station_id: string;
   is_active: boolean;
+  outstanding_debt: number;
   created_at: string;
   stations: { name: string } | null;
 };
@@ -38,7 +39,7 @@ const OwnersTab = () => {
   // Edit dialog
   const [editOpen, setEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Owner | null>(null);
-  const [editForm, setEditForm] = useState({ owner_name: "", owner_phone: "", station_id: "" });
+  const [editForm, setEditForm] = useState({ owner_name: "", owner_phone: "", station_id: "", outstanding_debt: "" });
 
   // Delete confirm
   const [deleteTarget, setDeleteTarget] = useState<Owner | null>(null);
@@ -84,7 +85,7 @@ const OwnersTab = () => {
   // ── Edit ─────────────────────────────────────────────────
   const openEdit = (o: Owner) => {
     setEditTarget(o);
-    setEditForm({ owner_name: o.owner_name, owner_phone: o.owner_phone || "", station_id: o.station_id });
+    setEditForm({ owner_name: o.owner_name, owner_phone: o.owner_phone || "", station_id: o.station_id, outstanding_debt: String(o.outstanding_debt ?? 0) });
     setEditOpen(true);
   };
 
@@ -97,7 +98,7 @@ const OwnersTab = () => {
     setLoading(true);
     const { error } = await supabase
       .from("station_owners")
-      .update({ owner_name: editForm.owner_name, owner_phone: editForm.owner_phone || null, station_id: editForm.station_id })
+      .update({ owner_name: editForm.owner_name, owner_phone: editForm.owner_phone || null, station_id: editForm.station_id, outstanding_debt: parseFloat(editForm.outstanding_debt) || 0 })
       .eq("id", editTarget.id);
     setLoading(false);
     if (error) {
@@ -130,15 +131,22 @@ const OwnersTab = () => {
 
   // ── Toggle active ────────────────────────────────────────
   const handleToggleActive = async (o: Owner) => {
+    const newActive = !o.is_active;
     const { error } = await supabase
       .from("station_owners")
-      .update({ is_active: !o.is_active })
+      .update({ is_active: newActive })
       .eq("id", o.id);
     if (error) {
       toast({ title: "فشل تغيير الحالة", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: o.is_active ? "تم إيقاف الحساب مؤقتاً" : "تم تفعيل الحساب" });
+    // When suspending an active owner, push WhatsApp suspension notice
+    if (!newActive && o.owner_phone) {
+      await supabase.functions.invoke("send-suspension-notice", {
+        body: { owner_id: o.id },
+      });
+    }
+    toast({ title: newActive ? "تم تفعيل الحساب ✅" : "تم إيقاف الحساب مؤقتاً ⚠️" });
     load();
   };
 
@@ -184,11 +192,12 @@ const OwnersTab = () => {
         <CardContent className="p-0">
           <Table>
             <colgroup>
-              <col style={{ width: "20%" }} />
-              <col style={{ width: "22%" }} />
+              <col style={{ width: "17%" }} />
               <col style={{ width: "18%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "16%" }} />
+              <col style={{ width: "15%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
               <col style={{ width: "12%" }} />
             </colgroup>
             <TableHeader>
@@ -197,6 +206,7 @@ const OwnersTab = () => {
                 <TableHead className="font-semibold text-foreground py-3">المحطة</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">الهاتف</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">الحالة</TableHead>
+                <TableHead className="font-semibold text-foreground py-3">الذمة (د.ع)</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">تاريخ الإنشاء</TableHead>
                 <TableHead className="font-semibold text-foreground py-3 text-center">إجراءات</TableHead>
               </TableRow>
@@ -214,6 +224,11 @@ const OwnersTab = () => {
                     >
                       {o.is_active ? "● نشط" : "○ موقوف"}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="py-3 text-sm font-mono">
+                    {o.outstanding_debt > 0
+                      ? <span className="text-red-600 font-semibold">{o.outstanding_debt.toLocaleString("ar-IQ")}</span>
+                      : <span className="text-green-600">0</span>}
                   </TableCell>
                   <TableCell className="py-3 text-muted-foreground text-sm">{new Date(o.created_at).toLocaleDateString("ar-IQ")}</TableCell>
                   <TableCell className="py-3">
@@ -250,7 +265,7 @@ const OwnersTab = () => {
               ))}
               {owners.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-16">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-16">
                     <div className="flex flex-col items-center gap-2">
                       <UserPlus className="h-8 w-8 text-muted-foreground/40" />
                       <span>لا توجد حسابات بعد</span>
@@ -270,6 +285,17 @@ const OwnersTab = () => {
           <div className="space-y-4">
             <div><Label>اسم المالك</Label><Input value={editForm.owner_name} onChange={(e) => setEditForm({ ...editForm, owner_name: e.target.value })} /></div>
             <div><Label>رقم الهاتف (واتساب)</Label><Input value={editForm.owner_phone} onChange={(e) => setEditForm({ ...editForm, owner_phone: e.target.value })} placeholder="964XXXXXXXXX" /></div>
+            <div>
+              <Label>الذمة المالية المستحقة (دينار عراقي)</Label>
+              <Input
+                type="number"
+                min="0"
+                value={editForm.outstanding_debt}
+                onChange={(e) => setEditForm({ ...editForm, outstanding_debt: e.target.value })}
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground mt-1">المبلغ الذي سيظهر للمالك عند إيقاف حسابه</p>
+            </div>
             <div>
               <Label>المحطة</Label>
               <Select value={editForm.station_id} onValueChange={(v) => setEditForm({ ...editForm, station_id: v })}>

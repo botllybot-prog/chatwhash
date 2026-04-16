@@ -1,4 +1,4 @@
-السيناريو 1 — الحجز الكامل الناجح (المسار الذهبي)import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -184,6 +184,13 @@ function replaceTemplateVars(template: string, vars: Record<string, string>): st
   return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
 }
 
+// Returns station_ids of stations whose owner is currently suspended
+async function getSuspendedStationIds(supabase: any): Promise<string[]> {
+  const { data } = await supabase.from("station_owners")
+    .select("station_id").eq("is_active", false);
+  return (data || []).map((r: any) => r.station_id).filter(Boolean);
+}
+
 const STATIONS_PER_PAGE = 5;
 
 async function sendWhatsAppList(phone: string, body: string, buttonText: string, sections: { title: string; rows: { id: string; title: string; description?: string }[] }[], settings: Record<string, string>) {
@@ -292,7 +299,7 @@ async function checkIfOwner(supabase: any, phone: string) {
 
   for (const p of alts) {
     const { data } = await supabase.from("station_owners")
-      .select("id, owner_name, station_id, is_active, stations(name)")
+      .select("id, owner_name, station_id, is_active, outstanding_debt, stations(name)")
       .eq("owner_phone", p).maybeSingle();
     if (data) return data;
   }
@@ -408,11 +415,86 @@ async function handleOwnerLogic(
 ): Promise<boolean> {
   // ── Check if owner account is suspended ──────────────────────────
   if (owner.is_active === false) {
-    const zain = settings.PAYMENT_ZAIN_CASH || "غير محدد";
-    const superKey = settings.PAYMENT_SUPER_KEY || "غير محدد";
-    const nas = settings.PAYMENT_NAS_WALLET || "غير محدد";
-    const blockedMsg = `⚠️ تم إيقاف حسابك مؤقتاً بسبب عدم سداد الاشتراك.\n\nللاستمرار في استخدام الخدمة، يرجى تسديد المبلغ المستحق إلى أحد الحسابات التالية:\n\n💚 زين كاش: ${zain}\n🔵 سوبر كي: ${superKey}\n🟠 ناس وولت: ${nas}\n\nبعد الدفع، تواصل مع الإدارة لتفعيل حسابك.`;
-    await sendAndSave(supabase, convId, phone, blockedMsg, settings);
+    const session = await getOrCreateSession(supabase, phone);
+    const step = session?.current_step || "idle";
+    const input = content.trim();
+    const debt = (owner.outstanding_debt as number) || 0;
+    const stationName = owner.stations?.name || "مغسلتك";
+
+    // ── Handle invoice step: owner selected a payment method ──────
+    if (input.startsWith("pay_method_")) {
+      const method = input === "pay_method_zain" ? "zain" : input === "pay_method_super" ? "super" : "nas";
+      const methodLabel = method === "zain" ? "💚 زين كاش" : method === "super" ? "🔵 سوبر كي" : "🟠 ناس وولت";
+      const accountNum =
+        method === "zain" ? settings.PAYMENT_ZAIN_CASH :
+        method === "super" ? settings.PAYMENT_SUPER_KEY :
+        settings.PAYMENT_NAS_WALLET;
+
+      const invoiceMsg =
+        `🧾 فاتورة تسديد 🧾\n\n` +
+        `المغسلة: ${stationName}\n` +
+        `المبلغ المستحق: ${debt.toLocaleString("ar-IQ")} دينار عراقي\n` +
+        `طريقة الدفع: ${methodLabel}\n` +
+        `رقم الحساب: ${accountNum || "تواصل مع الإدارة"}\n\n` +
+        `بعد إتمام التحويل، اضغط "تم الدفع" لإبلاغ الإدارة.`;
+
+      const waId = await sendWhatsAppInteractive(phone, invoiceMsg, [
+        { id: "payment_done", title: "✅ تم الدفع" },
+        { id: "payment_delay", title: "⏳ تأجيل الدفع" },
+      ], settings);
+      saveBotMessage(supabase, convId, invoiceMsg, waId);
+      updateSession(supabase, phone, { current_step: "owner_payment_confirm" });
+      return true;
+    }
+
+    // ── Handle payment confirmation ───────────────────────────────
+    if (step === "owner_payment_confirm" || input === "payment_done" || input === "payment_delay") {
+      if (input === "payment_done") {
+        const ownerAckMsg =
+          `✅ تم إرسال طلبك للإدارة.\n\n` +
+          `سيتم التحقق من الحوالة وإعادة تفعيل حسابك يدوياً فور التأكيد.\n` +
+          `يمكنك إرسال صورة وصل الدفع للإدارة للتسريع.`;
+        await sendAndSave(supabase, convId, phone, ownerAckMsg, settings);
+
+        // Notify admin
+        const adminMsg =
+          `🔔 إشعار دفع من مغسلة\n\n` +
+          `المغسلة: ${stationName}\n` +
+          `المالك: ${owner.owner_name || "غير معروف"}\n` +
+          `الهاتف: ${phone}\n` +
+          `المبلغ المطالب بدفعه: ${debt.toLocaleString("ar-IQ")} دينار عراقي\n\n` +
+          `⚠️ يرجى التحقق من الحوالة ثم إعادة تفعيل الحساب يدوياً من لوحة الإدارة.`;
+        await notifyAdmin(supabase, settings, adminMsg);
+
+        updateSession(supabase, phone, { current_step: "owner_idle" });
+        return true;
+      }
+      if (input === "payment_delay") {
+        await sendAndSave(supabase, convId, phone,
+          `حسناً، سيبقى حسابك موقوفاً حتى يتم التسديد. شكراً لتفهمك.`,
+          settings
+        );
+        updateSession(supabase, phone, { current_step: "owner_idle" });
+        return true;
+      }
+    }
+
+    // ── Default: show suspension notice with payment method buttons ──
+    const suspendMsg =
+      `⚠️ إشعار إداري مهم ⚠️\n\n` +
+      `عذراً، تم إيقاف حساب ${stationName} في النظام.\n` +
+      `السبب: وجود ذمة مالية غير مسددة.\n` +
+      `المبلغ المستحق: ${debt.toLocaleString("ar-IQ")} دينار عراقي.\n\n` +
+      `يرجى تسديد المبلغ للإدارة لإعادة تفعيل حسابك واستقبال الحجوزات.\n\n` +
+      `اختر طريقة الدفع:`;
+
+    const waId = await sendWhatsAppInteractive(phone, suspendMsg, [
+      { id: "pay_method_zain", title: "💚 زين كاش" },
+      { id: "pay_method_super", title: "🔵 سوبر كي" },
+      { id: "pay_method_nas", title: "🟠 ناس وولت" },
+    ], settings);
+    saveBotMessage(supabase, convId, suspendMsg, waId);
+    updateSession(supabase, phone, { current_step: "owner_payment_method" });
     return true;
   }
 
@@ -1264,10 +1346,16 @@ async function showCustomerWelcome(supabase: any, phone: string, convId: string,
 
 async function showStationsPage(supabase: any, phone: string, convId: string, settings: Record<string, string>, page: number) {
   const offset = page * STATIONS_PER_PAGE;
-  const [listResult, countResult] = await Promise.all([
-    supabase.from("stations").select("id, name, address").eq("is_active", true).order("created_at").range(offset, offset + STATIONS_PER_PAGE - 1),
-    supabase.from("stations").select("id", { count: "exact", head: true }).eq("is_active", true),
-  ]);
+  const suspendedIds = await getSuspendedStationIds(supabase);
+
+  let listQuery = supabase.from("stations").select("id, name, address").eq("is_active", true).order("created_at").range(offset, offset + STATIONS_PER_PAGE - 1);
+  let countQuery = supabase.from("stations").select("id", { count: "exact", head: true }).eq("is_active", true);
+  if (suspendedIds.length > 0) {
+    const ids = suspendedIds.join(",");
+    listQuery = listQuery.not("id", "in", `(${ids})`);
+    countQuery = countQuery.not("id", "in", `(${ids})`);
+  }
+  const [listResult, countResult] = await Promise.all([listQuery, countQuery]);
   const stations = listResult.data || [];
   const total = countResult.count || 0;
   const totalPages = Math.ceil(total / STATIONS_PER_PAGE);
@@ -1297,8 +1385,11 @@ async function showStationsPage(supabase: any, phone: string, convId: string, se
 }
 
 async function searchStations(supabase: any, phone: string, convId: string, settings: Record<string, string>, query: string) {
-  const { data: stations } = await supabase.from("stations").select("id, name, address")
+  const suspendedIds = await getSuspendedStationIds(supabase);
+  let q = supabase.from("stations").select("id, name, address")
     .eq("is_active", true).or(`name.ilike.%${query}%,address.ilike.%${query}%`).order("created_at").limit(10);
+  if (suspendedIds.length > 0) q = q.not("id", "in", `(${suspendedIds.join(",")})`);
+  const { data: stations } = await q;
 
   if (!stations || stations.length === 0) {
     await sendAndSave(supabase, convId, phone, `❌ لم يتم العثور على مغاسل بـ \"${query}\".\nأرسل \"قائمة\" لعرض المغاسل أو 0 للعودة.`, settings);
@@ -1318,8 +1409,10 @@ async function searchStations(supabase: any, phone: string, convId: string, sett
 }
 
 async function handleLocationMessage(supabase: any, phone: string, convId: string, settings: Record<string, string>, loc: { latitude: number; longitude: number }) {
-  const { data: stations } = await supabase.from("stations")
-    .select("id, name, address, latitude, longitude").eq("is_active", true);
+  const suspendedIds = await getSuspendedStationIds(supabase);
+  let q = supabase.from("stations").select("id, name, address, latitude, longitude").eq("is_active", true);
+  if (suspendedIds.length > 0) q = q.not("id", "in", `(${suspendedIds.join(",")})`);
+  const { data: stations } = await q;
 
   if (!stations || stations.length === 0) {
     await sendAndSave(supabase, convId, phone, "عذراً، لا توجد مغاسل متاحة حالياً.", settings);
