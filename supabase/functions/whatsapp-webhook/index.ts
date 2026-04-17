@@ -514,6 +514,45 @@ async function handleOwnerLogic(
     return await showOwnerMenu(supabase, phone, convId, settings, owner);
   }
 
+  // ── Global: change_time_{bookingId} — works at ANY session step ──────────
+  // Button payload embeds bookingId so no session state is required.
+  if (input.startsWith("change_time_")) {
+    const ctBookingId = input.replace("change_time_", "");
+    const { data: ctBk } = await supabase.from("bookings")
+      .select("id, booking_number, booking_date, stations(scheduling_type, working_hours_start, working_hours_end, slot_duration_minutes, name)")
+      .eq("id", ctBookingId).eq("station_id", owner.station_id).maybeSingle();
+    if (!ctBk) return await showOwnerMenu(supabase, phone, convId, settings, owner);
+    const ctSt = ctBk.stations as any;
+    const ctNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
+    const ctToday = ctNow.toISOString().split("T")[0];
+    const ctAllSlots = generateTimeSlots(
+      ctSt?.working_hours_start || "08:00",
+      ctSt?.working_hours_end   || "20:00",
+      ctSt?.slot_duration_minutes || 30
+    );
+    const { data: ctBooked } = await supabase.from("bookings").select("booking_time")
+      .eq("station_id", owner.station_id).eq("booking_date", ctToday)
+      .in("status", ["pending", "confirmed", "pending_customer_approval"])
+      .neq("id", ctBookingId);
+    const ctBookedSet = new Set((ctBooked || []).map((b: any) => b.booking_time?.substring(0, 5)));
+    const ctAvailable = ctAllSlots.filter((s: string) => !ctBookedSet.has(s));
+    if (ctAvailable.length === 0) {
+      const noSlotWaId = await sendWhatsAppInteractive(phone,
+        `⚠️ لا توجد مواعيد متاحة اليوم في ${ctSt?.name || "المحطة"}. هل تود رفض الحجز؟`,
+        [{ id: "approve_no", title: "❌ رفض الحجز" }, { id: "approve_yes", title: "✅ تأكيد الحجز" }], settings);
+      saveBotMessage(supabase, convId, "لا مواعيد متاحة", noSlotWaId);
+      updateSession(supabase, phone, { current_step: "owner_approve_reject", pending_booking_id: ctBookingId });
+      return true;
+    }
+    const ctRows = ctAvailable.slice(0, 9).map((s: string) => ({ id: `propose_time_${s}`, title: to12Hour(s) }));
+    ctRows.push({ id: "propose_time_back", title: "🔙 رجوع" });
+    const ctMsg = `📅 اختر الوقت البديل للحجز رقم #${ctBk.booking_number}:`;
+    const ctWaId = await sendWhatsAppList(phone, ctMsg, "اختر وقتاً", [{ title: "الأوقات المتاحة", rows: ctRows }], settings);
+    saveBotMessage(supabase, convId, ctMsg, ctWaId);
+    updateSession(supabase, phone, { current_step: "owner_propose_time", pending_booking_id: ctBookingId, selected_date: ctToday });
+    return true;
+  }
+
   // Owner selects a pending booking from list (ID: pending_UUID)
   if (step === "owner_view_pending" || input.startsWith("pending_")) {
     const pendingMatch = input.match(/^pending_([a-f0-9-]+)$/i);
@@ -534,7 +573,7 @@ async function handleOwnerLogic(
     const waId = await sendWhatsAppInteractive(phone, detailMsg, [
       { id: "approve_yes", title: "✅ موافق" },
       { id: "approve_no", title: "❌ غير موافق" },
-      { id: "approve_reschedule", title: "📅 تعديل الموعد" },
+      { id: `change_time_${b.id}`, title: "📅 تعديل الموعد" },
     ], settings);
     saveBotMessage(supabase, convId, detailMsg, waId);
     return true;
@@ -548,46 +587,10 @@ async function handleOwnerLogic(
       return await showOwnerMenu(supabase, phone, convId, settings, owner);
     }
 
-    // ── اقتراح وقت بديل (Phase 2) ──
+    // ── اقتراح وقت بديل: fallback للأزرار القديمة (approve_reschedule بدون bookingId) ──
     if (input === "approve_reschedule") {
-      // الخطوة الجديدة: اعرض الأوقات المتاحة للمالك ليختار وقتاً بديلاً بدلاً من الإلغاء الفوري
-      const { data: bkForPropose } = await supabase.from("bookings")
-        .select("booking_number, booking_date, stations(scheduling_type, working_hours_start, working_hours_end, slot_duration_minutes, name)")
-        .eq("id", bookingId).single();
-      if (!bkForPropose) {
-        updateSession(supabase, phone, { current_step: "owner_idle", pending_booking_id: null });
-        return await showOwnerMenu(supabase, phone, convId, settings, owner);
-      }
-      const st = bkForPropose.stations as any;
-      const iraqNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
-      const today = iraqNow.toISOString().split("T")[0];
-      const allSlots = generateTimeSlots(
-        st?.working_hours_start || "08:00",
-        st?.working_hours_end || "20:00",
-        st?.slot_duration_minutes || 30
-      );
-      const { data: bookedSlots } = await supabase.from("bookings").select("booking_time")
-        .eq("station_id", owner.station_id).eq("booking_date", today)
-        .in("status", ["pending", "confirmed", "pending_customer_approval"])
-        .neq("id", bookingId);
-      const bookedSet = new Set((bookedSlots || []).map((b: any) => b.booking_time?.substring(0, 5)));
-      const available = allSlots.filter((s: string) => !bookedSet.has(s));
-      if (available.length === 0) {
-        const noSlotsWaId = await sendWhatsAppInteractive(phone,
-          `⚠️ لا توجد مواعيد متاحة اليوم في ${st?.name || "المحطة"}.
-هل تود رفض الحجز بدلاً من ذلك؟`,
-          [{ id: "approve_no", title: "❌ رفض الحجز" }, { id: "approve_yes", title: "✅ تأكيد الحجز" }],
-          settings);
-        saveBotMessage(supabase, convId, "لا مواعيد متاحة للاقتراح", noSlotsWaId);
-        return true;
-      }
-      const timeRows = available.slice(0, 9).map((s: string) => ({ id: `propose_time_${s}`, title: to12Hour(s) }));
-      timeRows.push({ id: "propose_time_back", title: "🔙 رجوع" });
-      const proposeMsg = `📅 اقتراح وقت بديل للحجز #${bkForPropose.booking_number}\n\nاختر الوقت المناسب وسيُرسَل للعميل للموافقة:`;
-      const proposeWaId = await sendWhatsAppList(phone, proposeMsg, "اختر وقتاً", [{ title: "الأوقات المتاحة", rows: timeRows }], settings);
-      saveBotMessage(supabase, convId, proposeMsg, proposeWaId);
-      updateSession(supabase, phone, { current_step: "owner_propose_time", selected_date: today });
-      return true;
+      // Redirect to global change_time_ handler using the session's bookingId
+      return await handleOwnerLogic(supabase, phone, `change_time_${bookingId}`, convId, settings, owner);
     }
 
     // ── تأكيد ──
@@ -635,7 +638,7 @@ async function handleOwnerLogic(
     const fbWaId = await sendWhatsAppInteractive(phone, fallbackMsg, [
       { id: "approve_yes", title: "✅ تأكيد" },
       { id: "approve_no", title: "❌ رفض" },
-      { id: "approve_reschedule", title: "📅 تغيير الموعد" },
+      { id: `change_time_${bookingId}`, title: "📅 تغيير الموعد" },
     ], settings);
     saveBotMessage(supabase, convId, fallbackMsg, fbWaId);
     return true;
@@ -675,7 +678,7 @@ async function handleOwnerLogic(
         const waId = await sendWhatsAppInteractive(phone, detailMsg, [
           { id: "approve_yes", title: "✅ تأكيد" },
           { id: "approve_no", title: "❌ رفض" },
-          { id: "approve_reschedule", title: "📅 اقتراح وقت بديل" },
+          { id: `change_time_${bookingId}`, title: "📅 اقتراح وقت بديل" },
         ], settings);
         saveBotMessage(supabase, convId, detailMsg, waId);
       }
@@ -702,23 +705,35 @@ async function handleOwnerLogic(
     const { data: proposedBk } = await supabase.from("bookings")
       .select("booking_number, customer_phone, stations(name), services(name, price)")
       .eq("id", bookingId).single();
+
+    let customerNotified = false;
     if (proposedBk) {
-      const custConvId = await getOrCreateConvForPhone(supabase, proposedBk.customer_phone);
+      const custPhone = normalizePhone(proposedBk.customer_phone);
+      const custConvId = await getOrCreateConvForPhone(supabase, custPhone);
       if (custConvId) {
-        const custMsg = `📅 اقتراح وقت جديد\n\nعذراً، المغسلة مزدحمة في الوقت المطلوب.\n\nاقترحت إدارة مغسلة ${(proposedBk.stations as any)?.name || ""} موعداً بديلاً:\n⏰ الوقت الجديد: ${to12Hour(proposedTime)}\n📅 التاريخ: ${proposedDate}\n📋 رقم الحجز: #${proposedBk.booking_number}\n🔧 الخدمة: ${proposedBk.services?.name || ""} — ${proposedBk.services?.price || ""} د.ع\n\nهل توافق على الوقت الجديد؟`;
-        const custWaId = await sendWhatsAppInteractive(proposedBk.customer_phone, custMsg, [
+        const stationName = (proposedBk.stations as any)?.name || "";
+        const custMsg =
+          `⚠️ تحديث بخصوص حجزك ⚠️\n\n` +
+          `عذراً، المغسلة مزدحمة في الوقت المطلوب.\n` +
+          `لقد اقترحت إدارة مغسلة ${stationName} موعداً بديلاً في الساعة (${to12Hour(proposedTime)}).\n\n` +
+          `هل توافق؟`;
+        const custWaId = await sendWhatsAppInteractive(custPhone, custMsg, [
           { id: "new_time_accept", title: "✅ موافق على الوقت الجديد" },
-          { id: "new_time_reject", title: "🔍 البحث عن مغسلة أخرى" },
+          { id: "new_time_reject", title: "🔍 رفض والبحث عن مغسلة أخرى" },
         ], settings);
         saveBotMessage(supabase, custConvId, custMsg, custWaId);
-        updateSession(supabase, proposedBk.customer_phone, {
+        updateSession(supabase, custPhone, {
           current_step: "awaiting_new_time_approval",
           pending_booking_id: bookingId,
         });
+        customerNotified = !!custWaId;
       }
     }
-    // Notify owner that proposal was sent
-    const ownerAckMsg = `✅ تم إرسال الوقت البديل ${to12Hour(proposedTime)} للعميل. بانتظار موافقته.`;
+
+    // Notify owner ONLY after customer push completes
+    const ownerAckMsg = customerNotified
+      ? `✅ تم إرسال الوقت البديل للعميل بنجاح. نحن الآن بانتظار موافقته.`
+      : `⚠️ تعذّر إرسال الإشعار للعميل. تحقق من رقم هاتفه وحاول مجدداً.`;
     await sendAndSave(supabase, convId, phone, ownerAckMsg, settings);
     updateSession(supabase, phone, { current_step: "owner_idle", pending_booking_id: null, selected_date: null });
     await showOwnerMenu(supabase, phone, convId, settings, owner);
@@ -1754,7 +1769,7 @@ async function createBookingAndNotifyOwner(
       const ownerButtons = [
         { id: "approve_yes", title: "✅ تأكيد" },
         { id: "approve_no", title: "❌ رفض" },
-        { id: "approve_reschedule", title: "📅 تغيير الموعد" },
+        { id: `change_time_${booking.id}`, title: "📅 تغيير الموعد" },
       ];
 
       const ownerWaId = await sendWhatsAppInteractive(ownerPhone, ownerMsg, ownerButtons, settings);
