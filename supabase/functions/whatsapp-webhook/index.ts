@@ -320,12 +320,7 @@ async function confirmBookingAndNotifyCustomer(
   await supabase.from("bookings").update(updateData).eq("id", bookingId);
 
   // ── Competitive punishment: cancel any OTHER pending bookings for this customer ──
-  const { data: competing } = await supabase.from("bookings")
-    .select("id, booking_number, station_id, stations(name)")
-    .eq("customer_phone", ownerPhone.replace(/^.*$/, ""))
-    .eq("status", "pending")
-    .neq("id", bookingId);
-  // Use customer_phone from booking record instead
+  // Use customer_phone from booking record
   const { data: confirmedBk } = await supabase.from("bookings")
     .select("customer_phone")
     .eq("id", bookingId).single();
@@ -1274,12 +1269,18 @@ async function handleCustomerLogic(
       await supabase.from("bookings").update({
         status: "confirmed" as any,
         booking_time: pb.proposed_time,
-        booking_date: pb.proposed_date || pb.proposed_date,
+        booking_date: pb.proposed_date,
       }).eq("id", bookingId);
       const timeLabel = pb.proposed_time ? to12Hour(pb.proposed_time.substring(0, 5)) : "-";
       const dateFormatted = new Date(pb.proposed_date || "").toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
       const custConfirmMsg = `✅ تم تأكيد حجزك بالوقت الجديد!\n\n📍 المحطة: ${(pb.stations as any)?.name || ""}\n🔧 الخدمة: ${pb.services?.name || ""}\n💰 السعر: ${pb.services?.price || ""} د.ع\n📅 التاريخ: ${dateFormatted}\n🕐 الوقت: ${timeLabel}\n📋 رقم الحجز: #${pb.booking_number}\n\nنتمنى لك تجربة رائعة! 🚗✨`;
-      const custWaId = await sendAndSave(supabase, convId, phone, custConfirmMsg, settings);
+      await sendAndSave(supabase, convId, phone, custConfirmMsg, settings);
+      // Follow-up buttons for customer
+      const acceptFollowWaId = await sendWhatsAppInteractive(phone, "ماذا تريد أن تفعل؟", [
+        { id: "btn_bookings", title: "📋 حجوزاتي" },
+        { id: "btn_menu", title: "🏠 القائمة الرئيسية" },
+      ], settings);
+      saveBotMessage(supabase, convId, "أزرار بعد قبول الوقت البديل", acceptFollowWaId);
       updateSession(supabase, phone, { current_step: "idle", pending_booking_id: null });
       // Notify station owner
       const { data: stOwner } = await supabase.from("station_owners").select("owner_phone, owner_name").eq("station_id", pb.station_id).maybeSingle();
@@ -1289,6 +1290,7 @@ async function handleCustomerLogic(
         if (ownerConvId) {
           const ownerMsg = `✅ قَبِل العميل الوقت البديل!\n\n📋 الحجز #${pb.booking_number} أصبح مؤكداً\n⏰ الوقت: ${timeLabel}`;
           await sendAndSave(supabase, ownerConvId, ownerPhone, ownerMsg, settings);
+          await showOwnerMenu(supabase, ownerPhone, ownerConvId, settings, { ...stOwner, station_id: pb.station_id, stations: pb.stations });
         }
       }
       return true;
@@ -1296,11 +1298,11 @@ async function handleCustomerLogic(
     if (input === "new_time_reject") {
       // Cancel booking and let customer search for another station
       await supabase.from("bookings").update({ status: "cancelled" as any }).eq("id", bookingId);
-      const { data: rejBk } = await supabase.from("bookings").select("services(name)").eq("id", bookingId).single();
+      const { data: rejBk } = await supabase.from("bookings").select("service_id").eq("id", bookingId).single();
       updateSession(supabase, phone, {
         current_step: "idle",
         pending_booking_id: null,
-        selected_service_id: (rejBk as any)?.services?.id || null,
+        selected_service_id: rejBk?.service_id || null,
       });
       const rejectWaId = await sendWhatsAppInteractive(phone,
         "❌ تم رفض الوقت البديل وإلغاء الحجز.\n\nيمكنك البحث عن مغسلة أخرى:",
@@ -1314,7 +1316,7 @@ async function handleCustomerLogic(
     const propTimeLabel = pbFb?.proposed_time ? to12Hour(pbFb.proposed_time.substring(0, 5)) : "-";
     const fbWaId = await sendWhatsAppInteractive(phone,
       `هل توافق على الوقت البديل ${propTimeLabel} في مغسلة ${(pbFb?.stations as any)?.name || ""}؟`,
-      [{ id: "new_time_accept", title: "✅ موافق على الوقت الجديد" }, { id: "new_time_reject", title: "🔍 البحث عن مغسلة أخرى" }],
+      [{ id: "new_time_accept", title: "✅ موافق على الوقت الجديد" }, { id: "new_time_reject", title: "🔍 رفض والبحث عن مغسلة أخرى" }],
       settings);
     saveBotMessage(supabase, convId, "إعادة إرسال اقتراح الوقت", fbWaId);
     return true;
