@@ -142,9 +142,16 @@ const OwnersTab = () => {
     }
     // When suspending an active owner, push WhatsApp suspension notice
     if (!newActive && o.owner_phone) {
-      await supabase.functions.invoke("send-suspension-notice", {
+      const noticeRes = await supabase.functions.invoke("send-suspension-notice", {
         body: { owner_id: o.id },
       });
+      if (noticeRes.error || (noticeRes.data as any)?.error) {
+        toast({
+          title: "تم الإيقاف لكن فشل إرسال إشعار واتساب",
+          description: (noticeRes.data as any)?.error || noticeRes.error?.message,
+          variant: "destructive",
+        });
+      }
     }
     toast({ title: newActive ? "تم تفعيل الحساب ✅" : "تم إيقاف الحساب مؤقتاً ⚠️" });
     load();

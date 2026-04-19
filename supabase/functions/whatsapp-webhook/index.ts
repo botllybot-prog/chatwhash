@@ -533,20 +533,30 @@ async function handleOwnerLogic(
     const ctSt = ctBk.stations as any;
     const ctNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
     const ctToday = ctNow.toISOString().split("T")[0];
+    const ctTargetDate = ctBk.booking_date || ctToday;
     const ctAllSlots = generateTimeSlots(
       ctSt?.working_hours_start || "08:00",
       ctSt?.working_hours_end   || "20:00",
       ctSt?.slot_duration_minutes || 30
     );
     const { data: ctBooked } = await supabase.from("bookings").select("booking_time")
-      .eq("station_id", owner.station_id).eq("booking_date", ctToday)
+      .eq("station_id", owner.station_id).eq("booking_date", ctTargetDate)
       .in("status", ["pending", "confirmed", "pending_customer_approval"])
       .neq("id", ctBookingId);
     const ctBookedSet = new Set((ctBooked || []).map((b: any) => b.booking_time?.substring(0, 5)));
-    const ctAvailable = ctAllSlots.filter((s: string) => !ctBookedSet.has(s));
+    const ctNowMin = ctNow.getUTCHours() * 60 + ctNow.getUTCMinutes();
+    const ctAvailable = ctAllSlots.filter((s: string) => {
+      if (ctBookedSet.has(s)) return false;
+      // For today's date, don't show past times.
+      if (ctTargetDate === ctToday) {
+        const [h, m] = s.split(":").map(Number);
+        return h * 60 + m > ctNowMin;
+      }
+      return true;
+    });
     if (ctAvailable.length === 0) {
       const noSlotWaId = await sendWhatsAppInteractive(phone,
-        `⚠️ لا توجد مواعيد متاحة اليوم في ${ctSt?.name || "المحطة"}. هل تود رفض الحجز؟`,
+        `⚠️ لا توجد مواعيد متاحة في ${ctTargetDate} لدى ${ctSt?.name || "المحطة"}. هل تود رفض الحجز؟`,
         [{ id: "approve_no", title: "❌ رفض الحجز" }, { id: "approve_yes", title: "✅ تأكيد الحجز" }], settings);
       saveBotMessage(supabase, convId, "لا مواعيد متاحة", noSlotWaId);
       updateSession(supabase, phone, { current_step: "owner_approve_reject", pending_booking_id: ctBookingId });
@@ -554,10 +564,10 @@ async function handleOwnerLogic(
     }
     const ctRows = ctAvailable.slice(0, 9).map((s: string) => ({ id: `propose_time_${s}`, title: to12Hour(s) }));
     ctRows.push({ id: "propose_time_back", title: "🔙 رجوع" });
-    const ctMsg = `📅 اختر الوقت البديل للحجز رقم #${ctBk.booking_number}:`;
+    const ctMsg = `📅 اختر الوقت البديل للحجز رقم #${ctBk.booking_number}\n📆 التاريخ: ${ctTargetDate}`;
     const ctWaId = await sendWhatsAppList(phone, ctMsg, "اختر وقتاً", [{ title: "الأوقات المتاحة", rows: ctRows }], settings);
     saveBotMessage(supabase, convId, ctMsg, ctWaId);
-    updateSession(supabase, phone, { current_step: "owner_propose_time", pending_booking_id: ctBookingId, selected_date: ctToday });
+    updateSession(supabase, phone, { current_step: "owner_propose_time", pending_booking_id: ctBookingId, selected_date: ctTargetDate });
     return true;
   }
 
@@ -718,24 +728,24 @@ async function handleOwnerLogic(
     if (proposedBk) {
       const custPhone = normalizePhone(proposedBk.customer_phone);
       const custConvId = await getOrCreateConvForPhone(supabase, custPhone);
+      const stationName = (proposedBk.stations as any)?.name || "";
+      const custMsg =
+        `⚠️ تحديث بخصوص حجزك ⚠️\n\n` +
+        `عذراً، المغسلة مزدحمة في الوقت المطلوب.\n` +
+        `لقد اقترحت إدارة مغسلة ${stationName} موعداً بديلاً في الساعة (${to12Hour(proposedTime)}).\n\n` +
+        `هل توافق؟`;
+      const custWaId = await sendWhatsAppInteractive(custPhone, custMsg, [
+        { id: "new_time_accept", title: "✅ موافق" },
+        { id: "new_time_reject", title: "🔍 ابحث عن مغسلة" },
+      ], settings);
       if (custConvId) {
-        const stationName = (proposedBk.stations as any)?.name || "";
-        const custMsg =
-          `⚠️ تحديث بخصوص حجزك ⚠️\n\n` +
-          `عذراً، المغسلة مزدحمة في الوقت المطلوب.\n` +
-          `لقد اقترحت إدارة مغسلة ${stationName} موعداً بديلاً في الساعة (${to12Hour(proposedTime)}).\n\n` +
-          `هل توافق؟`;
-        const custWaId = await sendWhatsAppInteractive(custPhone, custMsg, [
-          { id: "new_time_accept", title: "✅ موافق على الوقت الجديد" },
-          { id: "new_time_reject", title: "🔍 رفض والبحث عن مغسلة أخرى" },
-        ], settings);
         saveBotMessage(supabase, custConvId, custMsg, custWaId);
         updateSession(supabase, custPhone, {
           current_step: "awaiting_new_time_approval",
           pending_booking_id: bookingId,
         });
-        customerNotified = !!custWaId;
       }
+      customerNotified = !!custWaId;
     }
 
     // Notify owner ONLY after customer push completes
@@ -1387,7 +1397,7 @@ async function handleCustomerLogic(
     const propTimeLabel = pbFb?.proposed_time ? to12Hour(pbFb.proposed_time.substring(0, 5)) : "-";
     const fbWaId = await sendWhatsAppInteractive(phone,
       `هل توافق على الوقت البديل ${propTimeLabel} في مغسلة ${(pbFb?.stations as any)?.name || ""}؟`,
-      [{ id: "new_time_accept", title: "✅ موافق على الوقت الجديد" }, { id: "new_time_reject", title: "🔍 رفض والبحث عن مغسلة أخرى" }],
+      [{ id: "new_time_accept", title: "✅ موافق" }, { id: "new_time_reject", title: "🔍 ابحث عن مغسلة" }],
       settings);
     saveBotMessage(supabase, convId, "إعادة إرسال اقتراح الوقت", fbWaId);
     return true;

@@ -11,7 +11,7 @@ async function sendWhatsAppInteractive(
   buttons: { id: string; title: string }[],
   accessToken: string,
   phoneNumberId: string
-): Promise<void> {
+): Promise<string | null> {
   const payload = {
     messaging_product: "whatsapp",
     to: phone,
@@ -27,7 +27,7 @@ async function sendWhatsAppInteractive(
       },
     },
   };
-  await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+  const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -35,6 +35,11 @@ async function sendWhatsAppInteractive(
     },
     body: JSON.stringify(payload),
   });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(`WhatsApp API error: ${res.status} ${JSON.stringify(data)}`);
+  }
+  return data?.messages?.[0]?.id || null;
 }
 
 Deno.serve(async (req) => {
@@ -131,7 +136,7 @@ Deno.serve(async (req) => {
     let phone = owner.owner_phone as string;
     if (/^07\d{9}$/.test(phone)) phone = "964" + phone.substring(1);
 
-    await sendWhatsAppInteractive(
+    const waId = await sendWhatsAppInteractive(
       phone,
       suspendMsg,
       [
@@ -142,12 +147,23 @@ Deno.serve(async (req) => {
       accessToken,
       phoneNumberId
     );
+    if (!waId) {
+      return new Response(JSON.stringify({ error: "Failed to send suspension notice" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Update bot session so owner is ready for payment method selection
     await supabase
       .from("bot_sessions")
       .upsert(
-        { customer_phone: phone, current_step: "owner_payment_method", updated_at: new Date().toISOString() },
+        {
+          customer_phone: phone,
+          current_step: "owner_payment_method",
+          updated_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        },
         { onConflict: "customer_phone" }
       );
 
