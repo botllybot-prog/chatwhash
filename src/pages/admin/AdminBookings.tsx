@@ -30,6 +30,11 @@ const AdminBookings = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  const normalizeStatus = (status: string | null | undefined) =>
+    String(status || "").trim().toLowerCase().replace(/\s+/g, "_");
+
+  const allowedStatuses = ["pending", "confirmed", "pending_customer_approval", "completed", "cancelled"] as const;
+
   const statusLabels: Record<string, string> = {
     pending: "قيد الانتظار",
     confirmed: "مؤكد",
@@ -137,7 +142,13 @@ const AdminBookings = () => {
       <Table>
         <TableHeader><TableRow><TableHead>#</TableHead><TableHead>العميل</TableHead><TableHead>المحطة</TableHead><TableHead>الخدمة</TableHead><TableHead>التاريخ</TableHead><TableHead>الوقت</TableHead><TableHead>الحالة</TableHead><TableHead>إجراءات</TableHead></TableRow></TableHeader>
         <TableBody>
-          {bookings.map((b) => (
+          {bookings.map((b) => {
+            const normalizedStatus = normalizeStatus(b.status);
+            const statusLabel = statusLabels[normalizedStatus] || b.status;
+            const statusVariant = statusColors[normalizedStatus] || "secondary";
+            const selectStatusValue = normalizedStatus || "pending";
+
+            return (
             <TableRow key={b.id}>
               <TableCell>#{b.booking_number}</TableCell>
               <TableCell>{b.customer_name || b.customer_phone}</TableCell>
@@ -145,11 +156,14 @@ const AdminBookings = () => {
               <TableCell>{(b as any).services?.name} - {(b as any).services?.price} د.ع</TableCell>
               <TableCell>{b.booking_date}</TableCell>
               <TableCell>{b.booking_time?.substring(0, 5) || "-"}</TableCell>
-              <TableCell><Badge variant={statusColors[b.status] || "secondary"}>{statusLabels[b.status] || b.status}</Badge></TableCell>
+              <TableCell><Badge variant={statusVariant}>{statusLabel}</Badge></TableCell>
               <TableCell>
-                <Select value={b.status} onValueChange={(v) => updateStatus(b.id, v)}>
+                <Select value={selectStatusValue} onValueChange={(v) => updateStatus(b.id, v)}>
                   <SelectTrigger className="w-36 h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    {!allowedStatuses.includes(selectStatusValue as any) && (
+                      <SelectItem value={selectStatusValue}>{statusLabel}</SelectItem>
+                    )}
                     <SelectItem value="pending">قيد الانتظار</SelectItem>
                     <SelectItem value="confirmed">مؤكد</SelectItem>
                     <SelectItem value="pending_customer_approval">انتظار موافقة العميل</SelectItem>
@@ -159,7 +173,7 @@ const AdminBookings = () => {
                 </Select>
               </TableCell>
             </TableRow>
-          ))}
+          )})}
           {bookings.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">لا توجد حجوزات</TableCell></TableRow>}
         </TableBody>
       </Table>
