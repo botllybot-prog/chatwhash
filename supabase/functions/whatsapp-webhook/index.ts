@@ -1141,7 +1141,7 @@ async function handleCustomerLogic(
     const bookingId = session.pending_booking_id;
     if (input === "conflict_cancel") {
       // Only cancel if still pending — never touch confirmed bookings
-      if (bookingId) await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId).eq("status", "pending");
+      if (bookingId) await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId).in("status", ["pending", "pending_customer_approval"]);
       updateSession(supabase, phone, { current_step: "idle", conflict_booking_id: null });
       return await showCustomerWelcome(supabase, phone, convId, settings, contactName);
     }
@@ -1155,7 +1155,7 @@ async function handleCustomerLogic(
         return await showCustomerWelcome(supabase, phone, convId, settings, contactName);
       }
       // Only cancel if still pending — never touch confirmed bookings
-      await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId).eq("status", "pending");
+      await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId).in("status", ["pending", "pending_customer_approval"]);
       updateSession(supabase, phone, { conflict_booking_id: null });
 
       const st = oldBooking.stations as any;
