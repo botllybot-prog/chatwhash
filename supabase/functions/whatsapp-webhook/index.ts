@@ -738,12 +738,14 @@ async function handleOwnerLogic(
         { id: "new_time_accept", title: "✅ موافق" },
         { id: "new_time_reject", title: "🔍 ابحث عن مغسلة" },
       ], settings);
-      if (custConvId) {
-        saveBotMessage(supabase, custConvId, custMsg, custWaId);
+      if (custWaId) {
         updateSession(supabase, custPhone, {
           current_step: "awaiting_new_time_approval",
           pending_booking_id: bookingId,
         });
+      }
+      if (custConvId) {
+        saveBotMessage(supabase, custConvId, custMsg, custWaId);
       }
       customerNotified = !!custWaId;
     }
@@ -1104,9 +1106,31 @@ async function handleCustomerLogic(
 
   // Waiting for owner response — send interactive buttons
   if (step === "awaiting_owner_response") {
-    const waId = await sendWhatsAppInteractive(phone, "⏳ حجزك قيد المراجعة من قبل إدارة المغسلة.\nسنبلغك فور الرد.", [
+    const { data: pendingBk } = await supabase.from("bookings")
+      .select("id, booking_number, stations(name), created_at")
+      .eq("customer_phone", phone)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const waitingText = pendingBk
+      ? (() => {
+          const started = new Date(pendingBk.created_at).getTime();
+          const elapsed = Math.max(0, Math.floor((Date.now() - started) / 1000));
+          const remainingSec = Math.max(0, 5 * 60 - elapsed);
+          const mm = String(Math.floor(remainingSec / 60)).padStart(2, "0");
+          const ss = String(remainingSec % 60).padStart(2, "0");
+          return `⏳ حجزك قيد المراجعة من قبل إدارة ${(pendingBk.stations as any)?.name || "المغسلة"}.\n` +
+            `الوقت المتبقي قبل عرض البدائل: ${mm}:${ss}\n\n` +
+            `يمكنك متابعة الانتظار أو البحث عن مغسلة أخرى الآن.\n(أرسل 0 للرجوع للقائمة الرئيسية)`;
+        })()
+      : "⏳ حجزك قيد المراجعة من قبل إدارة المغسلة.\nسنبلغك فور الرد.\n(أرسل 0 للرجوع للقائمة الرئيسية)";
+
+    const waId = await sendWhatsAppInteractive(phone, waitingText, [
+      { id: "timeout_wait", title: "⏳ الانتظار" },
+      { id: "timeout_search", title: "🔍 البحث عن مغسلة" },
       { id: "btn_bookings", title: "📋 حجوزاتي" },
-      { id: "btn_menu", title: "🏠 القائمة" },
     ], settings);
     saveBotMessage(supabase, convId, "⏳ حجزك قيد المراجعة", waId);
     return true;
@@ -1235,7 +1259,7 @@ async function handleCustomerLogic(
     const tStName = (tb2?.stations as any)?.name || "المغسلة";
     const fbWaId = await sendWhatsAppInteractive(phone,
       `مغسلة ${tStName} تأخرت في الرد. هل تود الاستمرار في الانتظار أم البحث عن مغسلة أخرى؟`,
-      [{ id: "timeout_wait", title: "⏳ الانتظار" }, { id: "timeout_search", title: "🔍 البحث عن مغسلة أخرى" }],
+      [{ id: "timeout_wait", title: "⏳ الانتظار" }, { id: "timeout_search", title: "🔍 البحث عن مغسلة" }],
       settings);
     saveBotMessage(supabase, convId, "تنبيه انتهاء المهلة", fbWaId);
     return true;
@@ -1782,11 +1806,42 @@ async function createBookingAndNotifyOwner(
   stationId: string, serviceId: string, bookingDate: string, bookingTime: string | null,
   vehicleDetails: string | null = null
 ) {
+  const iraqNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  const todayStr = iraqNow.toISOString().split("T")[0];
+
+  // Prevent repeated active bookings for the same station.
+  const { data: sameStationActive } = await supabase.from("bookings")
+    .select("id, booking_number, booking_date, status, stations(name)")
+    .eq("customer_phone", phone)
+    .eq("station_id", stationId)
+    .in("status", ["pending", "pending_customer_approval", "confirmed"])
+    .gte("booking_date", todayStr)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (sameStationActive) {
+    const stName = (sameStationActive.stations as any)?.name || "المغسلة";
+    const duplicateMsg =
+      `⚠️ لديك بالفعل حجز نشط في ${stName} (رقم #${sameStationActive.booking_number}).\n` +
+      `لا يمكن إنشاء حجز آخر لنفس المغسلة حالياً.\n\n` +
+      `يمكنك إدارة حجزك الحالي من "حجوزاتي".`;
+    const duplicateWaId = await sendWhatsAppInteractive(phone, duplicateMsg, [
+      { id: "btn_bookings", title: "📋 حجوزاتي" },
+      { id: "btn_menu", title: "🏠 القائمة" },
+    ], settings);
+    saveBotMessage(supabase, convId, duplicateMsg, duplicateWaId);
+    return true;
+  }
+
   // ── Anti-spam: check if customer already has a pending booking ──
   const { data: existingPending } = await supabase.from("bookings")
     .select("id, booking_number, stations(name)")
     .eq("customer_phone", phone)
-    .eq("status", "pending")
+    .in("status", ["pending", "pending_customer_approval"])
+    .gte("booking_date", todayStr)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (existingPending) {
@@ -1827,7 +1882,7 @@ async function createBookingAndNotifyOwner(
   // ── رسالة الزبون: دائماً "في انتظار التأكيد" - لا نستخدم BOT_CONFIRMATION_MESSAGE هنا ──
   const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const timeLabel = bookingTime ? to12Hour(bookingTime) : "";
-  const pendingMsg = `📩 تم استلام طلب حجزك!\n\n📍 المحطة: ${station?.name || ""}\n🔧 الخدمة: ${service?.name || ""}\n💰 السعر: ${service?.price || ""} د.ع\n📅 التاريخ: ${dateLabel}${timeLabel ? "\n🕐 الوقت: " + timeLabel : ""}\n📋 رقم الحجز: #${booking?.booking_number || "---"}\n\n⏳ في انتظار تأكيد صاحب المغسلة...\nسنعلمك فور الرد.`;
+  const pendingMsg = `📩 تم استلام طلب حجزك!\n\n📍 المحطة: ${station?.name || ""}\n🔧 الخدمة: ${service?.name || ""}\n💰 السعر: ${service?.price || ""} د.ع\n📅 التاريخ: ${dateLabel}${timeLabel ? "\n🕐 الوقت: " + timeLabel : ""}\n📋 رقم الحجز: #${booking?.booking_number || "---"}\n\n⏳ في انتظار تأكيد صاحب المغسلة...\nسيتم تذكيرك تلقائياً خلال 5 دقائق إذا لم يتم الرد.`;
 
   // إرسال رسالة الزبون + تحديث الجلسة معاً (بالتوازي مع إشعار المالك)
   updateSession(supabase, phone, { current_step: "awaiting_owner_response", selected_station_id: null, selected_service_id: null, selected_date: null, selected_time: null, vehicle_details: null });

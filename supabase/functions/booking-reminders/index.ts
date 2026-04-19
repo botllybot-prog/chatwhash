@@ -54,12 +54,12 @@ Deno.serve(async (req) => {
     }
 
     // ── Timeout Alert: bookings pending > 5 minutes without owner response ──
-    const tenMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: timedOutBookings } = await supabase.from("bookings")
       .select("id, booking_number, customer_phone, station_id, stations(name)")
       .eq("status", "pending")
       .eq("timeout_notified", false)
-      .lt("created_at", tenMinAgo);
+      .lt("created_at", fiveMinAgo);
 
     let timeoutAlerts = 0;
     for (const bk of timedOutBookings || []) {
@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
 
       const waId = await sendWhatsAppInteractive(bk.customer_phone, alertMsg, [
         { id: "timeout_wait", title: "⏳ الانتظار" },
-        { id: "timeout_search", title: "🔍 البحث عن مغسلة أخرى" },
+        { id: "timeout_search", title: "🔍 البحث عن مغسلة" },
       ], settings);
 
       if (waId) {
