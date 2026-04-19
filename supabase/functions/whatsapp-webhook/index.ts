@@ -251,29 +251,38 @@ function incrementCustomerBookings(supabase: any, phone: string, platform: strin
 
 // ==================== ADMIN NOTIFICATION ====================
 
-function notifyAdmin(supabase: any, settings: Record<string, string>, message: string, bookingId?: string) {
+async function notifyAdmin(
+  supabase: any,
+  settings: Record<string, string>,
+  message: string,
+  bookingId?: string,
+  options?: { title?: string; type?: string; referenceId?: string | null }
+) {
   const adminPhone = settings.ADMIN_WHATSAPP_PHONE;
-  // Fire-and-forget: send WhatsApp + insert DB notification
-  (async () => {
-    try {
-      // Insert into notifications table for bell icon
-      await supabase.from("notifications").insert({
-        title: "حجز جديد",
-        body: message,
-        type: "new_booking",
-        is_read: false,
-        reference_id: bookingId || null,
-        user_id: null,
-      });
-    } catch (e) { console.error("DB notify error:", e); }
+  const title = options?.title || "حجز جديد";
+  const type = options?.type || "new_booking";
+  const referenceId = options?.referenceId !== undefined ? options.referenceId : (bookingId || null);
 
-    if (!adminPhone) return;
-    try {
-      const convId = await getOrCreateConvForPhone(supabase, adminPhone, "المسؤول");
-      await sendWhatsAppMessage(adminPhone, message, settings);
-      if (convId) saveBotMessage(supabase, convId, message, null);
-    } catch (e) { console.error("Admin notify error:", e); }
-  })();
+  try {
+    // Insert into notifications table for bell icon
+    await supabase.from("notifications").insert({
+      title,
+      body: message,
+      type,
+      is_read: false,
+      reference_id: referenceId,
+      user_id: null,
+    });
+  } catch (e) { console.error("DB notify error:", e); }
+
+  if (!adminPhone) return;
+  try {
+    const normalizedAdminPhone = normalizePhone(adminPhone);
+    const convId = await getOrCreateConvForPhone(supabase, normalizedAdminPhone, "المسؤول");
+    const waId = await sendWhatsAppMessage(normalizedAdminPhone, message, settings);
+    if (convId) saveBotMessage(supabase, convId, message, waId);
+    if (!waId) console.error(`[ADMIN_NOTIFY] Failed to send WhatsApp message to ${normalizedAdminPhone}`);
+  } catch (e) { console.error("Admin notify error:", e); }
 }
 
 // ==================== CHECK IF ADMIN ====================
@@ -459,7 +468,11 @@ async function handleOwnerLogic(
           `الهاتف: ${phone}\n` +
           `المبلغ المطالب بدفعه: ${debt.toLocaleString("ar-IQ")} دينار عراقي\n\n` +
           `⚠️ يرجى التحقق من الحوالة ثم إعادة تفعيل الحساب يدوياً من لوحة الإدارة.`;
-        await notifyAdmin(supabase, settings, adminMsg);
+        await notifyAdmin(supabase, settings, adminMsg, undefined, {
+          title: "إشعار دفع من مغسلة",
+          type: "payment_notice",
+          referenceId: owner.station_id || null,
+        });
 
         updateSession(supabase, phone, { current_step: "owner_idle" });
         return true;
@@ -874,6 +887,63 @@ async function handleAdminLogic(
     return true;
   }
 
+  // ── أكثر المحطات استجابة ──
+  if (input === "admin_top_responsive") {
+    const { data: rows } = await supabase.from("bookings")
+      .select("station_id, status, created_at, updated_at, stations(name)")
+      .gte("booking_date", monthStartStr)
+      .lte("booking_date", todayStr);
+
+    if (!rows || rows.length === 0) {
+      const waId = await sendWhatsAppInteractive(phone,
+        `📌 أكثر المحطات استجابة\n\nلا توجد بيانات للشهر الحالي حتى الآن.`,
+        [{ id: "admin_menu", title: "🔙 القائمة" }], settings);
+      saveBotMessage(supabase, convId, "لا بيانات استجابة للمحطات", waId);
+      return true;
+    }
+
+    const handledStatuses = new Set(["confirmed", "completed", "cancelled", "pending_customer_approval"]);
+    const stationMap: Record<string, { name: string; total: number; handled: number; responseMinutesTotal: number; responseSamples: number }> = {};
+
+    for (const r of rows as any[]) {
+      const stationId = r.station_id || "unknown";
+      const stationName = (r.stations as any)?.name || "غير معروف";
+      if (!stationMap[stationId]) {
+        stationMap[stationId] = { name: stationName, total: 0, handled: 0, responseMinutesTotal: 0, responseSamples: 0 };
+      }
+      stationMap[stationId].total += 1;
+      if (handledStatuses.has(r.status)) {
+        stationMap[stationId].handled += 1;
+        if (r.created_at && r.updated_at) {
+          const mins = Math.max(0, Math.round((new Date(r.updated_at).getTime() - new Date(r.created_at).getTime()) / 60000));
+          stationMap[stationId].responseMinutesTotal += mins;
+          stationMap[stationId].responseSamples += 1;
+        }
+      }
+    }
+
+    const ranked = Object.values(stationMap)
+      .map((s) => {
+        const responseRate = s.total > 0 ? Math.round((s.handled / s.total) * 100) : 0;
+        const avgResponseMins = s.responseSamples > 0 ? Math.round(s.responseMinutesTotal / s.responseSamples) : null;
+        return { ...s, responseRate, avgResponseMins };
+      })
+      .sort((a, b) => b.responseRate - a.responseRate || (a.avgResponseMins ?? 999999) - (b.avgResponseMins ?? 999999))
+      .slice(0, 8);
+
+    let msg = `📌 أكثر المحطات استجابة (هذا الشهر)\n(${monthStartStr} – ${todayStr})\n\n`;
+    ranked.forEach((s, idx) => {
+      msg += `${idx + 1}. ${s.name}\n`;
+      msg += `   📊 نسبة الاستجابة: ${s.responseRate}% (${s.handled}/${s.total})\n`;
+      msg += `   ⏱ متوسط زمن الرد: ${s.avgResponseMins !== null ? s.avgResponseMins + " دقيقة" : "غير متاح"}\n`;
+    });
+
+    const waId = await sendWhatsAppInteractive(phone, msg,
+      [{ id: "admin_menu", title: "🔙 القائمة" }], settings);
+    saveBotMessage(supabase, convId, msg, waId);
+    return true;
+  }
+
   // ── Default: show admin menu ──
   const menuWaId = await sendWhatsAppList(
     phone,
@@ -898,6 +968,7 @@ async function handleAdminLogic(
         title: "المحطات",
         rows: [
           { id: "admin_stations_active", title: "🏪 المحطات الشغالة", description: "قائمة المحطات النشطة" },
+          { id: "admin_top_responsive", title: "📌 أكثر المحطات استجابة", description: "ترتيب حسب نسبة وسرعة الرد" },
         ],
       },
     ],

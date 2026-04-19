@@ -36,7 +36,8 @@ const ReportsTab = () => {
 
   // Stats
   const totalBookings = bookings.length;
-  const totalRevenue = bookings.reduce((sum, b) => sum + ((b as any).services?.price || 0), 0);
+  const revenueBookings = bookings.filter(b => b.status === "confirmed" || b.status === "completed");
+  const totalRevenue = revenueBookings.reduce((sum, b) => sum + ((b as any).services?.price || 0), 0);
   const completedBookings = bookings.filter(b => b.status === "completed").length;
   const uniqueCustomers = new Set(bookings.map(b => b.customer_phone)).size;
 

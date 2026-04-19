@@ -18,34 +18,40 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     const load = async () => {
-      const today = new Date().toISOString().split("T")[0];
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-      const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      // Normalize to Iraq timezone (UTC+3) and use calendar periods.
+      const nowIraq = new Date(Date.now() + 3 * 60 * 60 * 1000);
+      const today = nowIraq.toISOString().split("T")[0];
+      const dayOfWeek = nowIraq.getUTCDay(); // 0=Sunday ... 6=Saturday
+      const daysSinceSaturday = (dayOfWeek + 1) % 7;
+      const weekStart = new Date(nowIraq.getTime() - daysSinceSaturday * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const monthStart = `${nowIraq.getUTCFullYear()}-${String(nowIraq.getUTCMonth() + 1).padStart(2, "0")}-01`;
       const sevenDaysLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
       const [
         stationsRes, activeStationsRes,
-        todayBookingsRes, pendingRes, completedRes, cancelledRes,
-        weekBookingsRes, monthBookingsRes,
+        todayBookingsRes, pendingRes, confirmedRes, completedRes, cancelledRes,
+        todayRevenueRes, weekRevenueRes, monthRevenueRes,
         expiringRes, activeSubsRes,
         ownersRes,
       ] = await Promise.all([
         supabase.from("stations").select("id", { count: "exact", head: true }),
         supabase.from("stations").select("id", { count: "exact", head: true }).eq("is_active", true),
-        supabase.from("bookings").select("id, services(price)").eq("booking_date", today),
+        supabase.from("bookings").select("id").eq("booking_date", today),
         supabase.from("bookings").select("id", { count: "exact", head: true }).eq("status", "pending" as any),
+        supabase.from("bookings").select("id", { count: "exact", head: true }).eq("status", "confirmed" as any),
         supabase.from("bookings").select("id", { count: "exact", head: true }).eq("status", "completed" as any),
         supabase.from("bookings").select("id", { count: "exact", head: true }).eq("status", "cancelled" as any),
-        supabase.from("bookings").select("booking_date, services(price)").gte("booking_date", weekAgo).lte("booking_date", today),
-        supabase.from("bookings").select("id, services(price)").gte("booking_date", monthAgo).in("status", ["confirmed", "completed"] as any),
+        supabase.from("bookings").select("services(price)").eq("booking_date", today).in("status", ["confirmed", "completed"] as any),
+        supabase.from("bookings").select("booking_date, services(price)").gte("booking_date", weekStart).lte("booking_date", today).in("status", ["confirmed", "completed"] as any),
+        supabase.from("bookings").select("id, services(price)").gte("booking_date", monthStart).lte("booking_date", today).in("status", ["confirmed", "completed"] as any),
         supabase.from("subscriptions").select("id", { count: "exact", head: true }).in("status", ["active", "trial"] as any).lte("end_date", sevenDaysLater),
         supabase.from("subscriptions").select("id", { count: "exact", head: true }).in("status", ["active", "trial"] as any),
         supabase.from("station_owners").select("id", { count: "exact", head: true }),
       ]);
 
-      const todayRevenue = todayBookingsRes.data?.reduce((s: number, b: any) => s + (b.services?.price || 0), 0) || 0;
-      const weekRevenue = weekBookingsRes.data?.reduce((s: number, b: any) => s + (b.services?.price || 0), 0) || 0;
-      const monthRevenue = monthBookingsRes.data?.reduce((s: number, b: any) => s + (b.services?.price || 0), 0) || 0;
+      const todayRevenue = todayRevenueRes.data?.reduce((s: number, b: any) => s + (b.services?.price || 0), 0) || 0;
+      const weekRevenue = weekRevenueRes.data?.reduce((s: number, b: any) => s + (b.services?.price || 0), 0) || 0;
+      const monthRevenue = monthRevenueRes.data?.reduce((s: number, b: any) => s + (b.services?.price || 0), 0) || 0;
 
       setStats({
         totalStations: stationsRes.count || 0,
@@ -80,12 +86,12 @@ const AdminDashboard = () => {
 
       // Booking status pie data
       const p = pendingRes.count || 0;
+      const f = confirmedRes.count || 0;
       const c = completedRes.count || 0;
       const x = cancelledRes.count || 0;
-      const conf = (todayBookingsRes.data?.length || 0) - p - c - x;
       setStatusData([
         { name: "مكتمل", value: c, color: "hsl(var(--primary))" },
-        { name: "مؤكد", value: Math.max(conf, 0), color: "hsl(142 71% 45%)" },
+        { name: "مؤكد", value: f, color: "hsl(142 71% 45%)" },
         { name: "معلق", value: p, color: "hsl(38 92% 50%)" },
         { name: "ملغي", value: x, color: "hsl(var(--destructive))" },
       ].filter(d => d.value > 0));

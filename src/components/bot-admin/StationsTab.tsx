@@ -43,6 +43,8 @@ const defaultForm: StationForm = {
   image_url: null,
 };
 
+const ERBIL_CENTER = { lat: 36.191, lng: 44.009 };
+
 
 const StationsTab = () => {
   const [stations, setStations] = useState<any[]>([]);

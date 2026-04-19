@@ -19,7 +19,7 @@ const EmployeeDashboard = () => {
   const [showAddService, setShowAddService] = useState(false);
   const [showEditPrice, setShowEditPrice] = useState(false);
   const [ownerForm, setOwnerForm] = useState({ email: "", password: "", owner_name: "", owner_phone: "", station_id: "" });
-  const [stationForm, setStationForm] = useState({ name: "", address: "" });
+  const [stationForm, setStationForm] = useState({ name: "", address: "", latitude: "", longitude: "" });
   const [serviceForm, setServiceForm] = useState({ station_id: "", name: "", price: "" });
   const [editPriceForm, setEditPriceForm] = useState({ service_id: "", price: "" });
   const [services, setServices] = useState<any[]>([]);
@@ -127,11 +127,19 @@ const EmployeeDashboard = () => {
       toast({ title: "اسم المحطة مطلوب", variant: "destructive" });
       return;
     }
+    const latitude = stationForm.latitude ? Number(stationForm.latitude) : null;
+    const longitude = stationForm.longitude ? Number(stationForm.longitude) : null;
+    if ((stationForm.latitude && Number.isNaN(latitude)) || (stationForm.longitude && Number.isNaN(longitude))) {
+      toast({ title: "إحداثيات الموقع غير صحيحة", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     const { error } = await supabase.from("stations").insert({
       name: stationForm.name,
       address: stationForm.address,
+      latitude,
+      longitude,
       created_by: user?.id,
       working_hours_start: "08:00",
       working_hours_end: "22:00",
@@ -145,7 +153,7 @@ const EmployeeDashboard = () => {
     } else {
       toast({ title: "تم إنشاء المحطة بنجاح" });
       setShowCreateStation(false);
-      setStationForm({ name: "", address: "" });
+      setStationForm({ name: "", address: "", latitude: "", longitude: "" });
       // Refresh stations list
       const { data: sts } = await supabase.from("stations").select("id, name").order("name");
       if (sts) setStations(sts);
@@ -343,6 +351,26 @@ const EmployeeDashboard = () => {
             <div className="space-y-1.5">
               <Label>العنوان</Label>
               <Input value={stationForm.address} onChange={(e) => setStationForm({ ...stationForm, address: e.target.value })} placeholder="العنوان" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>خط العرض</Label>
+                <Input
+                  value={stationForm.latitude}
+                  onChange={(e) => setStationForm({ ...stationForm, latitude: e.target.value })}
+                  placeholder="36.191"
+                  dir="ltr"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>خط الطول</Label>
+                <Input
+                  value={stationForm.longitude}
+                  onChange={(e) => setStationForm({ ...stationForm, longitude: e.target.value })}
+                  placeholder="44.009"
+                  dir="ltr"
+                />
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">يمكن للإدارة تعديل بقية تفاصيل المحطة لاحقاً.</p>
           </div>
