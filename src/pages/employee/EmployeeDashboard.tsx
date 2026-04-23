@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,186 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { UserPlus, Store, Users, Building, PlusCircle, Tag, MapPin, LocateFixed } from "lucide-react";
+import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Google Maps Location Picker
-// ─────────────────────────────────────────────────────────────────────────────
-
-declare global {
-  interface Window {
-    google: typeof google;
-    _initGoogleMapPicker?: () => void;
-  }
-}
-
-const GMAPS_KEY = "AIzaSyCltYvGyFdsZmn_vQkI9Ny3rPlE4-NVUpY";
-
-interface MapPickerProps {
-  latitude: string;
-  longitude: string;
-  onLocationSelect: (lat: number, lng: number, address?: string) => void;
-}
-
-const MapPicker = ({ latitude, longitude, onLocationSelect }: MapPickerProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markerRef = useRef<google.maps.Marker | null>(null);
-  const [ready, setReady] = useState(false);
-  const [locating, setLocating] = useState(false);
-  const [failed, setFailed] = useState(!GMAPS_KEY);
-
-  const reverseGeocode = useCallback(
-    (lat: number, lng: number) => {
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-        const address =
-          status === "OK" && results?.[0] ? results[0].formatted_address : undefined;
-        onLocationSelect(lat, lng, address);
-      });
-    },
-    [onLocationSelect]
-  );
-
-  const buildMap = useCallback(() => {
-    if (!containerRef.current || !window.google) return;
-
-    const defaultLat = parseFloat(latitude) || 33.3152;
-    const defaultLng = parseFloat(longitude) || 44.3661;
-
-    const map = new window.google.maps.Map(containerRef.current, {
-      center: { lat: defaultLat, lng: defaultLng },
-      zoom: latitude ? 15 : 10,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
-    });
-
-    const marker = new window.google.maps.Marker({
-      map,
-      draggable: true,
-      animation: window.google.maps.Animation.DROP,
-      position: latitude ? { lat: defaultLat, lng: defaultLng } : undefined,
-    });
-
-    map.addListener("click", (e: google.maps.MapMouseEvent) => {
-      if (!e.latLng) return;
-      marker.setPosition(e.latLng);
-      reverseGeocode(e.latLng.lat(), e.latLng.lng());
-    });
-
-    marker.addListener("dragend", () => {
-      const pos = marker.getPosition();
-      if (pos) reverseGeocode(pos.lat(), pos.lng());
-    });
-
-    mapRef.current = map;
-    markerRef.current = marker;
-    setReady(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!GMAPS_KEY) { setFailed(true); return; }
-    const SCRIPT_ID = "gmaps-picker-script";
-    if (window.google?.maps) { buildMap(); return; }
-    window._initGoogleMapPicker = buildMap;
-    if (!document.getElementById(SCRIPT_ID)) {
-      const s = document.createElement("script");
-      s.id = SCRIPT_ID;
-      s.async = true;
-      s.defer = true;
-      s.onerror = () => setFailed(true);
-      s.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&callback=_initGoogleMapPicker&language=ar`;
-      document.head.appendChild(s);
-    }
-  }, [buildMap]);
-
-  // Keep marker in sync when user edits the lat/lng fields manually
-  useEffect(() => {
-    if (!mapRef.current || !markerRef.current || !window.google) return;
-    const lat = parseFloat(latitude);
-    const lng = parseFloat(longitude);
-    if (!isNaN(lat) && !isNaN(lng)) {
-      const pos = new window.google.maps.LatLng(lat, lng);
-      markerRef.current.setPosition(pos);
-      mapRef.current.panTo(pos);
-    }
-  }, [latitude, longitude]);
-
-  const handleLocateMe = () => {
-    if (!navigator.geolocation) {
-      toast({ title: "المتصفح لا يدعم تحديد الموقع", variant: "destructive" });
-      return;
-    }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      ({ coords: { latitude: lat, longitude: lng } }) => {
-        setLocating(false);
-        if (mapRef.current && markerRef.current && window.google) {
-          const pos = new window.google.maps.LatLng(lat, lng);
-          markerRef.current.setPosition(pos);
-          mapRef.current.panTo(pos);
-          mapRef.current.setZoom(16);
-          reverseGeocode(lat, lng);
-        } else {
-          onLocationSelect(lat, lng);
-        }
-      },
-      () => {
-        setLocating(false);
-        toast({ title: "تعذّر تحديد موقعك", variant: "destructive" });
-      }
-    );
-  };
-
-  if (failed) {
-    return (
-      <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/40 p-4 text-center space-y-1">
-        <MapPin className="mx-auto h-5 w-5 text-muted-foreground/50" />
-        <p className="text-sm text-muted-foreground">خريطة Google غير متاحة</p>
-        <p className="text-xs text-muted-foreground">
-          أضف مفتاح API عبر <code className="bg-muted px-1 rounded">VITE_GOOGLE_MAPS_API_KEY</code>
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label className="flex items-center gap-1.5 text-sm">
-          <MapPin className="h-3.5 w-3.5 text-primary" />
-          انقر على الخريطة أو اسحب الدبوس لتحديد الموقع
-        </Label>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleLocateMe}
-          disabled={locating || !ready}
-          className="h-7 text-xs gap-1"
-        >
-          <LocateFixed className="h-3 w-3" />
-          {locating ? "جاري..." : "موقعي"}
-        </Button>
-      </div>
-      <div
-        ref={containerRef}
-        className="w-full rounded-lg border overflow-hidden bg-muted"
-        style={{ height: 240 }}
-      />
-      {!ready && (
-        <p className="text-xs text-center text-muted-foreground animate-pulse">
-          جاري تحميل الخريطة...
-        </p>
-      )}
-    </div>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// EmployeeDashboard — all original code preserved, only Create Station dialog
-// has the MapPicker inserted above the lat/lng fields.
-// ─────────────────────────────────────────────────────────────────────────────
+const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
+const ERBIL_CENTER = { lat: 36.191, lng: 44.009 };
 
 const EmployeeDashboard = () => {
   const [employee, setEmployee] = useState<any>(null);
@@ -204,6 +28,37 @@ const EmployeeDashboard = () => {
   const [editPriceForm, setEditPriceForm] = useState({ service_id: "", price: "" });
   const [services, setServices] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
+
+  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_KEY });
+
+  const mapLat = parseFloat(stationForm.latitude) || ERBIL_CENTER.lat;
+  const mapLng = parseFloat(stationForm.longitude) || ERBIL_CENTER.lng;
+  const mapCenter = { lat: mapLat, lng: mapLng };
+
+  const handleLocateMe = () => {
+    if (!navigator.geolocation) {
+      toast({ title: "المتصفح لا يدعم تحديد الموقع", variant: "destructive" });
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setStationForm((f) => ({
+          ...f,
+          latitude: pos.coords.latitude.toFixed(6),
+          longitude: pos.coords.longitude.toFixed(6),
+        }));
+        setLocating(false);
+        toast({ title: "✅ تم تحديد موقعك الحالي" });
+      },
+      () => {
+        setLocating(false);
+        toast({ title: "تعذّر تحديد الموقع", variant: "destructive" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -517,8 +372,8 @@ const EmployeeDashboard = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Create Station Dialog — MapPicker added; all other fields/logic unchanged */}
-      <Dialog open={showCreateStation} onOpenChange={setShowCreateStation}>
+      {/* Create Station Dialog */}
+      <Dialog open={showCreateStation} onOpenChange={(o) => { setShowCreateStation(o); if (!o) setStationForm({ name: "", address: "", latitude: "", longitude: "" }); }}>
         <DialogContent dir="rtl" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>إضافة محطة جديدة</DialogTitle>
@@ -533,20 +388,56 @@ const EmployeeDashboard = () => {
               <Input value={stationForm.address} onChange={(e) => setStationForm({ ...stationForm, address: e.target.value })} placeholder="العنوان" />
             </div>
 
-            {/* ── Google Maps Picker (new) ── */}
-            <MapPicker
-              latitude={stationForm.latitude}
-              longitude={stationForm.longitude}
-              onLocationSelect={(lat, lng, address) =>
-                setStationForm((prev) => ({
-                  ...prev,
-                  latitude: lat.toFixed(6),
-                  longitude: lng.toFixed(6),
-                  // Auto-fill address only when empty
-                  address: prev.address || address || prev.address,
-                }))
-              }
-            />
+            {/* Google Map — same library as admin */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4" /> الموقع على الخريطة
+                </Label>
+                <Button type="button" variant="outline" size="sm" onClick={handleLocateMe} disabled={locating} className="gap-1.5 text-xs h-7">
+                  <LocateFixed className="h-3.5 w-3.5" />
+                  {locating ? "جاري التحديد..." : "موقعي الحالي"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">انقر على الخريطة أو اسحب الدبوس لتحديد موقع المحطة</p>
+              <div className="h-56 rounded-lg overflow-hidden border border-border">
+                {isLoaded ? (
+                  <GoogleMap
+                    mapContainerStyle={{ height: "100%", width: "100%" }}
+                    center={mapCenter}
+                    zoom={stationForm.latitude ? 15 : 12}
+                    onClick={(e) => {
+                      if (e.latLng) {
+                        setStationForm((f) => ({
+                          ...f,
+                          latitude: e.latLng!.lat().toFixed(6),
+                          longitude: e.latLng!.lng().toFixed(6),
+                        }));
+                      }
+                    }}
+                    options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+                  >
+                    <Marker
+                      position={mapCenter}
+                      draggable
+                      onDragEnd={(e) => {
+                        if (e.latLng) {
+                          setStationForm((f) => ({
+                            ...f,
+                            latitude: e.latLng!.lat().toFixed(6),
+                            longitude: e.latLng!.lng().toFixed(6),
+                          }));
+                        }
+                      }}
+                    />
+                  </GoogleMap>
+                ) : (
+                  <div className="h-full flex items-center justify-center bg-muted text-sm text-muted-foreground">
+                    جاري تحميل الخريطة...
+                  </div>
+                )}
+              </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
