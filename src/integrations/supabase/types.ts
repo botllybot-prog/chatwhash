@@ -380,6 +380,7 @@ export type Database = {
       services: {
         Row: {
           created_at: string
+          customer_discount: string | null
           duration_minutes: number
           id: string
           is_active: boolean
@@ -390,6 +391,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          customer_discount?: string | null
           duration_minutes?: number
           id?: string
           is_active?: boolean
@@ -400,6 +402,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          customer_discount?: string | null
           duration_minutes?: number
           id?: string
           is_active?: boolean

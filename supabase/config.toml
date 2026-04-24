@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.delete-station-owner]
 verify_jwt = false
+
+[functions.owner-self-register]
+verify_jwt = false

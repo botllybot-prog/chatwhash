@@ -12,6 +12,7 @@ import Conversations from "./pages/Conversations";
 import StationPortal from "./pages/StationPortal";
 import StationsMap from "./pages/StationsMap";
 import Login from "./pages/Login";
+import OwnerAccess from "./pages/OwnerAccess";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./components/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -74,6 +75,7 @@ const App = () => (
             <Route path="/map" element={<StationsMap />} />
           </Route>
           <Route path="/login" element={<Login />} />
+          <Route path="/owner" element={<OwnerAccess />} />
           <Route path="/app/*" element={<ProtectedRoutes />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

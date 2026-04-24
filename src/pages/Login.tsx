@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
-import { Lock, Mail, LogIn, Car, ArrowRight } from "lucide-react";
+import { ArrowRight, Car, LogIn, Mail } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Login = () => {
@@ -14,7 +14,6 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // If already logged in, redirect
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
@@ -34,8 +33,8 @@ const Login = () => {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
     setLoading(true);
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -85,7 +84,7 @@ const Login = () => {
                   id="email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(event) => setEmail(event.target.value)}
                   placeholder="admin@example.com"
                   className="pr-10"
                   required
@@ -98,7 +97,7 @@ const Login = () => {
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(event) => setPassword(event.target.value)}
                 placeholder="••••••"
                 required
               />
@@ -108,6 +107,15 @@ const Login = () => {
               {loading ? "جاري الدخول..." : "دخول"}
             </Button>
           </form>
+
+          <div className="mt-4 rounded-xl border border-dashed p-4 text-center">
+            <p className="text-sm text-muted-foreground mb-3">
+              إذا كنت صاحب محطة جديدة، أنشئ حسابك ومحطتك وخدماتك من صفحة واحدة.
+            </p>
+            <Button variant="outline" className="w-full" onClick={() => navigate("/owner")}>
+              إنشاء حساب صاحب محطة
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

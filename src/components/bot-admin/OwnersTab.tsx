@@ -1,17 +1,23 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { supabase } from "@/integrations/supabase/client";
+import { buildOwnerEmail, normalizeOwnerPhone } from "@/lib/ownerAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
-import { UserPlus, Pencil, Trash2, EyeOff, Eye } from "lucide-react";
+import { CalendarClock, Eye, EyeOff, Loader2, MapPin, Pencil, Plus, Store, Trash2, UserPlus, Wallet, Wrench } from "lucide-react";
+
+const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
+const DEFAULT_CENTER = { lat: 33.3152, lng: 44.3661 };
 
 type Owner = {
   id: string;
@@ -25,24 +31,69 @@ type Owner = {
   stations: { name: string } | null;
 };
 
-const emptyForm = { email: "", password: "", owner_name: "", owner_phone: "", station_id: "" };
+type SchedulingType = "slots" | "instant" | "daily";
+
+type ServiceDraft = {
+  name: string;
+  price: string;
+  duration_minutes: string;
+  customer_discount: string;
+};
+
+const emptyService = (): ServiceDraft => ({
+  name: "",
+  price: "",
+  duration_minutes: "30",
+  customer_discount: "",
+});
 
 const OwnersTab = () => {
+  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_KEY });
+
   const [owners, setOwners] = useState<Owner[]>([]);
   const [stations, setStations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Create dialog
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState(emptyForm);
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerWhatsapp, setOwnerWhatsapp] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [stationName, setStationName] = useState("");
+  const [stationAddress, setStationAddress] = useState("");
+  const [detailedAddress, setDetailedAddress] = useState("");
+  const [workingHoursStart, setWorkingHoursStart] = useState("08:00");
+  const [workingHoursEnd, setWorkingHoursEnd] = useState("22:00");
+  const [schedulingType, setSchedulingType] = useState<SchedulingType>("slots");
+  const [slotDuration, setSlotDuration] = useState("30");
+  const [location, setLocation] = useState(DEFAULT_CENTER);
+  const [services, setServices] = useState<ServiceDraft[]>([emptyService()]);
 
-  // Edit dialog
   const [editOpen, setEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Owner | null>(null);
   const [editForm, setEditForm] = useState({ owner_name: "", owner_phone: "", station_id: "", outstanding_debt: "" });
-
-  // Delete confirm
   const [deleteTarget, setDeleteTarget] = useState<Owner | null>(null);
+
+  const generatedEmail = useMemo(
+    () => buildOwnerEmail(ownerWhatsapp, ownerEmail),
+    [ownerWhatsapp, ownerEmail],
+  );
+
+  const resetCreateForm = () => {
+    setOwnerName("");
+    setOwnerWhatsapp("");
+    setOwnerEmail("");
+    setPassword("");
+    setStationName("");
+    setStationAddress("");
+    setDetailedAddress("");
+    setWorkingHoursStart("08:00");
+    setWorkingHoursEnd("22:00");
+    setSchedulingType("slots");
+    setSlotDuration("30");
+    setLocation(DEFAULT_CENTER);
+    setServices([emptyService()]);
+  };
 
   const load = useCallback(async () => {
     const [{ data: ow }, { data: st }] = await Promise.all([
@@ -53,39 +104,91 @@ const OwnersTab = () => {
     if (st) setStations(st);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  // ── Create ──────────────────────────────────────────────
-  const handleCreate = async () => {
-    if (!createForm.email || !createForm.password || !createForm.owner_name || !createForm.station_id) {
-      toast({ title: "جميع الحقول مطلوبة", variant: "destructive" });
-      return;
-    }
-    setLoading(true);
-    const { data, error } = await supabase.functions.invoke("create-station-owner", {
-      body: {
-        email: createForm.email,
-        password: createForm.password,
-        owner_name: createForm.owner_name,
-        owner_phone: createForm.owner_phone,
-        station_id: createForm.station_id,
-      },
-    });
-    setLoading(false);
-    if (error || data?.error) {
-      toast({ title: "فشل إنشاء الحساب", description: data?.error || error?.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "تم إنشاء الحساب بنجاح ✅" });
-    setCreateOpen(false);
-    setCreateForm(emptyForm);
+  useEffect(() => {
     load();
+  }, [load]);
+
+  const addService = () => setServices((current) => [...current, emptyService()]);
+
+  const removeService = (index: number) => {
+    setServices((current) => (current.length === 1 ? current : current.filter((_, i) => i !== index)));
   };
 
-  // ── Edit ─────────────────────────────────────────────────
-  const openEdit = (o: Owner) => {
-    setEditTarget(o);
-    setEditForm({ owner_name: o.owner_name, owner_phone: o.owner_phone || "", station_id: o.station_id, outstanding_debt: String(o.outstanding_debt ?? 0) });
+  const updateService = (index: number, field: keyof ServiceDraft, value: string) => {
+    setServices((current) => current.map((service, i) => (i === index ? { ...service, [field]: value } : service)));
+  };
+
+  const handleCreate = async () => {
+    if (!ownerName.trim() || !ownerWhatsapp.trim() || !password || !stationName.trim()) {
+      toast({ title: "اكمل بيانات المالك والمحطة", variant: "destructive" });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({ title: "كلمة المرور قصيرة", description: "يجب أن تكون 6 أحرف على الأقل", variant: "destructive" });
+      return;
+    }
+
+    const validServices = services.filter((service) => service.name.trim() && Number(service.price) > 0);
+    if (validServices.length === 0) {
+      toast({ title: "أضف خدمة واحدة على الأقل", variant: "destructive" });
+      return;
+    }
+
+    setLoading(true);
+
+    const { data, error } = await supabase.functions.invoke("owner-self-register", {
+      body: {
+        owner_name: ownerName.trim(),
+        owner_phone: normalizeOwnerPhone(ownerWhatsapp),
+        email: ownerEmail.trim() || null,
+        password,
+        station: {
+          name: stationName.trim(),
+          address: stationAddress.trim(),
+          detailed_address: detailedAddress.trim(),
+          working_hours_start: workingHoursStart,
+          working_hours_end: workingHoursEnd,
+          scheduling_type: schedulingType,
+          slot_duration_minutes: Number(slotDuration) || 30,
+          latitude: location.lat,
+          longitude: location.lng,
+        },
+        services: validServices.map((service, index) => ({
+          name: service.name.trim(),
+          price: Number(service.price),
+          duration_minutes: Number(service.duration_minutes) || 30,
+          customer_discount: service.customer_discount.trim() || null,
+          sort_order: index,
+        })),
+      },
+    });
+
+    setLoading(false);
+
+    if (error || data?.error) {
+      toast({
+        title: "فشل إنشاء حساب المالك",
+        description: data?.error || error?.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({ title: "تم إنشاء المالك والمحطة والخدمات بنجاح" });
+    setCreateOpen(false);
+    resetCreateForm();
+    await load();
+  };
+
+  const openEdit = (owner: Owner) => {
+    setEditTarget(owner);
+    setEditForm({
+      owner_name: owner.owner_name,
+      owner_phone: owner.owner_phone || "",
+      station_id: owner.station_id,
+      outstanding_debt: String(owner.outstanding_debt ?? 0),
+    });
     setEditOpen(true);
   };
 
@@ -95,55 +198,62 @@ const OwnersTab = () => {
       toast({ title: "اسم المالك والمحطة مطلوبان", variant: "destructive" });
       return;
     }
+
     setLoading(true);
     const { error } = await supabase
       .from("station_owners")
-      .update({ owner_name: editForm.owner_name, owner_phone: editForm.owner_phone || null, station_id: editForm.station_id, outstanding_debt: parseFloat(editForm.outstanding_debt) || 0 })
+      .update({
+        owner_name: editForm.owner_name,
+        owner_phone: editForm.owner_phone || null,
+        station_id: editForm.station_id,
+        outstanding_debt: parseFloat(editForm.outstanding_debt) || 0,
+      })
       .eq("id", editTarget.id);
     setLoading(false);
+
     if (error) {
       toast({ title: "فشل التعديل", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: "تم التعديل بنجاح ✅" });
+
+    toast({ title: "تم تعديل بيانات المالك" });
     setEditOpen(false);
     setEditTarget(null);
-    load();
+    await load();
   };
 
-  // ── Delete ───────────────────────────────────────────────
   const handleDelete = async () => {
     if (!deleteTarget) return;
+
     setLoading(true);
     const { data, error } = await supabase.functions.invoke("delete-station-owner", {
       body: { owner_id: deleteTarget.id },
     });
     setLoading(false);
+
     if (error || data?.error) {
       toast({ title: "فشل الحذف", description: data?.error || error?.message, variant: "destructive" });
       setDeleteTarget(null);
       return;
     }
-    toast({ title: "تم حذف الحساب بالكامل 🗑️" });
+
+    toast({ title: "تم حذف حساب المالك" });
     setDeleteTarget(null);
-    load();
+    await load();
   };
 
-  // ── Toggle active ────────────────────────────────────────
-  const handleToggleActive = async (o: Owner) => {
-    const newActive = !o.is_active;
-    const { error } = await supabase
-      .from("station_owners")
-      .update({ is_active: newActive })
-      .eq("id", o.id);
+  const handleToggleActive = async (owner: Owner) => {
+    const nextActive = !owner.is_active;
+    const { error } = await supabase.from("station_owners").update({ is_active: nextActive }).eq("id", owner.id);
+
     if (error) {
-      toast({ title: "فشل تغيير الحالة", description: error.message, variant: "destructive" });
+      toast({ title: "فشل تغيير حالة المالك", description: error.message, variant: "destructive" });
       return;
     }
-    // When suspending an active owner, push WhatsApp suspension notice
-    if (!newActive && o.owner_phone) {
+
+    if (!nextActive && owner.owner_phone) {
       const noticeRes = await supabase.functions.invoke("send-suspension-notice", {
-        body: { owner_id: o.id },
+        body: { owner_id: owner.id },
       });
       if (noticeRes.error || (noticeRes.data as any)?.error) {
         toast({
@@ -153,60 +263,238 @@ const OwnersTab = () => {
         });
       }
     }
-    toast({ title: newActive ? "تم تفعيل الحساب ✅" : "تم إيقاف الحساب مؤقتاً ⚠️" });
-    load();
+
+    toast({ title: nextActive ? "تم تفعيل المالك" : "تم إيقاف المالك" });
+    await load();
   };
 
   return (
     <div className="space-y-6 p-1" dir="rtl">
-      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-xl font-bold text-foreground">أصحاب المحطات</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">إدارة حسابات أصحاب المحطات وصلاحياتهم</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            إنشاء حساب المالك والمحطة والخدمات من صفحة واحدة. ستظهر المحطة تلقائياً أيضاً في قسم محطات.
+          </p>
         </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+
+        <Dialog open={createOpen} onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) resetCreateForm();
+        }}>
           <DialogTrigger asChild>
-            <Button><UserPlus className="h-4 w-4 ml-2" />إنشاء حساب جديد</Button>
+            <Button><UserPlus className="h-4 w-4 ml-2" />إضافة مالك من صفحة واحدة</Button>
           </DialogTrigger>
-          <DialogContent dir="rtl" className="max-w-md">
+          <DialogContent dir="rtl" className="max-w-5xl max-h-[92vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-lg">إنشاء حساب صاحب محطة</DialogTitle>
+              <DialogTitle>إنشاء مالك ومحطة وخدمات</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-1.5"><Label>اسم المالك *</Label><Input value={createForm.owner_name} onChange={(e) => setCreateForm({ ...createForm, owner_name: e.target.value })} placeholder="أحمد محمد" /></div>
-              <div className="space-y-1.5"><Label>البريد الإلكتروني *</Label><Input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} placeholder="owner@example.com" /></div>
-              <div className="space-y-1.5"><Label>كلمة المرور *</Label><Input type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} placeholder="8 أحرف على الأقل" /></div>
-              <div className="space-y-1.5"><Label>رقم الواتساب</Label><Input value={createForm.owner_phone} onChange={(e) => setCreateForm({ ...createForm, owner_phone: e.target.value })} placeholder="964XXXXXXXXX" /></div>
-              <div className="space-y-1.5">
-                <Label>المحطة *</Label>
-                <Select value={createForm.station_id} onValueChange={(v) => setCreateForm({ ...createForm, station_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="اختر المحطة" /></SelectTrigger>
-                  <SelectContent>{stations.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                </Select>
+
+            <div className="grid lg:grid-cols-[1.05fr,0.95fr] gap-6">
+              <div className="space-y-6">
+                <Card>
+                  <CardContent className="pt-6 grid md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2 flex items-center gap-2 font-semibold">
+                      <UserPlus className="h-4 w-4 text-primary" />
+                      بيانات الحساب
+                    </div>
+                    <div className="space-y-2">
+                      <Label>اسم المالك</Label>
+                      <Input value={ownerName} onChange={(event) => setOwnerName(event.target.value)} placeholder="أحمد محمد" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>رقم الواتساب</Label>
+                      <Input dir="ltr" value={ownerWhatsapp} onChange={(event) => setOwnerWhatsapp(event.target.value)} placeholder="0770xxxxxxx" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>البريد الإلكتروني</Label>
+                      <Input dir="ltr" type="email" value={ownerEmail} onChange={(event) => setOwnerEmail(event.target.value)} placeholder="owner@example.com" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>كلمة المرور</Label>
+                      <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="6 أحرف على الأقل" />
+                    </div>
+                    <div className="md:col-span-2 rounded-2xl border border-dashed p-3 text-sm text-muted-foreground">
+                      بريد الدخول الناتج:
+                      <div className="mt-2 font-mono text-foreground break-all">{generatedEmail}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6 space-y-4">
+                    <div className="flex items-center gap-2 font-semibold">
+                      <Store className="h-4 w-4 text-primary" />
+                      بيانات المحطة
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>اسم المحطة</Label>
+                        <Input value={stationName} onChange={(event) => setStationName(event.target.value)} placeholder="محطة المنصور" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>العنوان المختصر</Label>
+                        <Input value={stationAddress} onChange={(event) => setStationAddress(event.target.value)} placeholder="المنصور، بغداد" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>العنوان التفصيلي</Label>
+                      <Textarea value={detailedAddress} onChange={(event) => setDetailedAddress(event.target.value)} rows={3} placeholder="الشارع، أقرب معلم، تفاصيل الوصول..." />
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>وقت الفتح</Label>
+                        <Input type="time" value={workingHoursStart} onChange={(event) => setWorkingHoursStart(event.target.value)} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>وقت الغلق</Label>
+                        <Input type="time" value={workingHoursEnd} onChange={(event) => setWorkingHoursEnd(event.target.value)} />
+                      </div>
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>نوع المواعيد</Label>
+                        <Select value={schedulingType} onValueChange={(value: SchedulingType) => setSchedulingType(value)}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="slots">فترات زمنية ثابتة</SelectItem>
+                            <SelectItem value="instant">حجز فوري</SelectItem>
+                            <SelectItem value="daily">اختيار اليوم فقط</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {schedulingType === "slots" && (
+                        <div className="space-y-2">
+                          <Label>مدة الفتحة بالدقائق</Label>
+                          <Input type="number" value={slotDuration} onChange={(event) => setSlotDuration(event.target.value)} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <Label className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-primary" />
+                        موقع المحطة
+                      </Label>
+                      <div className="h-72 rounded-2xl overflow-hidden border">
+                        {isLoaded ? (
+                          <GoogleMap
+                            mapContainerStyle={{ width: "100%", height: "100%" }}
+                            center={location}
+                            zoom={12}
+                            onClick={(event) => {
+                              if (!event.latLng) return;
+                              setLocation({ lat: event.latLng.lat(), lng: event.latLng.lng() });
+                            }}
+                            options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+                          >
+                            <Marker
+                              position={location}
+                              draggable
+                              onDragEnd={(event) => {
+                                if (!event.latLng) return;
+                                setLocation({ lat: event.latLng.lat(), lng: event.latLng.lng() });
+                              }}
+                            />
+                          </GoogleMap>
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                            جاري تحميل الخريطة...
+                          </div>
+                        )}
+                      </div>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>خط العرض</Label>
+                          <Input type="number" step="any" value={location.lat} onChange={(event) => setLocation((current) => ({ ...current, lat: Number(event.target.value) || current.lat }))} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>خط الطول</Label>
+                          <Input type="number" step="any" value={location.lng} onChange={(event) => setLocation((current) => ({ ...current, lng: Number(event.target.value) || current.lng }))} />
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="space-y-6">
+                <Card>
+                  <CardContent className="pt-6 space-y-4">
+                    <div className="flex items-center gap-2 font-semibold">
+                      <Wrench className="h-4 w-4 text-primary" />
+                      خدمات المحطة
+                    </div>
+                    {services.map((service, index) => (
+                      <div key={index} className="rounded-2xl border p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium">الخدمة #{index + 1}</div>
+                          {services.length > 1 && (
+                            <Button type="button" variant="ghost" size="icon" onClick={() => removeService(index)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label>اسم الخدمة</Label>
+                          <Input value={service.name} onChange={(event) => updateService(index, "name", event.target.value)} placeholder="غسل سطحي" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label>السعر</Label>
+                            <Input type="number" value={service.price} onChange={(event) => updateService(index, "price", event.target.value)} placeholder="10000" />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>المدة</Label>
+                            <Input type="number" value={service.duration_minutes} onChange={(event) => updateService(index, "duration_minutes", event.target.value)} placeholder="30" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <Wallet className="h-4 w-4 text-primary" />
+                            الخصم الظاهر للعميل
+                          </Label>
+                          <Input value={service.customer_discount} onChange={(event) => updateService(index, "customer_discount", event.target.value)} placeholder="مثال: خصم 20% أو 5000 د.ع" />
+                        </div>
+                      </div>
+                    ))}
+
+                    <Button type="button" variant="outline" className="w-full" onClick={addService}>
+                      <Plus className="h-4 w-4 ml-1" />
+                      إضافة خدمة أخرى
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6 space-y-3">
+                    <div className="rounded-2xl bg-muted/40 p-4 text-sm text-muted-foreground">
+                      عند الحفظ سيتم إنشاء حساب المالك وربطه بالمحطة ثم إدخال الخدمات.
+                      ستظهر المحطة الجديدة أيضاً داخل صفحة محطات تلقائياً.
+                    </div>
+                    <Button onClick={handleCreate} className="w-full h-12" disabled={loading}>
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                          جاري الإنشاء...
+                        </>
+                      ) : (
+                        <>
+                          <CalendarClock className="h-4 w-4 ml-2" />
+                          إنشاء المالك والمحطة والخدمات
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
             </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>إلغاء</Button>
-              <Button onClick={handleCreate} disabled={loading}>{loading ? "جاري الإنشاء..." : "إنشاء الحساب"}</Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Table Card */}
       <Card>
         <CardContent className="p-0">
           <Table>
-            <colgroup>
-              <col style={{ width: "17%" }} />
-              <col style={{ width: "18%" }} />
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "12%" }} />
-            </colgroup>
             <TableHeader>
               <TableRow className="bg-muted/40">
                 <TableHead className="font-semibold text-foreground py-3 px-4">المالك</TableHead>
@@ -219,30 +507,32 @@ const OwnersTab = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {owners.map((o) => (
-                <TableRow key={o.id} className={`hover:bg-muted/30 transition-colors ${!o.is_active ? "opacity-50" : ""}`}>
-                  <TableCell className="font-semibold px-4 py-3">{o.owner_name}</TableCell>
-                  <TableCell className="py-3 text-muted-foreground">{o.stations?.name || "-"}</TableCell>
-                  <TableCell className="py-3 font-mono text-sm" dir="ltr">{o.owner_phone || "-"}</TableCell>
+              {owners.map((owner) => (
+                <TableRow key={owner.id} className={!owner.is_active ? "opacity-50" : ""}>
+                  <TableCell className="font-semibold px-4 py-3">{owner.owner_name}</TableCell>
+                  <TableCell className="py-3 text-muted-foreground">{owner.stations?.name || "-"}</TableCell>
+                  <TableCell className="py-3 font-mono text-sm" dir="ltr">{owner.owner_phone || "-"}</TableCell>
                   <TableCell className="py-3">
                     <Badge
-                      variant={o.is_active ? "default" : "secondary"}
-                      className={o.is_active ? "bg-green-100 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500"}
+                      variant={owner.is_active ? "default" : "secondary"}
+                      className={owner.is_active ? "bg-green-100 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500"}
                     >
-                      {o.is_active ? "● نشط" : "○ موقوف"}
+                      {owner.is_active ? "نشط" : "موقوف"}
                     </Badge>
                   </TableCell>
                   <TableCell className="py-3 text-sm font-mono">
-                    {o.outstanding_debt > 0
-                      ? <span className="text-red-600 font-semibold">{o.outstanding_debt.toLocaleString("ar-IQ")}</span>
-                      : <span className="text-green-600">0</span>}
+                    {owner.outstanding_debt > 0 ? (
+                      <span className="text-red-600 font-semibold">{owner.outstanding_debt.toLocaleString("ar-IQ")}</span>
+                    ) : (
+                      <span className="text-green-600">0</span>
+                    )}
                   </TableCell>
-                  <TableCell className="py-3 text-muted-foreground text-sm">{new Date(o.created_at).toLocaleDateString("ar-IQ")}</TableCell>
+                  <TableCell className="py-3 text-muted-foreground text-sm">{new Date(owner.created_at).toLocaleDateString("ar-IQ")}</TableCell>
                   <TableCell className="py-3">
                     <div className="flex items-center justify-center gap-1">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-50" onClick={() => openEdit(o)}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-blue-50" onClick={() => openEdit(owner)}>
                             <Pencil className="h-3.5 w-3.5 text-blue-500" />
                           </Button>
                         </TooltipTrigger>
@@ -250,17 +540,19 @@ const OwnersTab = () => {
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className={`h-8 w-8 ${o.is_active ? "hover:bg-yellow-50" : "hover:bg-green-50"}`} onClick={() => handleToggleActive(o)}>
-                            {o.is_active
-                              ? <EyeOff className="h-3.5 w-3.5 text-yellow-500" />
-                              : <Eye className="h-3.5 w-3.5 text-green-500" />}
+                          <Button variant="ghost" size="icon" className={`h-8 w-8 ${owner.is_active ? "hover:bg-yellow-50" : "hover:bg-green-50"}`} onClick={() => handleToggleActive(owner)}>
+                            {owner.is_active ? (
+                              <EyeOff className="h-3.5 w-3.5 text-yellow-500" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5 text-green-500" />
+                            )}
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>{o.is_active ? "إيقاف مؤقت" : "تفعيل"}</TooltipContent>
+                        <TooltipContent>{owner.is_active ? "إيقاف مؤقت" : "تفعيل"}</TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-red-50" onClick={() => setDeleteTarget(o)}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-red-50" onClick={() => setDeleteTarget(owner)}>
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </Button>
                         </TooltipTrigger>
@@ -270,13 +562,11 @@ const OwnersTab = () => {
                   </TableCell>
                 </TableRow>
               ))}
+
               {owners.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-16">
-                    <div className="flex flex-col items-center gap-2">
-                      <UserPlus className="h-8 w-8 text-muted-foreground/40" />
-                      <span>لا توجد حسابات بعد</span>
-                    </div>
+                    لا توجد حسابات مالكين بعد
                   </TableCell>
                 </TableRow>
               )}
@@ -285,29 +575,33 @@ const OwnersTab = () => {
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent dir="rtl">
-          <DialogHeader><DialogTitle>تعديل بيانات المالك</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>تعديل بيانات المالك</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
-            <div><Label>اسم المالك</Label><Input value={editForm.owner_name} onChange={(e) => setEditForm({ ...editForm, owner_name: e.target.value })} /></div>
-            <div><Label>رقم الهاتف (واتساب)</Label><Input value={editForm.owner_phone} onChange={(e) => setEditForm({ ...editForm, owner_phone: e.target.value })} placeholder="964XXXXXXXXX" /></div>
             <div>
-              <Label>الذمة المالية المستحقة (دينار عراقي)</Label>
-              <Input
-                type="number"
-                min="0"
-                value={editForm.outstanding_debt}
-                onChange={(e) => setEditForm({ ...editForm, outstanding_debt: e.target.value })}
-                placeholder="0"
-              />
-              <p className="text-xs text-muted-foreground mt-1">المبلغ الذي سيظهر للمالك عند إيقاف حسابه</p>
+              <Label>اسم المالك</Label>
+              <Input value={editForm.owner_name} onChange={(event) => setEditForm({ ...editForm, owner_name: event.target.value })} />
+            </div>
+            <div>
+              <Label>رقم الهاتف (واتساب)</Label>
+              <Input value={editForm.owner_phone} onChange={(event) => setEditForm({ ...editForm, owner_phone: event.target.value })} />
+            </div>
+            <div>
+              <Label>الذمة المالية (د.ع)</Label>
+              <Input type="number" min="0" value={editForm.outstanding_debt} onChange={(event) => setEditForm({ ...editForm, outstanding_debt: event.target.value })} />
             </div>
             <div>
               <Label>المحطة</Label>
-              <Select value={editForm.station_id} onValueChange={(v) => setEditForm({ ...editForm, station_id: v })}>
+              <Select value={editForm.station_id} onValueChange={(value) => setEditForm({ ...editForm, station_id: value })}>
                 <SelectTrigger><SelectValue placeholder="اختر المحطة" /></SelectTrigger>
-                <SelectContent>{stations.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  {stations.map((station) => (
+                    <SelectItem key={station.id} value={station.id}>{station.name}</SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
           </div>
@@ -318,14 +612,14 @@ const OwnersTab = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirm */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
             <AlertDialogDescription>
               هل أنت متأكد من حذف حساب <strong>{deleteTarget?.owner_name}</strong>؟
-              <br />سيتم حذف الحساب والمستخدم بشكل نهائي ولا يمكن التراجع.
+              <br />
+              سيتم حذف الحساب نهائياً مع ربطه الحالي.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
