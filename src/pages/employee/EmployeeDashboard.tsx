@@ -8,7 +8,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
+<<<<<<< HEAD
 import { UserPlus, Store, Users, Building, PlusCircle, Tag } from "lucide-react";
+=======
+import { UserPlus, Store, Users, Building, PlusCircle, Tag, MapPin, LocateFixed } from "lucide-react";
+import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+
+const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
+const ERBIL_CENTER = { lat: 36.191, lng: 44.009 };
+>>>>>>> 8518bccf0be21e2eca783edcfec9608edf9af65b
 
 const EmployeeDashboard = () => {
   const [employee, setEmployee] = useState<any>(null);
@@ -24,6 +32,40 @@ const EmployeeDashboard = () => {
   const [editPriceForm, setEditPriceForm] = useState({ service_id: "", price: "" });
   const [services, setServices] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+<<<<<<< HEAD
+=======
+  const [locating, setLocating] = useState(false);
+
+  const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_KEY });
+
+  const mapLat = parseFloat(stationForm.latitude) || ERBIL_CENTER.lat;
+  const mapLng = parseFloat(stationForm.longitude) || ERBIL_CENTER.lng;
+  const mapCenter = { lat: mapLat, lng: mapLng };
+
+  const handleLocateMe = () => {
+    if (!navigator.geolocation) {
+      toast({ title: "المتصفح لا يدعم تحديد الموقع", variant: "destructive" });
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setStationForm((f) => ({
+          ...f,
+          latitude: pos.coords.latitude.toFixed(6),
+          longitude: pos.coords.longitude.toFixed(6),
+        }));
+        setLocating(false);
+        toast({ title: "✅ تم تحديد موقعك الحالي" });
+      },
+      () => {
+        setLocating(false);
+        toast({ title: "تعذّر تحديد الموقع", variant: "destructive" });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+>>>>>>> 8518bccf0be21e2eca783edcfec9608edf9af65b
 
   useEffect(() => {
     const load = async () => {
@@ -338,8 +380,13 @@ const EmployeeDashboard = () => {
       </Dialog>
 
       {/* Create Station Dialog */}
+<<<<<<< HEAD
       <Dialog open={showCreateStation} onOpenChange={setShowCreateStation}>
         <DialogContent dir="rtl" className="max-w-md">
+=======
+      <Dialog open={showCreateStation} onOpenChange={(o) => { setShowCreateStation(o); if (!o) setStationForm({ name: "", address: "", latitude: "", longitude: "" }); }}>
+        <DialogContent dir="rtl" className="max-w-lg">
+>>>>>>> 8518bccf0be21e2eca783edcfec9608edf9af65b
           <DialogHeader>
             <DialogTitle>إضافة محطة جديدة</DialogTitle>
           </DialogHeader>
@@ -352,6 +399,61 @@ const EmployeeDashboard = () => {
               <Label>العنوان</Label>
               <Input value={stationForm.address} onChange={(e) => setStationForm({ ...stationForm, address: e.target.value })} placeholder="العنوان" />
             </div>
+<<<<<<< HEAD
+=======
+
+            {/* Google Map — same library as admin */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4" /> الموقع على الخريطة
+                </Label>
+                <Button type="button" variant="outline" size="sm" onClick={handleLocateMe} disabled={locating} className="gap-1.5 text-xs h-7">
+                  <LocateFixed className="h-3.5 w-3.5" />
+                  {locating ? "جاري التحديد..." : "موقعي الحالي"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">انقر على الخريطة أو اسحب الدبوس لتحديد موقع المحطة</p>
+              <div className="h-56 rounded-lg overflow-hidden border border-border">
+                {isLoaded ? (
+                  <GoogleMap
+                    mapContainerStyle={{ height: "100%", width: "100%" }}
+                    center={mapCenter}
+                    zoom={stationForm.latitude ? 15 : 12}
+                    onClick={(e) => {
+                      if (e.latLng) {
+                        setStationForm((f) => ({
+                          ...f,
+                          latitude: e.latLng!.lat().toFixed(6),
+                          longitude: e.latLng!.lng().toFixed(6),
+                        }));
+                      }
+                    }}
+                    options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+                  >
+                    <Marker
+                      position={mapCenter}
+                      draggable
+                      onDragEnd={(e) => {
+                        if (e.latLng) {
+                          setStationForm((f) => ({
+                            ...f,
+                            latitude: e.latLng!.lat().toFixed(6),
+                            longitude: e.latLng!.lng().toFixed(6),
+                          }));
+                        }
+                      }}
+                    />
+                  </GoogleMap>
+                ) : (
+                  <div className="h-full flex items-center justify-center bg-muted text-sm text-muted-foreground">
+                    جاري تحميل الخريطة...
+                  </div>
+                )}
+              </div>
+            </div>
+
+>>>>>>> 8518bccf0be21e2eca783edcfec9608edf9af65b
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>خط العرض</Label>
