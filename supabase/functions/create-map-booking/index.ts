@@ -47,6 +47,93 @@ async function sendWhatsAppMessage(
   });
 }
 
+async function sendWhatsAppInteractive(
+  phone: string,
+  body: string,
+  buttons: { id: string; title: string }[],
+  settings: Record<string, string>
+) {
+  const token = settings.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!token || !phoneId || !phone) return null;
+
+  const response = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: phone,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: body },
+        action: {
+          buttons: buttons.map((button) => ({
+            type: "reply",
+            reply: {
+              id: button.id,
+              title: button.title,
+            },
+          })),
+        },
+      },
+    }),
+  });
+
+  const data = await response.json();
+  return data?.messages?.[0]?.id || null;
+}
+
+async function getOrCreateSession(supabase: ReturnType<typeof createClient>, phone: string) {
+  const { data: existing } = await supabase
+    .from("bot_sessions")
+    .select("*")
+    .eq("customer_phone", phone)
+    .maybeSingle();
+
+  if (existing && new Date(existing.expires_at) > new Date()) return existing;
+
+  const sessionData = {
+    customer_phone: phone,
+    current_step: "idle",
+    selected_station_id: null,
+    selected_service_id: null,
+    selected_date: null,
+    selected_time: null,
+    vehicle_details: null,
+    pending_booking_id: null,
+    expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    await supabase.from("bot_sessions").update(sessionData).eq("id", existing.id);
+    return { ...existing, ...sessionData };
+  }
+
+  const { data: created } = await supabase.from("bot_sessions").insert(sessionData).select().single();
+  return created;
+}
+
+async function updateSession(
+  supabase: ReturnType<typeof createClient>,
+  phone: string,
+  updates: Record<string, unknown>
+) {
+  await supabase
+    .from("bot_sessions")
+    .update({
+      ...updates,
+      expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("customer_phone", phone);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -226,10 +313,37 @@ Deno.serve(async (req) => {
       });
     }
 
+    const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", {
+      calendar: "gregory",
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const pendingMsg = `📩 تم استلام طلب حجزك من الخريطة.\n\n🏪 المحطة: ${stationName}\n🧽 الخدمة: ${service.name}\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${formatTime(bookingTime)}\n🔢 رقم الحجز: #${booking.booking_number}\n\n⏳ الطلب الآن بانتظار موافقة صاحب المحطة، وسيصلك إشعار القبول أو الرفض على هذا الرقم.`;
+
+    await sendWhatsAppMessage(customerPhone, pendingMsg, settings);
+
     if (owner?.owner_phone) {
-      await sendWhatsAppMessage(
-        normalizePhone(owner.owner_phone),
-        `📢 حجز جديد من الخريطة\n\n🏪 المحطة: ${stationName}\n🔢 رقم الحجز: #${booking.booking_number}\n👤 العميل: ${customerName}\n📱 الهاتف: ${customerPhone}\n🧽 الخدمة: ${service.name}\n📅 التاريخ: ${bookingDate}\n⏰ الوقت: ${formatTime(bookingTime)}`,
+      const ownerPhone = normalizePhone(owner.owner_phone);
+      const ownerMsg = `📢 طلب حجز جديد من الخريطة!\n\n🏪 المحطة: ${stationName}\n🔢 رقم الحجز: #${booking.booking_number}\n👤 العميل: ${customerName}\n📱 الهاتف: ${customerPhone}\n🧽 الخدمة: ${service.name}\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${formatTime(bookingTime)}\n\nاختر أحد الخيارات:`;
+
+      await getOrCreateSession(supabase, ownerPhone);
+      await updateSession(supabase, ownerPhone, {
+        current_step: "owner_approve_reject",
+        pending_booking_id: booking.id,
+        selected_station_id: stationId,
+      });
+
+      await sendWhatsAppInteractive(
+        ownerPhone,
+        ownerMsg,
+        [
+          { id: "approve_yes", title: "✅ تأكيد" },
+          { id: "approve_no", title: "❌ رفض" },
+          { id: `change_time_${booking.id}`, title: "📅 تغيير الموعد" },
+        ],
         settings
       );
     }
@@ -239,6 +353,7 @@ Deno.serve(async (req) => {
         success: true,
         bookingId: booking.id,
         bookingNumber: booking.booking_number,
+        status: "pending_owner_approval",
       }),
       {
         status: 200,

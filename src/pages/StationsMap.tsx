@@ -494,11 +494,11 @@ function StationCard({
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
                   <div className="flex items-center gap-2 font-medium">
                     <CheckCircle2 className="h-4 w-4" />
-                    تم إنشاء الحجز بنجاح
+                    تم إرسال طلب الحجز بنجاح
                   </div>
                   <p className="mt-2">رقم الحجز: #{bookingResult.bookingNumber}</p>
                   <p className="mt-1 text-emerald-700">
-                    سيظهر الحجز في النظام مباشرة، وسيتم إشعار صاحب المحطة.
+                    تم إرسال الطلب إلى صاحب المحطة عبر واتساب. سيصل للعميل إشعار القبول أو الرفض على نفس الرقم المدخل.
                   </p>
                 </div>
               )}
