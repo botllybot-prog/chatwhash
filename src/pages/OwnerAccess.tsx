@@ -11,12 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { buildOwnerEmail, normalizeOwnerPhone } from "@/lib/ownerAuth";
+import { normalizeOwnerPhone } from "@/lib/ownerAuth";
 import {
   ArrowRight,
   Loader2,
   LocateFixed,
-  LogIn,
   MapPin,
   Plus,
   Store,
@@ -50,7 +49,6 @@ const OwnerAccess = () => {
   const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_KEY });
 
   const [signupLoading, setSignupLoading] = useState(false);
-  const [loginLoading, setLoginLoading] = useState(false);
 
   const [ownerName, setOwnerName] = useState("");
   const [ownerWhatsapp, setOwnerWhatsapp] = useState("");
@@ -67,9 +65,6 @@ const OwnerAccess = () => {
   const [slotDuration, setSlotDuration] = useState("30");
   const [location, setLocation] = useState(DEFAULT_CENTER);
   const [services, setServices] = useState<ServiceDraft[]>([emptyService()]);
-
-  const [loginIdentifier, setLoginIdentifier] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
 
   const getUserRole = async (userId: string) => {
     const { data } = await supabase
@@ -208,52 +203,6 @@ const OwnerAccess = () => {
     navigate("/app/station-portal", { replace: true });
   };
 
-  const handleLogin = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    if (!loginIdentifier.trim() || !loginPassword) {
-      toast({ title: "أدخل بيانات الدخول", variant: "destructive" });
-      return;
-    }
-
-    setLoginLoading(true);
-
-    const email = buildOwnerEmail(
-      loginIdentifier.trim(),
-      loginIdentifier.includes("@") ? loginIdentifier.trim() : undefined,
-    );
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: loginPassword,
-    });
-
-    if (error || !data.user) {
-      setLoginLoading(false);
-      toast({
-        title: "فشل تسجيل الدخول",
-        description: "تحقق من رقم الواتساب أو البريد الإلكتروني وكلمة المرور.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const role = await getUserRole(data.user.id);
-    setLoginLoading(false);
-
-    if (role !== "station_owner") {
-      await supabase.auth.signOut();
-      toast({
-        title: "هذه الصفحة مخصصة لأصحاب المحطات فقط",
-        description: "استخدم صفحة تسجيل الدخول العادية للدخول بحساب الإدارة.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    navigate("/app/station-portal", { replace: true });
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-ocean-50 via-background to-background p-4 md:p-6" dir="rtl">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -274,7 +223,13 @@ const OwnerAccess = () => {
         <Tabs defaultValue="signup" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2 max-w-md">
             <TabsTrigger value="signup">إنشاء حساب محطة</TabsTrigger>
-            <TabsTrigger value="login">دخول المالك</TabsTrigger>
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all"
+            >
+              دخول المالك
+            </button>
           </TabsList>
 
           <TabsContent value="signup">
@@ -502,42 +457,6 @@ const OwnerAccess = () => {
             </form>
           </TabsContent>
 
-          <TabsContent value="login">
-            <Card className="max-w-md">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <LogIn className="h-5 w-5 text-primary" />
-                  دخول المالك
-                </CardTitle>
-                <CardDescription>ادخل برقم الواتساب أو البريد الإلكتروني مع كلمة المرور.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleLogin} autoComplete="off" className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>الواتساب أو البريد الإلكتروني</Label>
-                    <Input value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} placeholder="0770xxxxxxx أو owner@example.com" autoComplete="username" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>كلمة المرور</Label>
-                    <Input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} autoComplete="current-password" />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loginLoading}>
-                    {loginLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                        جاري الدخول...
-                      </>
-                    ) : (
-                      <>
-                        <LogIn className="h-4 w-4 ml-2" />
-                        دخول
-                      </>
-                    )}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
       </div>
     </div>
