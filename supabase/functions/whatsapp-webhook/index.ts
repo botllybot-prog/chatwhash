@@ -1076,13 +1076,47 @@ async function handleCustomerLogic(
   const cancelConfirmMatch = input.match(/^cancelconfirm_(\d+)$/);
   if (cancelConfirmMatch) {
     const bookingNum = parseInt(cancelConfirmMatch[1]);
+    const { data: bookingBeforeCancel } = await supabase.from("bookings")
+      .select("id, booking_number, booking_date, booking_time, customer_name, station_id, stations(name), services(name)")
+      .eq("booking_number", bookingNum)
+      .eq("customer_phone", phone)
+      .maybeSingle();
+
     await supabase.from("bookings").update({ status: "cancelled" }).eq("booking_number", bookingNum).eq("customer_phone", phone);
+
     const cancelMsg = replaceTemplateVars(settings.BOT_CANCELLATION_MESSAGE || "تم إلغاء الحجز #{booking_number} بنجاح. ✅", { booking_number: String(bookingNum) });
     const waId = await sendWhatsAppInteractive(phone, cancelMsg, [
       { id: "btn_bookings", title: "📋 حجوزاتي" },
       { id: "btn_menu", title: "🏠 القائمة" },
     ], settings);
     saveBotMessage(supabase, convId, cancelMsg, waId);
+
+    if (bookingBeforeCancel?.station_id) {
+      const { data: owner } = await supabase.from("station_owners")
+        .select("owner_phone, owner_name")
+        .eq("station_id", bookingBeforeCancel.station_id)
+        .maybeSingle();
+
+      if (owner?.owner_phone) {
+        const ownerPhone = normalizePhone(owner.owner_phone);
+        const ownerConvId = await getOrCreateConvForPhone(supabase, ownerPhone, owner.owner_name);
+        const timeLabel = bookingBeforeCancel.booking_time ? to12Hour(bookingBeforeCancel.booking_time.substring(0, 5)) : "-";
+        const dateLabel = new Date(bookingBeforeCancel.booking_date).toLocaleDateString("ar-IQ", {
+          calendar: "gregory",
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        const ownerCancelMsg = `⚠️ الزبون قام بإلغاء الحجز.\n\n📋 رقم الحجز: #${bookingBeforeCancel.booking_number}\n👤 العميل: ${bookingBeforeCancel.customer_name || phone}\n🏪 المحطة: ${(bookingBeforeCancel.stations as any)?.name || ""}\n🔧 الخدمة: ${bookingBeforeCancel.services?.name || ""}\n📅 التاريخ: ${dateLabel}\n🕐 الوقت: ${timeLabel}`;
+
+        if (ownerConvId) {
+          await sendAndSave(supabase, ownerConvId, ownerPhone, ownerCancelMsg, settings);
+          updateSession(supabase, ownerPhone, { current_step: "owner_idle", pending_booking_id: null });
+        }
+      }
+    }
+
     updateSession(supabase, phone, { current_step: "idle" });
     return true;
   }
