@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,7 +14,6 @@ import { toast } from "@/hooks/use-toast";
 import { buildOwnerEmail, normalizeOwnerPhone } from "@/lib/ownerAuth";
 import {
   ArrowRight,
-  CalendarClock,
   Loader2,
   LocateFixed,
   LogIn,
@@ -72,23 +71,22 @@ const OwnerAccess = () => {
   const [loginIdentifier, setLoginIdentifier] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
-  const generatedEmail = useMemo(
-    () => buildOwnerEmail(ownerWhatsapp, ownerEmail),
-    [ownerWhatsapp, ownerEmail]
-  );
+  const getUserRole = async (userId: string) => {
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+
+    return data?.role || null;
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) return;
-
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", session.user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (data?.role === "station_owner") {
+      const role = await getUserRole(session.user.id);
+      if (role === "station_owner") {
         navigate("/app/station-portal", { replace: true });
       }
     });
@@ -101,7 +99,7 @@ const OwnerAccess = () => {
 
   const updateService = (index: number, field: keyof ServiceDraft, value: string) => {
     setServices((current) =>
-      current.map((service, i) => (i === index ? { ...service, [field]: value } : service))
+      current.map((service, i) => (i === index ? { ...service, [field]: value } : service)),
     );
   };
 
@@ -121,24 +119,8 @@ const OwnerAccess = () => {
       },
       () => {
         toast({ title: "تعذر تحديد الموقع", variant: "destructive" });
-      }
+      },
     );
-  };
-
-  const navigateByRole = async (userId: string) => {
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .limit(1)
-      .maybeSingle();
-
-    if (data?.role === "station_owner") {
-      navigate("/app/station-portal", { replace: true });
-      return;
-    }
-
-    navigate("/app", { replace: true });
   };
 
   const handleSignup = async (event: React.FormEvent) => {
@@ -159,10 +141,7 @@ const OwnerAccess = () => {
       return;
     }
 
-    const validServices = services.filter(
-      (service) => service.name.trim() && Number(service.price) > 0
-    );
-
+    const validServices = services.filter((service) => service.name.trim() && Number(service.price) > 0);
     if (validServices.length === 0) {
       toast({ title: "أضف خدمة واحدة على الأقل", variant: "destructive" });
       return;
@@ -226,7 +205,7 @@ const OwnerAccess = () => {
     }
 
     toast({ title: "تم إنشاء الحساب والدخول بنجاح" });
-    await navigateByRole(loginResult.data.user.id);
+    navigate("/app/station-portal", { replace: true });
   };
 
   const handleLogin = async (event: React.FormEvent) => {
@@ -239,15 +218,18 @@ const OwnerAccess = () => {
 
     setLoginLoading(true);
 
-    const email = buildOwnerEmail(loginIdentifier.trim(), loginIdentifier.includes("@") ? loginIdentifier.trim() : undefined);
+    const email = buildOwnerEmail(
+      loginIdentifier.trim(),
+      loginIdentifier.includes("@") ? loginIdentifier.trim() : undefined,
+    );
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: loginPassword,
     });
 
-    setLoginLoading(false);
-
     if (error || !data.user) {
+      setLoginLoading(false);
       toast({
         title: "فشل تسجيل الدخول",
         description: "تحقق من رقم الواتساب أو البريد الإلكتروني وكلمة المرور.",
@@ -256,7 +238,20 @@ const OwnerAccess = () => {
       return;
     }
 
-    await navigateByRole(data.user.id);
+    const role = await getUserRole(data.user.id);
+    setLoginLoading(false);
+
+    if (role !== "station_owner") {
+      await supabase.auth.signOut();
+      toast({
+        title: "هذه الصفحة مخصصة لأصحاب المحطات فقط",
+        description: "استخدم صفحة تسجيل الدخول العادية للدخول بحساب الإدارة.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    navigate("/app/station-portal", { replace: true });
   };
 
   return (
@@ -283,7 +278,7 @@ const OwnerAccess = () => {
           </TabsList>
 
           <TabsContent value="signup">
-            <form onSubmit={handleSignup} className="grid lg:grid-cols-[1.1fr,0.9fr] gap-6">
+            <form onSubmit={handleSignup} autoComplete="off" className="grid lg:grid-cols-[1.1fr,0.9fr] gap-6">
               <div className="space-y-6">
                 <Card>
                   <CardHeader>
@@ -296,27 +291,23 @@ const OwnerAccess = () => {
                   <CardContent className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>اسم المالك</Label>
-                      <Input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="أحمد محمد" />
+                      <Input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="أحمد محمد" autoComplete="name" />
                     </div>
                     <div className="space-y-2">
                       <Label>رقم الواتساب</Label>
-                      <Input dir="ltr" value={ownerWhatsapp} onChange={(e) => setOwnerWhatsapp(e.target.value)} placeholder="0770xxxxxxx" />
+                      <Input dir="ltr" value={ownerWhatsapp} onChange={(e) => setOwnerWhatsapp(e.target.value)} placeholder="0770xxxxxxx" autoComplete="tel" />
                     </div>
                     <div className="space-y-2 md:col-span-2">
                       <Label>البريد الإلكتروني (اختياري)</Label>
-                      <Input dir="ltr" type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="owner@example.com" />
+                      <Input dir="ltr" type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="owner@example.com" autoComplete="off" />
                     </div>
                     <div className="space-y-2">
                       <Label>كلمة المرور</Label>
-                      <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="6 أحرف على الأقل" />
+                      <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="6 أحرف على الأقل" autoComplete="new-password" />
                     </div>
                     <div className="space-y-2">
                       <Label>تأكيد كلمة المرور</Label>
-                      <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="أعد كتابة كلمة المرور" />
-                    </div>
-                    <div className="md:col-span-2 rounded-2xl border border-dashed p-3 text-sm text-muted-foreground">
-                      البريد المستخدم للدخول بعد الإنشاء:
-                      <div className="mt-2 font-mono text-foreground break-all">{generatedEmail}</div>
+                      <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="أعد كتابة كلمة المرور" autoComplete="new-password" />
                     </div>
                   </CardContent>
                 </Card>
@@ -521,14 +512,14 @@ const OwnerAccess = () => {
                 <CardDescription>ادخل برقم الواتساب أو البريد الإلكتروني مع كلمة المرور.</CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleLogin} className="space-y-4">
+                <form onSubmit={handleLogin} autoComplete="off" className="space-y-4">
                   <div className="space-y-2">
                     <Label>الواتساب أو البريد الإلكتروني</Label>
-                    <Input value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} placeholder="0770xxxxxxx أو owner@example.com" />
+                    <Input value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} placeholder="0770xxxxxxx أو owner@example.com" autoComplete="username" />
                   </div>
                   <div className="space-y-2">
                     <Label>كلمة المرور</Label>
-                    <Input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
+                    <Input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} autoComplete="current-password" />
                   </div>
                   <Button type="submit" className="w-full" disabled={loginLoading}>
                     {loginLoading ? (
