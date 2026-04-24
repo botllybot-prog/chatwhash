@@ -1,0 +1,19 @@
+project_id = "yhklvtzonvgzkodysawu"
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+[functions.whatsapp-send]
+verify_jwt = false
+
+[functions.booking-reminders]
+verify_jwt = false
+
+[functions.create-station-owner]
+verify_jwt = false
+
+[functions.notify-station-owner]
+verify_jwt = false
+
+[functions.delete-station-owner]
+verify_jwt = false

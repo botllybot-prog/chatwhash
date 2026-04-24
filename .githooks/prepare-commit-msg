@@ -1,0 +1,14 @@
+#!/bin/sh
+# Auto-prepend date (Iraq timezone UTC+3) to every commit message
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+
+# Only add date for normal commits (not merges, amends, etc.)
+if [ -z "$COMMIT_SOURCE" ]; then
+  DATE_IRAQ=$(date -u -d '+3 hours' '+%Y-%m-%d' 2>/dev/null || date -u '+%Y-%m-%d')
+  ORIGINAL=$(cat "$COMMIT_MSG_FILE")
+  # Don't add date if already present
+  if ! echo "$ORIGINAL" | grep -qE '^\[20[0-9]{2}-[0-9]{2}-[0-9]{2}\]'; then
+    echo "[$DATE_IRAQ] $ORIGINAL" > "$COMMIT_MSG_FILE"
+  fi
+fi
