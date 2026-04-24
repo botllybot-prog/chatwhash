@@ -234,7 +234,7 @@ const LandingPage = () => {
                 className="text-ocean-600 border-ocean-200 hover:bg-ocean-50 text-base px-8 py-6 rounded-2xl"
               >
                 <Users className="h-5 w-5 ml-2" />
-                Ø³Ø¬Ù‘Ù„ Ù…Ø­Ø·ØªÙƒ Ø§Ù„Ø¢Ù†
+                سجل محطتك الآن
               </Button>
               <Button
                 variant="outline"
