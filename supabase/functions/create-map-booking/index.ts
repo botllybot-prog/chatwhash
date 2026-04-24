@@ -342,7 +342,6 @@ Deno.serve(async (req) => {
         [
           { id: "approve_yes", title: "✅ تأكيد" },
           { id: "approve_no", title: "❌ رفض" },
-          { id: `change_time_${booking.id}`, title: "📅 تغيير الموعد" },
         ],
         settings
       );
