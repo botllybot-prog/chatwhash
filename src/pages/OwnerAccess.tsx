@@ -78,8 +78,19 @@ const OwnerAccess = () => {
   );
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate("/app/station-portal", { replace: true });
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return;
+
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", session.user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (data?.role === "station_owner") {
+        navigate("/app/station-portal", { replace: true });
+      }
     });
   }, [navigate]);
 

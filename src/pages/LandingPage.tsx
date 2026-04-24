@@ -479,7 +479,7 @@ const LandingPage = () => {
               <div className="mt-8">
                 <Button
                   size="lg"
-                  onClick={() => navigate("/login")}
+                  onClick={() => navigate("/owner")}
                   className="bg-ocean-500 hover:bg-ocean-600 text-white px-8 py-6 rounded-2xl shadow-lg shadow-ocean-500/25"
                 >
                   سجّل محطتك الآن
@@ -541,7 +541,7 @@ const LandingPage = () => {
             <Button
               variant="outline"
               size="lg"
-              onClick={() => navigate("/login")}
+              onClick={() => navigate("/owner")}
               className="text-ocean-600 border-ocean-200 hover:bg-ocean-50 text-base px-10 py-6 rounded-2xl"
             >
               <Users className="h-5 w-5 ml-2" />
