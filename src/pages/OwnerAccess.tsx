@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -123,7 +123,7 @@ const texts = {
   en: {
     badge: "Station owners portal",
     title: "Register your station in one page",
-    subtitle: "Create the account, add station details, set services, prices, and customer discounts, then enter مباشرة.",
+    subtitle: "Create the account, add station details, set services, prices, and customer discounts, then sign in directly.",
     home: "Home",
     signupTab: "Create station account",
     ownerLogin: "Owner login",
@@ -269,12 +269,12 @@ const texts = {
     located: "شوێنی ئێستات دیاری کرا",
   },
   tr: {
-    badge: "İstasyon sahipleri kapısı",
+    badge: "İstasyon sahibi portalı",
     title: "İstasyonunu tek sayfada kaydet",
     subtitle: "Hesabı oluştur, istasyon bilgilerini ekle, hizmetleri, fiyatları ve müşteri indirimlerini belirle, sonra doğrudan giriş yap.",
     home: "Ana sayfa",
     signupTab: "İstasyon hesabı oluştur",
-    ownerLogin: "Sahip girişi",
+    ownerLogin: "İstasyon sahibi girişi",
     account: "Hesap",
     accountDesc: "WhatsApp numarası ana giriş kimliği olacaktır. E-posta isteğe bağlıdır.",
     ownerName: "Sahip adı",
@@ -314,7 +314,7 @@ const texts = {
       "Hizmetleri, fiyatları ve indirimleri ekler",
       "Doğrudan istasyon paneline giriş yapar",
     ],
-    createAndLogin: "Hesap oluştur ve giriş yap",
+    createAndLogin: "Hesabı oluştur ve giriş yap",
     creating: "Hesap oluşturuluyor...",
     fillRequired: "Lütfen gerekli alanları tamamlayın",
     passwordShort: "Şifre çok kısa",
@@ -772,3 +772,4 @@ const OwnerAccess = () => {
 };
 
 export default OwnerAccess;
+

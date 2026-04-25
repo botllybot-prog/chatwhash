@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+﻿import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export type AppLanguage = "ar" | "en" | "ku" | "tr";
 
@@ -14,10 +14,10 @@ const STORAGE_KEY = "washlly-app-language";
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export const APP_LANGUAGE_OPTIONS: { value: AppLanguage; label: string }[] = [
-  { value: "ar", label: "???????" },
+  { value: "ar", label: "عربي" },
+  { value: "ku", label: "کوردی" },
+  { value: "tr", label: "Türkçe" },
   { value: "en", label: "English" },
-  { value: "ku", label: "?????" },
-  { value: "tr", label: "T�rk�e" },
 ];
 
 const LOCALES: Record<AppLanguage, string> = {
@@ -65,3 +65,5 @@ export function useAppLanguage() {
 
   return context;
 }
+
+

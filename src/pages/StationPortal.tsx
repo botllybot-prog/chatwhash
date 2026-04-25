@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Button } from "@/components/ui/button";
@@ -375,7 +375,7 @@ const texts = {
     weekRevenue: "Haftalık gelir",
     last7Days: "Son 7 gün",
     totalBookings: "Toplam rezervasyon",
-    sinceStart: "Başlangıçtan beri",
+    sinceStart: "Başlangıçtan bu yana",
     stats: "İstatistikler",
     dailyRevenue: "Günlük gelir — son 30 gün",
     revenue: "Gelir",
@@ -458,7 +458,7 @@ const texts = {
     method: "Yöntem",
     notes: "Notlar",
     noLinkedStation: "Hesabınız hiçbir istasyona bağlı değil.",
-    portalTitle: "İstasyon paneli",
+    portalTitle: "İstasyon portalı",
     logout: "Çıkış yap",
     dashboard: "İstatistikler",
     station: "İstasyon",
@@ -926,3 +926,4 @@ const StationPortal = () => {
 };
 
 export default StationPortal;
+

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -38,10 +38,10 @@ const DEFAULT_CENTER = { lat: 33.3152, lng: 44.3661 };
 type Language = "ar" | "en" | "ku" | "tr";
 
 const LANGUAGE_OPTIONS: { value: Language; label: string }[] = [
-  { value: "ar", label: "العربية" },
-  { value: "en", label: "English" },
+  { value: "ar", label: "عربي" },
   { value: "ku", label: "کوردی" },
   { value: "tr", label: "Türkçe" },
+  { value: "en", label: "English" },
 ];
 
 const translations = {
@@ -1561,3 +1561,4 @@ const StationsMap = () => {
 };
 
 export default StationsMap;
+

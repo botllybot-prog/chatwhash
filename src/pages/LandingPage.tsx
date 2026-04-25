@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+﻿import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { ArrowLeft, BarChart3, Bell, Car, CheckCircle, Clock, Droplets, MapPin, MessageSquare, Shield, Sparkles, Star, Users, Waves, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -201,7 +201,7 @@ const texts = {
     badge: "Akıllı araç yıkama platformu",
     heroTitle1: "Aracınız",
     heroTitle2: "özel bakımı hak ediyor",
-    heroDescription: "Araba yıkamanızı saniyeler içinde ayırtın. En yakın istasyonu seçin, uygun hizmeti belirleyin ve aracınızı beklemeden temiz teslim alın.",
+    heroDescription: "Araba yıkamanızı saniyeler içinde ayırtın. En yakın istasyonu seçin, uygun hizmeti belirleyin ve aracınızı beklemeden tertemiz teslim alın.",
     exploreStations: "Yakındaki istasyonları keşfet",
     registerStation: "İstasyonunu kaydet",
     howItWorksButton: "Nasıl çalışır?",
@@ -209,7 +209,7 @@ const texts = {
       { value: "50+", label: "Müsait istasyon" },
       { value: "1,200+", label: "Tamamlanan rezervasyon" },
       { value: "98%", label: "Müşteri memnuniyeti" },
-      { value: "3", label: "Rezervasyon saniyesi" },
+      { value: "3", label: "Rezervasyon için saniye" },
     ],
     featuresBadge: "Neden Washlly",
     featuresTitle: "Müşteri için daha hızlı rezervasyon, istasyon için daha net yönetim",
@@ -224,7 +224,7 @@ const texts = {
     ],
     ownersBadge: "İstasyon sahipleri için",
     ownersTitle1: "İstasyonunu yönet",
-    ownersTitle2: "tam profesyonellikle",
+    ownersTitle2: "profesyonelce",
     ownersDescription: "Hesabını oluştur, istasyon konumunu ekle, hizmetlerini ve fiyatlarını belirle, anlık WhatsApp onaylarıyla harita rezervasyonlarını al.",
     ownersList: [
       "İstasyonun haritada hemen görünsün",
@@ -242,7 +242,7 @@ const texts = {
     ],
     ctaTitle1: "Denemeye hazır mısın",
     ctaTitle2: "Washlly",
-    ctaDescription: "İster daha hızlı rezervasyon isteyen müşteri olun ister daha iyi yönetim isteyen istasyon sahibi, her şey hazır.",
+    ctaDescription: "İster daha hızlı rezervasyon isteyen bir müşteri olun, ister daha iyi yönetim isteyen bir istasyon sahibi; her şey hazır.",
     bookNow: "Şimdi ayırt",
     footerDescription: "Araç sahiplerini yıkama istasyonlarıyla kolay rezervasyon, net takip ve tam yönetimle buluşturan platform.",
     quickLinks: "Hızlı bağlantılar",
@@ -511,3 +511,4 @@ const LandingPage = () => {
 };
 
 export default LandingPage;
+
