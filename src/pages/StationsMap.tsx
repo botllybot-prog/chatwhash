@@ -28,11 +28,11 @@ const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 const DEFAULT_CENTER = { lat: 33.3152, lng: 44.3661 };
 
 const SPIN_SEGMENTS = [
-  { key: "discount_5", label: "5%", subtitle: "خصم فوري", color: "#2ea7ff", discountPercent: 5, size: 88, textColor: "#ffffff" },
-  { key: "discount_10", label: "10%", subtitle: "خصم فوري", color: "#1c6ce5", discountPercent: 10, size: 88, textColor: "#ffffff" },
-  { key: "discount_15", label: "15%", subtitle: "خصم فوري", color: "#0b47b5", discountPercent: 15, size: 88, textColor: "#ffffff" },
-  { key: "retry", label: "أعد", subtitle: "المحاولة", color: "#1f7ae0", discountPercent: 0, size: 76, textColor: "#ffffff" },
-  { key: "discount_0", label: "0%", subtitle: "بدون خصم", color: "#f5f7fb", discountPercent: 0, size: 20, textColor: "#111827" },
+  { key: "discount_0", label: "0%", subtitle: "بدون خصم", color: "#f6f7fb", discountPercent: 0, size: 24, textColor: "#111827" },
+  { key: "discount_5", label: "5%", subtitle: "خصم فوري", color: "#47b2ff", discountPercent: 5, size: 84, textColor: "#ffffff" },
+  { key: "discount_10", label: "10%", subtitle: "خصم فوري", color: "#2b7fff", discountPercent: 10, size: 84, textColor: "#ffffff" },
+  { key: "discount_15", label: "15%", subtitle: "خصم فوري", color: "#185fdb", discountPercent: 15, size: 84, textColor: "#ffffff" },
+  { key: "retry", label: "أعد", subtitle: "المحاولة", color: "#0f49b8", discountPercent: 0, size: 84, textColor: "#ffffff" },
 ] as const;
 
 const SPIN_SEGMENT_ARCS = SPIN_SEGMENTS.reduce<
@@ -729,11 +729,11 @@ function StationCard({
               <StepHeader
                 number="4"
                 title="عجلة الخصم"
-                description="لف العجلة الآن لتثبيت الخصم لهذا الحجز. إذا ظهرت لك محاولة إضافية فمعناها يمكنك الدوران مرة أخرى لنفس الطلب."
+                description="النسبة التي يقف عندها المؤشر هي الخصم المعتمد لهذا الحجز."
               />
 
-              <div className="rounded-[30px] border border-white/10 bg-[#0d1526] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                <div className="relative mx-auto h-[290px] w-[290px] max-w-full">
+              <div className="rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,_#15213d,_#0a0f1a_72%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                <div className="relative mx-auto h-[292px] w-[292px] max-w-full">
                   {WHEEL_LIGHTS.map((lightIndex) => {
                     const angle = (360 / WHEEL_LIGHTS.length) * lightIndex;
                     return (
@@ -748,13 +748,15 @@ function StationCard({
                   })}
 
                   <div className="absolute left-1/2 top-2 z-20 -translate-x-1/2">
-                    <div className="h-0 w-0 border-l-[18px] border-r-[18px] border-b-[34px] border-l-transparent border-r-transparent border-b-yellow-400 drop-shadow-[0_6px_12px_rgba(250,204,21,0.45)]" />
+                    <div className="rounded-full bg-gradient-to-b from-amber-300 to-yellow-500 p-1 shadow-[0_8px_18px_rgba(250,204,21,0.4)]">
+                      <div className="h-0 w-0 border-l-[20px] border-r-[20px] border-b-[36px] border-l-transparent border-r-transparent border-b-[#ffc928]" />
+                    </div>
                   </div>
 
                   <div className="absolute inset-0 rounded-full border-[14px] border-white/10 bg-white/5 shadow-[0_0_0_2px_rgba(255,255,255,0.06),0_18px_55px_rgba(0,0,0,0.5)]" />
 
                   <div
-                    className="absolute inset-[16px] rounded-full border-[6px] border-white/20 shadow-[inset_0_2px_16px_rgba(255,255,255,0.08)]"
+                    className="absolute inset-[16px] rounded-full border-[6px] border-white/15 shadow-[inset_0_2px_16px_rgba(255,255,255,0.08)]"
                     style={{
                       background: WHEEL_BACKGROUND,
                       transform: `rotate(${spinRotation}deg)`,
@@ -762,14 +764,23 @@ function StationCard({
                     }}
                   >
                     {SPIN_SEGMENT_ARCS.map((segment) => {
-                      const radius = segment.size <= 24 ? -78 : segment.key === "retry" ? -88 : -98;
-                      const labelSize = segment.size <= 24 ? "text-[18px]" : segment.key === "retry" ? "text-[22px]" : "text-[28px]";
-                      const subtitleSize = segment.size <= 24 ? "text-[10px]" : "text-sm";
+                      const radius = segment.key === "discount_0"
+                        ? -72
+                        : segment.key === "retry"
+                          ? -92
+                          : -100;
+                      const labelSize = segment.key === "discount_0"
+                        ? "text-[16px]"
+                        : segment.key === "retry"
+                          ? "text-[18px]"
+                          : "text-[28px]";
+                      const subtitleSize = segment.key === "discount_0" ? "text-[10px]" : "text-sm";
+                      const labelWidth = segment.key === "retry" ? "w-28" : "w-24";
 
                       return (
                         <div
                           key={segment.key}
-                          className="absolute left-1/2 top-1/2 w-24 -translate-x-1/2 -translate-y-1/2 text-center"
+                          className={`absolute left-1/2 top-1/2 ${labelWidth} -translate-x-1/2 -translate-y-1/2 text-center`}
                           style={{
                             transform: `translate(-50%, -50%) rotate(${segment.midAngle}deg) translateY(${radius}px) rotate(-${segment.midAngle}deg)`,
                             color: segment.textColor,
@@ -781,9 +792,9 @@ function StationCard({
                       );
                     })}
 
-                    <div className="absolute inset-[33%] flex flex-col items-center justify-center rounded-full border-4 border-white/15 bg-[#09111e] text-center shadow-[inset_0_2px_10px_rgba(255,255,255,0.06),0_12px_30px_rgba(0,0,0,0.45)]">
-                      <div className="text-[10px] font-bold tracking-[0.3em] text-yellow-300">WASHLLY</div>
-                      <div className="mt-2 text-xs text-slate-300">خصم الحجز الحالي</div>
+                    <div className="absolute inset-[34%] flex flex-col items-center justify-center rounded-full border-4 border-white/10 bg-[radial-gradient(circle,_#1a2233,_#090e18)] text-center shadow-[inset_0_2px_10px_rgba(255,255,255,0.05),0_12px_30px_rgba(0,0,0,0.45)]">
+                      <div className="text-[11px] font-bold tracking-[0.22em] text-yellow-300">WASHLLY</div>
+                      <div className="mt-2 text-xs leading-5 text-slate-300">خصم الحجز الحالي</div>
                       <div className="mt-2 text-2xl font-black text-white">
                         {spinResult ? `${spinResult.discountPercent}%` : needsRespin ? "↻" : "؟"}
                       </div>
@@ -791,7 +802,7 @@ function StationCard({
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-center text-sm text-slate-200">
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-center text-sm leading-7 text-slate-200">
                   {spinHint}
                 </div>
 
