@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/components/ui/use-toast";
 import {
   CalendarCheck,
-  Car,
   CheckCircle2,
   Clock,
   Gift,
@@ -19,6 +18,7 @@ import {
   Navigation,
   RotateCw,
   Search,
+  ShieldCheck,
   Sparkles,
   Wrench,
   X,
@@ -28,11 +28,11 @@ const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 const DEFAULT_CENTER = { lat: 33.3152, lng: 44.3661 };
 
 const SPIN_SEGMENTS = [
-  { key: "discount_5", label: "5%", subtitle: "خصم فوري", color: "#1ea7ff", discountPercent: 5, size: 80, textColor: "#ffffff" },
-  { key: "discount_10", label: "10%", subtitle: "خصم فوري", color: "#155ed1", discountPercent: 10, size: 80, textColor: "#ffffff" },
-  { key: "discount_15", label: "15%", subtitle: "خصم فوري", color: "#0b43aa", discountPercent: 15, size: 80, textColor: "#ffffff" },
-  { key: "retry", label: "أعد", subtitle: "حاول مرة أخرى", color: "#0f72d5", discountPercent: 0, size: 84, textColor: "#ffffff" },
-  { key: "discount_0", label: "0%", subtitle: "لا يوجد خصم", color: "#f3f4f6", discountPercent: 0, size: 36, textColor: "#111827" },
+  { key: "discount_5", label: "5%", subtitle: "خصم فوري", color: "#2ea7ff", discountPercent: 5, size: 88, textColor: "#ffffff" },
+  { key: "discount_10", label: "10%", subtitle: "خصم فوري", color: "#1c6ce5", discountPercent: 10, size: 88, textColor: "#ffffff" },
+  { key: "discount_15", label: "15%", subtitle: "خصم فوري", color: "#0b47b5", discountPercent: 15, size: 88, textColor: "#ffffff" },
+  { key: "retry", label: "أعد", subtitle: "المحاولة", color: "#1f7ae0", discountPercent: 0, size: 76, textColor: "#ffffff" },
+  { key: "discount_0", label: "0%", subtitle: "بدون خصم", color: "#f5f7fb", discountPercent: 0, size: 20, textColor: "#111827" },
 ] as const;
 
 const SPIN_SEGMENT_ARCS = SPIN_SEGMENTS.reduce<
@@ -102,26 +102,32 @@ interface SpinDiscountResponse {
   error?: string;
 }
 
+interface CancelBookingResponse {
+  success?: boolean;
+  error?: string;
+}
+
 function isStationOpen(station: Station): boolean {
   const now = new Date();
-  const [sh, sm] = station.working_hours_start.split(":").map(Number);
-  const [eh, em] = station.working_hours_end.split(":").map(Number);
-  const currentMin = now.getHours() * 60 + now.getMinutes();
-  return currentMin >= sh * 60 + sm && currentMin < eh * 60 + em;
+  const [startHour, startMinute] = station.working_hours_start.split(":").map(Number);
+  const [endHour, endMinute] = station.working_hours_end.split(":").map(Number);
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  return currentMinutes >= startHour * 60 + startMinute && currentMinutes < endHour * 60 + endMinute;
 }
 
 function generateTimeSlots(start: string, end: string, duration: number): string[] {
   const slots: string[] = [];
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
+  const [startHour, startMinute] = start.split(":").map(Number);
+  const [endHour, endMinute] = end.split(":").map(Number);
 
-  let current = sh * 60 + sm;
-  const endMin = eh * 60 + em;
+  let current = startHour * 60 + startMinute;
+  const endMinutes = endHour * 60 + endMinute;
 
-  while (current + duration <= endMin) {
-    const h = Math.floor(current / 60);
-    const m = current % 60;
-    slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+  while (current + duration <= endMinutes) {
+    const hour = Math.floor(current / 60);
+    const minute = current % 60;
+    slots.push(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
     current += duration;
   }
 
@@ -152,6 +158,28 @@ function calculateSpinRotation(currentRotation: number, targetMidAngle: number) 
   return currentRotation + 360 * 5 + delta;
 }
 
+function StepHeader({
+  number,
+  title,
+  description,
+}: {
+  number: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+        {number}
+      </div>
+      <div className="space-y-1">
+        <h3 className="font-semibold leading-none">{title}</h3>
+        <p className="text-sm leading-6 text-muted-foreground">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 function StationCard({
   station,
   onClose,
@@ -163,6 +191,7 @@ function StationCard({
   const [loadingServices, setLoadingServices] = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [spinning, setSpinning] = useState(false);
 
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -175,13 +204,12 @@ function StationCard({
   const [bookingResult, setBookingResult] = useState<BookingResult | null>(null);
   const [spinResult, setSpinResult] = useState<SpinResult | null>(null);
   const [spinRotation, setSpinRotation] = useState(0);
-  const [spinHint, setSpinHint] = useState("لف العجلة مرة واحدة لكل حجز قبل تأكيد الطلب.");
+  const [spinHint, setSpinHint] = useState("لف العجلة مرة واحدة قبل تأكيد الحجز، وإذا ظهرت لك محاولة إضافية يمكنك الدوران مرة أخرى لنفس الطلب فقط.");
   const [needsRespin, setNeedsRespin] = useState(false);
 
   const open = isStationOpen(station);
   const isSlotsFlow = station.scheduling_type === "slots";
   const isDailyFlow = station.scheduling_type === "daily";
-
   const bookingDate = isDailyFlow || isSlotsFlow ? selectedDate : getTodayDate();
   const normalizedPhone = normalizePhone(customerPhone);
 
@@ -198,7 +226,7 @@ function StationCard({
     (!isDailyFlow || !!selectedDate) &&
     (!isSlotsFlow || (!!selectedDate && !!selectedSlot));
 
-  const canSubmit = canSpin && !!spinResult && !spinning && !loadingServices;
+  const canSubmit = canSpin && !!spinResult && !spinning && !loadingServices && !bookingResult;
 
   const discountAmount = selectedService && spinResult
     ? (selectedService.price * spinResult.discountPercent) / 100
@@ -208,7 +236,7 @@ function StationCard({
   const resetSpinState = () => {
     setSpinResult(null);
     setNeedsRespin(false);
-    setSpinHint("لف العجلة مرة واحدة لكل حجز قبل تأكيد الطلب.");
+    setSpinHint("لف العجلة مرة واحدة قبل تأكيد الحجز، وإذا ظهرت لك محاولة إضافية يمكنك الدوران مرة أخرى لنفس الطلب فقط.");
   };
 
   const resetSelectionAndClose = () => {
@@ -281,7 +309,7 @@ function StationCard({
 
       if (error) {
         toast({
-          title: "تعذر تحميل المواعيد",
+          title: "تعذر تحميل الأوقات",
           description: error.message,
           variant: "destructive",
         });
@@ -295,14 +323,14 @@ function StationCard({
 
       const now = new Date();
       const isToday = selectedDate === getTodayDate();
-      const currentMin = now.getHours() * 60 + now.getMinutes();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
       const filteredSlots = allSlots.filter((slot) => {
-        const [h, m] = slot.split(":").map(Number);
-        const slotMin = h * 60 + m;
+        const [hour, minute] = slot.split(":").map(Number);
+        const slotMinutes = hour * 60 + minute;
 
         if (bookedSet.has(slot)) return false;
-        if (isToday && slotMin <= currentMin) return false;
+        if (isToday && slotMinutes <= currentMinutes) return false;
         return true;
       });
 
@@ -344,8 +372,8 @@ function StationCard({
 
     if (!canSpin) {
       toast({
-        title: "أكمل بيانات الحجز أولاً",
-        description: "اختر الخدمة والموعد وأدخل الاسم ورقم الهاتف قبل تدوير العجلة.",
+        title: "أكمل البيانات أولاً",
+        description: "اختر الخدمة والموعد وأدخل اسمك ورقم هاتفك قبل تدوير عجلة الخصم.",
         variant: "destructive",
       });
       return;
@@ -354,7 +382,7 @@ function StationCard({
     if (spinResult && !needsRespin) return;
 
     setSpinning(true);
-    setSpinHint("جاري تدوير عجلة الخصم...");
+    setSpinHint("جاري تدوير عجلة الخصم الآن...");
 
     const { data, error } = await supabase.functions.invoke<SpinDiscountResponse>("spin-booking-discount", {
       body: {
@@ -368,7 +396,7 @@ function StationCard({
 
     if (error || data?.error || !data?.segmentKey) {
       setSpinning(false);
-      setSpinHint("تعذر تدوير العجلة الآن.");
+      setSpinHint("تعذر تدوير العجلة الآن. حاول مرة أخرى بعد قليل.");
       toast({
         title: "فشل تدوير العجلة",
         description: data?.error || error?.message || "حاول مرة أخرى بعد قليل.",
@@ -387,7 +415,7 @@ function StationCard({
       if (data.requiresRespin) {
         setSpinResult(null);
         setNeedsRespin(true);
-        setSpinHint("ظهرت لك محاولة إضافية. اضغط مرة أخرى لتدوير العجلة.");
+        setSpinHint("ظهرت لك محاولة إضافية. اضغط مرة أخرى لتدوير العجلة لنفس الحجز.");
         return;
       }
 
@@ -400,8 +428,8 @@ function StationCard({
 
       setSpinResult(resolvedResult);
       setNeedsRespin(false);
-      setSpinHint(`تم حفظ الخصم لهذا الحجز: (${resolvedResult.discountPercent})%`);
-    }, 4000);
+      setSpinHint(`تم تثبيت الخصم لهذا الحجز: (${resolvedResult.discountPercent})%`);
+    }, 3800);
   };
 
   const handleCreateBooking = async () => {
@@ -419,7 +447,7 @@ function StationCard({
     if (isSlotsFlow && !selectedSlot) {
       toast({
         title: "اختر الموعد",
-        description: "يرجى اختيار وقت مناسب من المواعيد المتاحة.",
+        description: "يرجى اختيار وقت مناسب من الأوقات المتاحة.",
         variant: "destructive",
       });
       return;
@@ -428,7 +456,7 @@ function StationCard({
     if (!spinResult?.token) {
       toast({
         title: "لف عجلة الخصم أولاً",
-        description: "العرض يثبت مرة واحدة لكل حجز قبل إرسال الطلب.",
+        description: "يجب تثبيت نتيجة العجلة قبل إرسال طلب الحجز للمحطة.",
         variant: "destructive",
       });
       return;
@@ -436,19 +464,17 @@ function StationCard({
 
     setSubmitting(true);
 
-    const payload = {
-      station_id: station.id,
-      service_id: selectedService.id,
-      customer_name: customerName.trim(),
-      customer_phone: normalizedPhone,
-      booking_date: bookingDate,
-      booking_time: isSlotsFlow ? selectedSlot : null,
-      spin_discount_percent: spinResult.discountPercent,
-      spin_token: spinResult.token,
-    };
-
     const { data, error } = await supabase.functions.invoke("create-map-booking", {
-      body: payload,
+      body: {
+        station_id: station.id,
+        service_id: selectedService.id,
+        customer_name: customerName.trim(),
+        customer_phone: normalizedPhone,
+        booking_date: bookingDate,
+        booking_time: isSlotsFlow ? selectedSlot : null,
+        spin_discount_percent: spinResult.discountPercent,
+        spin_token: spinResult.token,
+      },
     });
 
     setSubmitting(false);
@@ -478,43 +504,73 @@ function StationCard({
     });
 
     toast({
-      title: "تم إرسال الحجز بنجاح",
-      description: `رقم الحجز #${data.bookingNumber} - الخصم (${spinResult.discountPercent})%`,
+      title: "تم إرسال طلب الحجز",
+      description: `رقم الحجز #${data.bookingNumber} والخصم (${spinResult.discountPercent})%`,
+    });
+  };
+
+  const handleCancelBooking = async () => {
+    if (!bookingResult) {
+      resetSelectionAndClose();
+      return;
+    }
+
+    setCancelling(true);
+
+    const { data, error } = await supabase.functions.invoke<CancelBookingResponse>("cancel-map-booking", {
+      body: {
+        booking_id: bookingResult.bookingId,
+        customer_phone: normalizedPhone,
+      },
     });
 
-    window.setTimeout(() => {
-      resetSelectionAndClose();
-    }, 1200);
+    setCancelling(false);
+
+    if (error || data?.error) {
+      toast({
+        title: "تعذر إلغاء الحجز",
+        description: data?.error || error?.message || "حاول مرة أخرى بعد قليل.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "تم إلغاء الحجز",
+      description: `أرسلنا إشعار الإلغاء عبر واتساب للحجز #${bookingResult.bookingNumber}.`,
+    });
+
+    resetSelectionAndClose();
   };
 
   return (
-    <div className="absolute top-0 left-0 h-full w-full sm:w-[430px] z-[1000] bg-background border-l shadow-2xl" dir="rtl">
+    <div className="absolute left-0 top-0 z-[1000] h-full w-full bg-background shadow-2xl sm:w-[440px]" dir="rtl">
       <ScrollArea className="h-full">
-        <div className="p-4 space-y-4">
+        <div className="space-y-4 p-4">
           <div className="flex items-center justify-between">
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="h-5 w-5" />
             </Button>
             <Badge variant={open ? "default" : "destructive"}>
-              {open ? "مفتوحة الآن" : "مغلقة الآن"}
+              {open ? "المحطة مفتوحة الآن" : "المحطة مغلقة الآن"}
             </Badge>
           </div>
 
           {station.image_url ? (
-            <div className="rounded-2xl overflow-hidden border border-border">
+            <div className="overflow-hidden rounded-2xl border border-border">
               <img src={station.image_url} alt={station.name} className="h-44 w-full object-cover" />
             </div>
           ) : (
-            <div className="rounded-2xl bg-ocean-100 h-36 flex items-center justify-center">
-              <Car className="h-12 w-12 text-ocean-300" />
+            <div className="flex h-36 items-center justify-center rounded-2xl bg-sky-50">
+              <MapPin className="h-10 w-10 text-sky-500" />
             </div>
           )}
 
-          <div>
+          <div className="space-y-2">
             <h2 className="text-xl font-bold">{station.name}</h2>
             {station.address && (
-              <p className="text-sm text-muted-foreground flex items-start gap-1.5 mt-2">
-                <MapPin className="h-4 w-4 mt-0.5 text-ocean-500 flex-shrink-0" />
+              <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+                <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-500" />
                 <span>{station.address}</span>
               </p>
             )}
@@ -530,11 +586,11 @@ function StationCard({
 
           {station.latitude && station.longitude && (
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" onClick={openGoogleMaps} className="gap-2">
+              <Button variant="outline" className="gap-2" onClick={openGoogleMaps}>
                 <Navigation className="h-4 w-4" />
                 Google Maps
               </Button>
-              <Button variant="outline" onClick={openWaze} className="gap-2">
+              <Button variant="outline" className="gap-2" onClick={openWaze}>
                 <Navigation className="h-4 w-4" />
                 Waze
               </Button>
@@ -542,11 +598,12 @@ function StationCard({
           )}
 
           <Card>
-            <CardContent className="pt-4 space-y-4">
-              <div className="flex items-center gap-2">
-                <Wrench className="h-4 w-4 text-primary" />
-                <h3 className="font-semibold">اختر الخدمة</h3>
-              </div>
+            <CardContent className="space-y-4 pt-4">
+              <StepHeader
+                number="1"
+                title="اختر الخدمة"
+                description="ابدأ بتحديد الخدمة المناسبة. بعدها سنحسب الخصم والسعر النهائي بوضوح."
+              />
 
               {loadingServices ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -554,11 +611,12 @@ function StationCard({
                   جاري تحميل الخدمات...
                 </div>
               ) : services.length === 0 ? (
-                <p className="text-sm text-muted-foreground">لا توجد خدمات متاحة لهذه المحطة حاليا.</p>
+                <p className="text-sm text-muted-foreground">لا توجد خدمات متاحة لهذه المحطة حالياً.</p>
               ) : (
                 <div className="space-y-2">
                   {services.map((service) => {
                     const isSelected = selectedService?.id === service.id;
+
                     return (
                       <button
                         key={service.id}
@@ -566,20 +624,16 @@ function StationCard({
                         onClick={() => setSelectedService(service)}
                         className={`w-full rounded-2xl border p-3 text-right transition ${
                           isSelected
-                            ? "border-ocean-500 bg-ocean-50"
-                            : "border-border bg-card hover:border-ocean-300"
+                            ? "border-sky-500 bg-sky-50"
+                            : "border-border bg-card hover:border-sky-300"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="font-medium">{service.name}</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {service.duration_minutes} دقيقة
-                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">{service.duration_minutes} دقيقة</p>
                           </div>
-                          <Badge variant={isSelected ? "default" : "secondary"}>
-                            {service.price} د.ع
-                          </Badge>
+                          <Badge variant={isSelected ? "default" : "secondary"}>{formatCurrency(service.price)}</Badge>
                         </div>
                       </button>
                     );
@@ -591,11 +645,12 @@ function StationCard({
 
           {(isDailyFlow || isSlotsFlow) && (
             <Card>
-              <CardContent className="pt-4 space-y-4">
-                <div className="flex items-center gap-2">
-                  <CalendarCheck className="h-4 w-4 text-primary" />
-                  <h3 className="font-semibold">{isSlotsFlow ? "اختر اليوم والوقت" : "اختر اليوم"}</h3>
-                </div>
+              <CardContent className="space-y-4 pt-4">
+                <StepHeader
+                  number="2"
+                  title={isSlotsFlow ? "اختر اليوم والوقت" : "اختر اليوم"}
+                  description="اختر اليوم المناسب، وإذا كانت المحطة تعمل بالمواعيد ستظهر لك الأوقات المتاحة فقط."
+                />
 
                 <Input
                   type="date"
@@ -616,9 +671,7 @@ function StationCard({
                         جاري تحميل الأوقات المتاحة...
                       </div>
                     ) : availableSlots.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        لا توجد أوقات متاحة في هذا اليوم. اختر يوما آخر.
-                      </p>
+                      <p className="text-sm text-muted-foreground">لا توجد أوقات متاحة في هذا اليوم. اختر يوماً آخر.</p>
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {availableSlots.map((slot) => (
@@ -628,8 +681,8 @@ function StationCard({
                             onClick={() => setSelectedSlot(slot)}
                             className={`rounded-full border px-3 py-1.5 text-sm transition ${
                               selectedSlot === slot
-                                ? "border-ocean-500 bg-ocean-500 text-white"
-                                : "border-border hover:border-ocean-300"
+                                ? "border-sky-500 bg-sky-500 text-white"
+                                : "border-border hover:border-sky-300"
                             }`}
                           >
                             {slot}
@@ -644,86 +697,102 @@ function StationCard({
           )}
 
           <Card>
-            <CardContent className="pt-4 space-y-3">
-              <h3 className="font-semibold">بيانات الحجز</h3>
-              <Input
-                placeholder="الاسم"
-                value={customerName}
-                onChange={(event) => setCustomerName(event.target.value)}
+            <CardContent className="space-y-4 pt-4">
+              <StepHeader
+                number="3"
+                title="بيانات الحجز"
+                description="أدخل اسمك ورقم واتساب الصحيح. هذا الرقم سيصلك عليه تأكيد أو إلغاء الحجز."
               />
+
+              <Input placeholder="الاسم" value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
               <Input
                 dir="ltr"
                 placeholder="رقم الهاتف"
                 value={customerPhone}
                 onChange={(event) => setCustomerPhone(event.target.value)}
               />
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+                <div className="flex items-start gap-2 font-medium">
+                  <ShieldCheck className="mt-0.5 h-4 w-4" />
+                  <span>تنبيه مهم</span>
+                </div>
+                <p className="mt-2">
+                  يمكنك الاحتفاظ بحجزين نشطين فقط على نفس الرقم. إذا أردت إنشاء حجز جديد بعد ذلك، يجب أولاً إلغاء أحد الحجوزات القديمة.
+                </p>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="overflow-hidden border-0 bg-[#06080d] text-white shadow-2xl">
-            <CardContent className="pt-5 space-y-5">
-              <div className="text-center">
-                <div className="inline-flex items-center gap-2 rounded-full border border-yellow-400/30 bg-yellow-400/10 px-3 py-1 text-xs text-yellow-200">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  لف العجلة واربح خصم فوري
-                </div>
-                <h3 className="mt-3 text-2xl font-extrabold">عجلة الخصم</h3>
-                <p className="mt-2 text-sm text-slate-300">{spinHint}</p>
-              </div>
+          <Card className="overflow-hidden border-0 bg-[#070b13] text-white shadow-2xl">
+            <CardContent className="space-y-5 pt-5">
+              <StepHeader
+                number="4"
+                title="عجلة الخصم"
+                description="لف العجلة الآن لتثبيت الخصم لهذا الحجز. إذا ظهرت لك محاولة إضافية فمعناها يمكنك الدوران مرة أخرى لنفس الطلب."
+              />
 
-              <div className="rounded-[32px] border border-white/10 bg-[#0b1220] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-                <div className="relative mx-auto h-72 w-72 max-w-full">
+              <div className="rounded-[30px] border border-white/10 bg-[#0d1526] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                <div className="relative mx-auto h-[290px] w-[290px] max-w-full">
                   {WHEEL_LIGHTS.map((lightIndex) => {
                     const angle = (360 / WHEEL_LIGHTS.length) * lightIndex;
                     return (
                       <div
                         key={lightIndex}
-                        className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-yellow-300 shadow-[0_0_14px_rgba(253,224,71,0.95)]"
+                        className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-yellow-300 shadow-[0_0_14px_rgba(253,224,71,0.95)]"
                         style={{
-                          transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-148px)`,
+                          transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-146px)`,
                         }}
                       />
                     );
                   })}
 
-                  <div className="absolute left-1/2 top-1 z-20 -translate-x-1/2">
-                    <div className="rounded-full bg-gradient-to-b from-yellow-300 to-amber-500 p-1 shadow-lg shadow-amber-400/30">
-                      <div className="h-0 w-0 border-l-[16px] border-r-[16px] border-b-[32px] border-l-transparent border-r-transparent border-b-[#111827]" />
-                    </div>
+                  <div className="absolute left-1/2 top-2 z-20 -translate-x-1/2">
+                    <div className="h-0 w-0 border-l-[18px] border-r-[18px] border-b-[34px] border-l-transparent border-r-transparent border-b-yellow-400 drop-shadow-[0_6px_12px_rgba(250,204,21,0.45)]" />
                   </div>
 
-                  <div className="absolute inset-0 rounded-full border-[12px] border-white/15 bg-white/5 shadow-[0_0_0_2px_rgba(255,255,255,0.08),0_20px_60px_rgba(0,0,0,0.5)]" />
+                  <div className="absolute inset-0 rounded-full border-[14px] border-white/10 bg-white/5 shadow-[0_0_0_2px_rgba(255,255,255,0.06),0_18px_55px_rgba(0,0,0,0.5)]" />
 
                   <div
                     className="absolute inset-[16px] rounded-full border-[6px] border-white/20 shadow-[inset_0_2px_16px_rgba(255,255,255,0.08)]"
                     style={{
                       background: WHEEL_BACKGROUND,
                       transform: `rotate(${spinRotation}deg)`,
-                      transition: spinning ? "transform 4s cubic-bezier(0.22, 1, 0.36, 1)" : undefined,
+                      transition: spinning ? "transform 3.8s cubic-bezier(0.18, 0.92, 0.24, 1)" : undefined,
                     }}
                   >
-                    {SPIN_SEGMENT_ARCS.map((segment) => (
-                      <div
-                        key={segment.key}
-                        className="absolute left-1/2 top-1/2 w-24 -translate-x-1/2 -translate-y-1/2 text-center"
-                        style={{
-                          transform: `translate(-50%, -50%) rotate(${segment.midAngle}deg) translateY(-92px) rotate(-${segment.midAngle}deg)`,
-                          color: segment.textColor,
-                        }}
-                      >
-                        <div className="text-[30px] font-black leading-none">{segment.label}</div>
-                        <div className="mt-1 text-sm font-semibold leading-4">{segment.subtitle}</div>
-                      </div>
-                    ))}
+                    {SPIN_SEGMENT_ARCS.map((segment) => {
+                      const radius = segment.size <= 24 ? -78 : segment.key === "retry" ? -88 : -98;
+                      const labelSize = segment.size <= 24 ? "text-[18px]" : segment.key === "retry" ? "text-[22px]" : "text-[28px]";
+                      const subtitleSize = segment.size <= 24 ? "text-[10px]" : "text-sm";
 
-                    <div className="absolute inset-[30%] rounded-full border-4 border-white/20 bg-[#0a0f18] shadow-[inset_0_2px_10px_rgba(255,255,255,0.06),0_12px_30px_rgba(0,0,0,0.45)] flex flex-col items-center justify-center text-center px-4">
-                      <div className="text-[10px] font-bold tracking-[0.35em] text-yellow-300">WASHLLY</div>
-                      <div className="mt-2 text-xs text-slate-300">خدمات سيارتك أسهل</div>
+                      return (
+                        <div
+                          key={segment.key}
+                          className="absolute left-1/2 top-1/2 w-24 -translate-x-1/2 -translate-y-1/2 text-center"
+                          style={{
+                            transform: `translate(-50%, -50%) rotate(${segment.midAngle}deg) translateY(${radius}px) rotate(-${segment.midAngle}deg)`,
+                            color: segment.textColor,
+                          }}
+                        >
+                          <div className={`${labelSize} font-black leading-none`}>{segment.label}</div>
+                          <div className={`mt-1 ${subtitleSize} font-semibold leading-4`}>{segment.subtitle}</div>
+                        </div>
+                      );
+                    })}
+
+                    <div className="absolute inset-[33%] flex flex-col items-center justify-center rounded-full border-4 border-white/15 bg-[#09111e] text-center shadow-[inset_0_2px_10px_rgba(255,255,255,0.06),0_12px_30px_rgba(0,0,0,0.45)]">
+                      <div className="text-[10px] font-bold tracking-[0.3em] text-yellow-300">WASHLLY</div>
+                      <div className="mt-2 text-xs text-slate-300">خصم الحجز الحالي</div>
                       <div className="mt-2 text-2xl font-black text-white">
                         {spinResult ? `${spinResult.discountPercent}%` : needsRespin ? "↻" : "؟"}
                       </div>
                     </div>
                   </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-center text-sm text-slate-200">
+                  {spinHint}
                 </div>
 
                 {selectedService && spinResult && (
@@ -744,7 +813,6 @@ function StationCard({
                 )}
 
                 <Button
-                  variant={needsRespin ? "secondary" : "default"}
                   className="mt-5 h-12 w-full gap-2 bg-gradient-to-l from-yellow-400 via-amber-400 to-yellow-300 text-slate-950 hover:from-yellow-300 hover:to-amber-300"
                   disabled={spinning || !!spinResult || !canSpin}
                   onClick={handleSpin}
@@ -752,7 +820,7 @@ function StationCard({
                   {spinning ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      تدور العجلة...
+                      تدور العجلة الآن...
                     </>
                   ) : needsRespin ? (
                     <>
@@ -762,7 +830,7 @@ function StationCard({
                   ) : spinResult ? (
                     <>
                       <CheckCircle2 className="h-4 w-4" />
-                      تم حفظ الخصم
+                      تم تثبيت الخصم
                     </>
                   ) : (
                     <>
@@ -776,50 +844,63 @@ function StationCard({
           </Card>
 
           <Card>
-            <CardContent className="pt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  className="w-full"
-                  disabled={!canSubmit || submitting}
-                  onClick={handleCreateBooking}
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                      جاري التأكيد...
-                    </>
-                  ) : (
-                    "تأكيد الحجز"
-                  )}
-                </Button>
+            <CardContent className="space-y-4 pt-4">
+              <StepHeader
+                number="5"
+                title="الخطوة الأخيرة"
+                description="راجع التفاصيل ثم اختر إما تأكيد الحجز ليصل للمحطة عبر واتساب، أو إلغاء الحجز للعودة إلى الخريطة بدون حفظ الاختيارات."
+              />
 
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  disabled={submitting}
-                  onClick={resetSelectionAndClose}
-                >
-                  إلغاء
-                </Button>
+              <div className="rounded-2xl border bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+                <p>بعد تأكيد الحجز سيصل طلبك إلى صاحب المحطة عبر واتساب مع الخصم الذي حصلت عليه.</p>
+                <p className="mt-1">إذا ألغيت الحجز بعد إنشائه سنرسل إشعار إلغاء عبر واتساب لك ولصاحب المحطة.</p>
               </div>
 
-              {!spinResult && (
-                <p className="text-xs text-muted-foreground">
-                  يجب تدوير عجلة الخصم أولاً. إذا ظهرت لك "حاول مرة أخرى" يمكنك المحاولة مرة إضافية لنفس الحجز.
-                </p>
-              )}
+              {!bookingResult ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button className="w-full" disabled={!canSubmit || submitting} onClick={handleCreateBooking}>
+                    {submitting ? (
+                      <>
+                        <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                        جاري تأكيد الحجز...
+                      </>
+                    ) : (
+                      "تأكيد الحجز"
+                    )}
+                  </Button>
 
-              {bookingResult && (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                  <div className="flex items-center gap-2 font-medium">
-                    <CheckCircle2 className="h-4 w-4" />
-                    تم إرسال طلب الحجز بنجاح
+                  <Button variant="outline" className="w-full" disabled={submitting} onClick={handleCancelBooking}>
+                    إلغاء الحجز
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                    <div className="flex items-center gap-2 font-medium">
+                      <CheckCircle2 className="h-4 w-4" />
+                      تم إرسال طلب الحجز بنجاح
+                    </div>
+                    <p className="mt-2">رقم الحجز: #{bookingResult.bookingNumber}</p>
+                    <p className="mt-1">الخصم المثبت: ({bookingResult.discountPercent})%</p>
+                    <p className="mt-1">الطلب الآن بانتظار موافقة المحطة. إذا رغبت بإلغائه يمكنك فعل ذلك من هنا مباشرة.</p>
                   </div>
-                  <p className="mt-2">رقم الحجز: #{bookingResult.bookingNumber}</p>
-                  <p className="mt-1">الخصم المحفوظ: ({bookingResult.discountPercent})%</p>
-                  <p className="mt-1 text-emerald-700">
-                    ستعود الخريطة الآن بدون الاختيارات القديمة.
-                  </p>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" className="w-full" onClick={resetSelectionAndClose}>
+                      العودة إلى الخريطة
+                    </Button>
+
+                    <Button variant="destructive" className="w-full" disabled={cancelling} onClick={handleCancelBooking}>
+                      {cancelling ? (
+                        <>
+                          <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                          جاري الإلغاء...
+                        </>
+                      ) : (
+                        "إلغاء الحجز"
+                      )}
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -881,7 +962,7 @@ const StationsMap = () => {
       return { ...station, distance };
     });
 
-    const onlyMatching = query
+    const matchingStations = query
       ? mappedStations.filter(
           (station) =>
             station.name.toLowerCase().includes(query) ||
@@ -890,7 +971,7 @@ const StationsMap = () => {
         )
       : mappedStations;
 
-    return onlyMatching.sort((a, b) => {
+    return matchingStations.sort((a, b) => {
       if (a.distance == null && b.distance == null) return 0;
       if (a.distance == null) return 1;
       if (b.distance == null) return -1;
@@ -937,12 +1018,12 @@ const StationsMap = () => {
   };
 
   return (
-    <div className="h-[100vh] w-full relative" dir="rtl">
-      <div className="absolute top-4 right-4 left-4 z-[900] mx-auto max-w-xl">
-        <Card className="shadow-xl border-0 bg-background/95 backdrop-blur">
-          <CardContent className="p-3 space-y-3">
+    <div className="relative h-[100vh] w-full" dir="rtl">
+      <div className="absolute left-4 right-4 top-4 z-[900] mx-auto max-w-xl">
+        <Card className="border-0 bg-background/95 shadow-xl backdrop-blur">
+          <CardContent className="space-y-3 p-3">
             <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="ابحث عن محطة أو منطقة"
                 className="pr-9"
@@ -952,7 +1033,7 @@ const StationsMap = () => {
             </div>
 
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <Button variant="outline" size="sm" onClick={handleLocateMe} className="gap-2 shrink-0">
+              <Button variant="outline" size="sm" className="shrink-0 gap-2" onClick={handleLocateMe}>
                 <LocateFixed className="h-4 w-4" />
                 موقعي
               </Button>
@@ -995,7 +1076,7 @@ const StationsMap = () => {
           ))}
         </GoogleMap>
       ) : (
-        <div className="h-full w-full flex items-center justify-center">
+        <div className="flex h-full w-full items-center justify-center">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             جاري تحميل الخريطة...

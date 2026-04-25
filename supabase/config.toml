@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.spin-booking-discount]
 verify_jwt = false
+
+[functions.cancel-map-booking]
+verify_jwt = false
