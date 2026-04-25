@@ -1,607 +1,509 @@
-import { useRef, useEffect, useState } from "react";
-import { motion, useScroll, useTransform, useInView } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+import { ArrowLeft, BarChart3, Bell, Car, CheckCircle, Clock, Droplets, MapPin, MessageSquare, Shield, Sparkles, Star, Users, Waves, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import {
-  Car, Droplets, Clock, MapPin, Star, Shield, Phone,
-  MessageSquare, ChevronDown, Sparkles, Waves, CheckCircle,
-  BarChart3, Bell, Users, Zap, ArrowLeft
-} from "lucide-react";
+import { useAppLanguage } from "@/lib/language";
 
-/* ─── Animated Section Wrapper ─── */
-const Section = ({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) => {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-80px" });
-  return (
-    <motion.section
-      ref={ref}
-      initial={{ opacity: 0, y: 40 }}
-      animate={isInView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] }}
-      className={className}
-    >
-      {children}
-    </motion.section>
-  );
+const texts = {
+  ar: {
+    badge: "منصة ذكية لغسيل السيارات",
+    heroTitle1: "سيارتك تستحق",
+    heroTitle2: "عناية استثنائية",
+    heroDescription: "احجز موعد غسيل سيارتك خلال ثوانٍ. اختر المحطة الأقرب، حدد الخدمة المناسبة، واستلم سيارتك نظيفة بدون انتظار.",
+    exploreStations: "اكتشف المحطات القريبة",
+    registerStation: "سجل محطتك الآن",
+    howItWorksButton: "كيف يعمل؟",
+    stats: [
+      { value: "50+", label: "محطة متاحة" },
+      { value: "1,200+", label: "حجز مكتمل" },
+      { value: "98%", label: "رضا العملاء" },
+      { value: "3", label: "ثوانٍ للحجز" },
+    ],
+    featuresBadge: "لماذا واشللي",
+    featuresTitle: "تجربة أسرع للعميل وإدارة أوضح للمحطة",
+    featuresDescription: "كل ما يحتاجه العميل وصاحب المحطة في مسار واحد من الخريطة إلى التأكيد والإشعار والمتابعة.",
+    features: [
+      { title: "حجز سريع", desc: "اختر المحطة والخدمة والوقت من الخريطة بخطوات واضحة.", icon: Clock },
+      { title: "موقع مباشر", desc: "شاهد المحطات الأقرب لك وتفاصيل كل محطة قبل الحجز.", icon: MapPin },
+      { title: "واتساب تلقائي", desc: "إشعارات فورية للعميل وصاحب المحطة بعد كل إجراء.", icon: MessageSquare },
+      { title: "أمان ووضوح", desc: "تأكيدات واضحة، إلغاء مباشر، وتتبع أسهل للحجز.", icon: Shield },
+      { title: "خدمات متعددة", desc: "كل محطة تعرض خدماتها وأسعارها وخصوماتها بشكل واضح.", icon: Droplets },
+      { title: "إدارة ذكية", desc: "لوحة تحكم للمحطة مع الحجوزات والإيرادات والتنبيهات.", icon: Zap },
+    ],
+    ownersBadge: "لأصحاب المحطات",
+    ownersTitle1: "أدر محطتك",
+    ownersTitle2: "باحترافية كاملة",
+    ownersDescription: "أنشئ حسابك، أضف موقع المحطة، حدّد خدماتك وأسعارك، واستقبل الحجوزات من الخريطة مع موافقات فورية عبر واتساب.",
+    ownersList: [
+      "ظهور محطتك على الخريطة مباشرة",
+      "إدارة الخدمات والأسعار وساعات العمل",
+      "تنبيهات واتساب للحجوزات والتأكيد والإلغاء",
+      "لوحة إدارة للإيرادات والأداء",
+    ],
+    howBadge: "خطوات بسيطة",
+    howTitle: "كيف يعمل واشللي؟",
+    howDescription: "ثلاث خطوات فقط من اختيار المحطة إلى استلام سيارة نظيفة.",
+    howSteps: [
+      { title: "اختر المحطة", desc: "افتح الخريطة وحدد المحطة الأقرب أو الأنسب لك." },
+      { title: "اختر الخدمة والوقت", desc: "راجع الخدمات والأسعار ثم حدد اليوم والوقت المناسب." },
+      { title: "أكد واستلم الإشعار", desc: "يصل الطلب إلى صاحب المحطة ويصلك إشعار النتيجة على واتساب." },
+    ],
+    ctaTitle1: "جاهز لتجربة",
+    ctaTitle2: "واشللي",
+    ctaDescription: "سواء كنت عميلاً تريد حجزاً أسرع أو صاحب محطة يريد إدارة أوضح، كل شيء جاهز الآن.",
+    bookNow: "احجز الآن",
+    footerDescription: "منصة تربط أصحاب السيارات بمحطات الغسيل بحجز سهل، متابعة واضحة، وإدارة متكاملة.",
+    quickLinks: "روابط سريعة",
+    contactUs: "تواصل معنا",
+    links: ["المميزات", "أصحاب المحطات", "كيف يعمل", "الخريطة"],
+    copyright: "جميع الحقوق محفوظة.",
+    dashboardLabel: "لوحة تحكم المحطة",
+    bookingsToday: "حجوزات اليوم",
+    revenueToday: "إيرادات اليوم",
+    rating: "تقييم",
+    latestBookings: "آخر الحجوزات",
+    confirmed: "مؤكد",
+    pending: "معلق",
+    completed: "مكتمل",
+    newBooking: "حجز جديد!",
+    fullWash: "غسيل شامل",
+    now: "الآن",
+  },
+  en: {
+    badge: "Smart car wash platform",
+    heroTitle1: "Your car deserves",
+    heroTitle2: "exceptional care",
+    heroDescription: "Book your car wash in seconds. Choose the nearest station, pick the right service, and get your car back clean without waiting.",
+    exploreStations: "Explore nearby stations",
+    registerStation: "Register your station",
+    howItWorksButton: "How it works",
+    stats: [
+      { value: "50+", label: "Available stations" },
+      { value: "1,200+", label: "Completed bookings" },
+      { value: "98%", label: "Customer satisfaction" },
+      { value: "3", label: "Seconds to book" },
+    ],
+    featuresBadge: "Why Washlly",
+    featuresTitle: "Faster booking for customers and clearer management for stations",
+    featuresDescription: "Everything the customer and station owner need in one smooth flow from map to confirmation and notifications.",
+    features: [
+      { title: "Fast booking", desc: "Choose the station, service, and time from the map in clear steps.", icon: Clock },
+      { title: "Live location", desc: "See the nearest stations and their details before booking.", icon: MapPin },
+      { title: "Automatic WhatsApp", desc: "Instant notifications for customers and station owners after every action.", icon: MessageSquare },
+      { title: "Secure and clear", desc: "Clear confirmations, direct cancellation, and easier booking tracking.", icon: Shield },
+      { title: "Multiple services", desc: "Every station shows its services, prices, and discounts clearly.", icon: Droplets },
+      { title: "Smart management", desc: "A control panel for bookings, revenue, and alerts.", icon: Zap },
+    ],
+    ownersBadge: "For station owners",
+    ownersTitle1: "Manage your station",
+    ownersTitle2: "professionally",
+    ownersDescription: "Create your account, add your station location, define services and prices, and receive map bookings with instant WhatsApp approvals.",
+    ownersList: [
+      "Show your station directly on the map",
+      "Manage services, prices, and working hours",
+      "WhatsApp alerts for booking, confirmation, and cancellation",
+      "A dashboard for revenue and performance",
+    ],
+    howBadge: "Simple steps",
+    howTitle: "How Washlly works",
+    howDescription: "Only three steps from choosing a station to receiving a clean car.",
+    howSteps: [
+      { title: "Choose the station", desc: "Open the map and select the nearest or best station for you." },
+      { title: "Choose service and time", desc: "Review prices and services, then choose the day and time that fit you." },
+      { title: "Confirm and get notified", desc: "The request goes to the station owner and you receive the result on WhatsApp." },
+    ],
+    ctaTitle1: "Ready to try",
+    ctaTitle2: "Washlly",
+    ctaDescription: "Whether you are a customer who wants faster booking or a station owner who wants better management, everything is ready now.",
+    bookNow: "Book now",
+    footerDescription: "A platform connecting car owners with wash stations through easy booking, clear follow-up, and complete management.",
+    quickLinks: "Quick links",
+    contactUs: "Contact us",
+    links: ["Features", "Station owners", "How it works", "Map"],
+    copyright: "All rights reserved.",
+    dashboardLabel: "Station dashboard",
+    bookingsToday: "Today's bookings",
+    revenueToday: "Today's revenue",
+    rating: "Rating",
+    latestBookings: "Latest bookings",
+    confirmed: "Confirmed",
+    pending: "Pending",
+    completed: "Completed",
+    newBooking: "New booking!",
+    fullWash: "Full wash",
+    now: "Now",
+  },
+  ku: {
+    badge: "پلاتفۆرمی زیرەکی شۆردنی ئۆتۆمبێل",
+    heroTitle1: "ئۆتۆمبێلەکەت شایەنی",
+    heroTitle2: "چاودێری تایبەتە",
+    heroDescription: "چند چرکەیەکدا کاتی شۆردن حجز بکە. نزیکترین وێستگە هەڵبژێرە، خزمەتگوزارییەکە دیاری بکە و بێ چاوەڕوانی ئۆتۆمبێلەکەت پاک وەرگرە.",
+    exploreStations: "وێستگە نزیکەکان ببینە",
+    registerStation: "وێستگەکەت تۆمار بکە",
+    howItWorksButton: "چۆن کار دەکات؟",
+    stats: [
+      { value: "50+", label: "وێستگەی بەردەست" },
+      { value: "1,200+", label: "حجزی تەواوبوو" },
+      { value: "98%", label: "ڕازیبوونی کڕیار" },
+      { value: "3", label: "چرکە بۆ حجز" },
+    ],
+    featuresBadge: "بۆچی واشللی",
+    featuresTitle: "حجزی خێراتر بۆ کڕیار و بەڕێوەبردنی ڕوونتر بۆ وێستگە",
+    featuresDescription: "هەموو ئەوەی کڕیار و خاوەن وێستگە پێویستیانە لە یەک ڕێگادا لە نەخشە تا پشتڕاستکردنەوە و ئاگادارکردنەوە.",
+    features: [
+      { title: "حجزی خێرا", desc: "وێستگە و خزمەتگوزاری و کات لەسەر نەخشە بە هەنگاوە ڕوونەکان هەڵبژێرە.", icon: Clock },
+      { title: "شوێنی ڕاستەوخۆ", desc: "وێستگە نزیکەکان و وردەکارییەکانیان پێش حجز ببینە.", icon: MapPin },
+      { title: "واتساپی خۆکار", desc: "ئاگادارکردنەوەی خێرا بۆ کڕیار و خاوەن وێستگە دوای هەر کردارێک.", icon: MessageSquare },
+      { title: "پاراستن و ڕوونی", desc: "پشتڕاستکردنەوەی ڕوون، هەڵوەشاندنەوەی ڕاستەوخۆ، و شوێنکەوتنی ئاسانتر.", icon: Shield },
+      { title: "خزمەتگوزاریی جۆراوجۆر", desc: "هەر وێستگەیەک خزمەتگوزاری و نرخ و داشکاندنی خۆی بە ڕوونی پیشان دەدات.", icon: Droplets },
+      { title: "بەڕێوەبردنی زیرەک", desc: "داشبۆردێک بۆ حجز و داهات و ئاگادارکردنەوە.", icon: Zap },
+    ],
+    ownersBadge: "بۆ خاوەن وێستگەکان",
+    ownersTitle1: "وێستگەکەت بەڕێوە بەرە",
+    ownersTitle2: "بە شێوەیەکی پیشەیی",
+    ownersDescription: "هەژمارەکەت دروست بکە، شوێنی وێستگە زیاد بکە، خزمەتگوزاری و نرخ دیاری بکە و حجزەکانی نەخشە وەرگرە لەگەڵ پشتڕاستکردنەوەی خێرای واتساپ.",
+    ownersList: [
+      "پیشاندانی وێستگەکەت ڕاستەوخۆ لەسەر نەخشە",
+      "بەڕێوەبردنی خزمەتگوزاری و نرخ و کاتی کار",
+      "ئاگادارکردنەوەی واتساپ بۆ حجز و پشتڕاستکردنەوە و هەڵوەشاندنەوە",
+      "داشبۆرد بۆ داهات و کارایی",
+    ],
+    howBadge: "هەنگاوە سادەکان",
+    howTitle: "Washlly چۆن کار دەکات",
+    howDescription: "تەنها سێ هەنگاو لە هەڵبژاردنی وێستگە تا وەرگرتنی ئۆتۆمبێلێکی پاک.",
+    howSteps: [
+      { title: "وێستگە هەڵبژێرە", desc: "نەخشە بکەرەوە و نزیکترین یان گونجاوترین وێستگە هەڵبژێرە." },
+      { title: "خزمەتگوزاری و کات هەڵبژێرە", desc: "نرخ و خزمەتگوزاری ببینە و ڕۆژ و کاتێک دیاری بکە کە بۆت گونجاوە." },
+      { title: "پشتڕاست بکە و ئاگاداربە", desc: "داواکارییەکە دەگاتە خاوەن وێستگە و تۆ لە واتساپ ئەنجامەکە وەردەگریت." },
+    ],
+    ctaTitle1: "ئامادەیت بۆ تاقیکردنەوەی",
+    ctaTitle2: "Washlly",
+    ctaDescription: "ئەگەر کڕیاری خێراتر دەوێت یان خاوەن وێستگەیەکی بەڕێوەبردنی باشتر، هەموو شتێک ئامادەیە.",
+    bookNow: "ئێستا حجز بکە",
+    footerDescription: "پلاتفۆرمێک کە خاوەن ئۆتۆمبێل بە وێستگەکانی شۆردن دەبەستێتەوە بە حجزی ئاسان و شوێنکەوتنی ڕوون و بەڕێوەبردنی تەواو.",
+    quickLinks: "بەستەرە خێراکان",
+    contactUs: "پەیوەندیمان پێوە بکە",
+    links: ["تایبەتمەندییەکان", "خاوەن وێستگەکان", "چۆن کار دەکات", "نەخشە"],
+    copyright: "هەموو مافەکان پارێزراون.",
+    dashboardLabel: "داشبۆردی وێستگە",
+    bookingsToday: "حجزەکانی ئەمڕۆ",
+    revenueToday: "داهاتی ئەمڕۆ",
+    rating: "هەڵسەنگاندن",
+    latestBookings: "دوایین حجزەکان",
+    confirmed: "پشتڕاستکراوە",
+    pending: "چاوەڕوان",
+    completed: "تەواوبوو",
+    newBooking: "حجزی نوێ!",
+    fullWash: "شۆردنی تەواو",
+    now: "ئێستا",
+  },
+  tr: {
+    badge: "Akıllı araç yıkama platformu",
+    heroTitle1: "Aracınız",
+    heroTitle2: "özel bakımı hak ediyor",
+    heroDescription: "Araba yıkamanızı saniyeler içinde ayırtın. En yakın istasyonu seçin, uygun hizmeti belirleyin ve aracınızı beklemeden temiz teslim alın.",
+    exploreStations: "Yakındaki istasyonları keşfet",
+    registerStation: "İstasyonunu kaydet",
+    howItWorksButton: "Nasıl çalışır?",
+    stats: [
+      { value: "50+", label: "Müsait istasyon" },
+      { value: "1,200+", label: "Tamamlanan rezervasyon" },
+      { value: "98%", label: "Müşteri memnuniyeti" },
+      { value: "3", label: "Rezervasyon saniyesi" },
+    ],
+    featuresBadge: "Neden Washlly",
+    featuresTitle: "Müşteri için daha hızlı rezervasyon, istasyon için daha net yönetim",
+    featuresDescription: "Haritadan onaya ve bildirime kadar müşteri ve istasyon sahibi için gereken her şey tek akışta.",
+    features: [
+      { title: "Hızlı rezervasyon", desc: "İstasyonu, hizmeti ve saati harita üzerinden net adımlarla seçin.", icon: Clock },
+      { title: "Canlı konum", desc: "Rezervasyon öncesi size en yakın istasyonları ve detaylarını görün.", icon: MapPin },
+      { title: "Otomatik WhatsApp", desc: "Her işlemden sonra müşteri ve istasyon sahibine anında bildirim gider.", icon: MessageSquare },
+      { title: "Güvenli ve net", desc: "Net onaylar, doğrudan iptal ve daha kolay rezervasyon takibi.", icon: Shield },
+      { title: "Birden fazla hizmet", desc: "Her istasyon hizmetlerini, fiyatlarını ve indirimlerini açıkça gösterir.", icon: Droplets },
+      { title: "Akıllı yönetim", desc: "Rezervasyonlar, gelirler ve bildirimler için kontrol paneli.", icon: Zap },
+    ],
+    ownersBadge: "İstasyon sahipleri için",
+    ownersTitle1: "İstasyonunu yönet",
+    ownersTitle2: "tam profesyonellikle",
+    ownersDescription: "Hesabını oluştur, istasyon konumunu ekle, hizmetlerini ve fiyatlarını belirle, anlık WhatsApp onaylarıyla harita rezervasyonlarını al.",
+    ownersList: [
+      "İstasyonun haritada hemen görünsün",
+      "Hizmetleri, fiyatları ve çalışma saatlerini yönet",
+      "Rezervasyon, onay ve iptal için WhatsApp uyarıları",
+      "Gelir ve performans için yönetim paneli",
+    ],
+    howBadge: "Basit adımlar",
+    howTitle: "Washlly nasıl çalışır",
+    howDescription: "İstasyon seçiminden temiz aracınızı almaya kadar sadece üç adım.",
+    howSteps: [
+      { title: "İstasyonu seç", desc: "Haritayı aç ve sana en yakın ya da en uygun istasyonu seç." },
+      { title: "Hizmet ve saati seç", desc: "Fiyatları ve hizmetleri incele, sonra sana uygun gün ve saati belirle." },
+      { title: "Onayla ve bildirimi al", desc: "Talep istasyon sahibine gider ve sonucu WhatsApp üzerinden alırsın." },
+    ],
+    ctaTitle1: "Denemeye hazır mısın",
+    ctaTitle2: "Washlly",
+    ctaDescription: "İster daha hızlı rezervasyon isteyen müşteri olun ister daha iyi yönetim isteyen istasyon sahibi, her şey hazır.",
+    bookNow: "Şimdi ayırt",
+    footerDescription: "Araç sahiplerini yıkama istasyonlarıyla kolay rezervasyon, net takip ve tam yönetimle buluşturan platform.",
+    quickLinks: "Hızlı bağlantılar",
+    contactUs: "Bize ulaşın",
+    links: ["Özellikler", "İstasyon sahipleri", "Nasıl çalışır", "Harita"],
+    copyright: "Tüm hakları saklıdır.",
+    dashboardLabel: "İstasyon paneli",
+    bookingsToday: "Bugünkü rezervasyonlar",
+    revenueToday: "Bugünkü gelir",
+    rating: "Puan",
+    latestBookings: "Son rezervasyonlar",
+    confirmed: "Onaylandı",
+    pending: "Beklemede",
+    completed: "Tamamlandı",
+    newBooking: "Yeni rezervasyon!",
+    fullWash: "Tam yıkama",
+    now: "Şimdi",
+  },
+} as const;
+
+const fadeUp = {
+  initial: { opacity: 0, y: 24 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true },
+  transition: { duration: 0.6 },
 };
 
-/* ─── Floating Bubbles Background ─── */
-const Bubbles = () => (
-  <div className="absolute inset-0 overflow-hidden pointer-events-none">
-    {[...Array(8)].map((_, i) => (
-      <div
-        key={i}
-        className="absolute rounded-full bg-ocean-200/20"
-        style={{
-          width: `${12 + Math.random() * 30}px`,
-          height: `${12 + Math.random() * 30}px`,
-          left: `${10 + Math.random() * 80}%`,
-          bottom: `-${10 + Math.random() * 30}px`,
-          animation: `bubble ${7 + Math.random() * 6}s ease-in infinite`,
-          animationDelay: `${Math.random() * 5}s`,
-        }}
-      />
-    ))}
-  </div>
-);
-
-/* ─── Wave Divider SVG ─── */
-const WaveDivider = ({ flip = false, color = "hsl(var(--ocean-50))" }: { flip?: boolean; color?: string }) => (
-  <div className={`w-full overflow-hidden leading-[0] ${flip ? "rotate-180" : ""}`}>
-    <svg viewBox="0 0 1440 120" preserveAspectRatio="none" className="w-full h-[60px] md:h-[100px]">
-      <path
-        d="M0,40 C360,100 720,0 1080,60 C1260,90 1380,40 1440,50 L1440,120 L0,120 Z"
-        fill={color}
-      />
-    </svg>
-  </div>
-);
-
-/* ─── Sparkle Effect ─── */
-const SparkleEffect = () => (
-  <div className="absolute inset-0 overflow-hidden pointer-events-none">
-    {[...Array(6)].map((_, i) => (
-      <Sparkles
-        key={i}
-        className="absolute text-sparkle animate-sparkle"
-        style={{
-          width: "16px",
-          top: `${15 + Math.random() * 70}%`,
-          left: `${5 + Math.random() * 90}%`,
-          animationDelay: `${Math.random() * 3}s`,
-        }}
-      />
-    ))}
-  </div>
-);
-
-/* ─── Feature Card ─── */
-const FeatureCard = ({ icon, title, desc, delay = 0 }: { icon: React.ReactNode; title: string; desc: string; delay?: number }) => {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-50px" });
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 30, scale: 0.95 }}
-      animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
-      transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={{ y: -6, boxShadow: "0 20px 40px -12px hsl(var(--ocean-500) / 0.15)" }}
-      className="group relative bg-card rounded-2xl p-6 border border-border hover:border-ocean-300 transition-colors duration-300"
-    >
-      <div className="w-12 h-12 rounded-xl bg-ocean-100 flex items-center justify-center mb-4 group-hover:bg-ocean-200 transition-colors">
-        {icon}
-      </div>
-      <h3 className="text-lg font-bold font-cairo text-foreground mb-2">{title}</h3>
-      <p className="text-muted-foreground text-sm leading-relaxed">{desc}</p>
-    </motion.div>
-  );
-};
-
-/* ─── Stat Counter ─── */
-const StatCounter = ({ value, label, suffix = "" }: { value: number; label: string; suffix?: string }) => {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true });
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    if (!isInView) return;
-    let start = 0;
-    const dur = 1800;
-    const step = (timestamp: number) => {
-      if (!start) start = timestamp;
-      const progress = Math.min((timestamp - start) / dur, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setCount(Math.floor(eased * value));
-      if (progress < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }, [isInView, value]);
-
-  return (
-    <div ref={ref} className="text-center">
-      <p className="text-3xl md:text-4xl font-black font-cairo text-ocean-500">
-        {count.toLocaleString()}{suffix}
-      </p>
-      <p className="text-muted-foreground text-sm mt-1">{label}</p>
-    </div>
-  );
-};
-
-/* ─── Step Component ─── */
-const Step = ({ number, title, desc, delay = 0 }: { number: number; title: string; desc: string; delay?: number }) => {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-50px" });
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, x: -20 }}
-      animate={isInView ? { opacity: 1, x: 0 } : {}}
-      transition={{ duration: 0.5, delay }}
-      className="flex gap-4 items-start"
-    >
-      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-ocean-500 text-primary-foreground flex items-center justify-center font-bold font-cairo text-lg shadow-lg shadow-ocean-500/30">
-        {number}
-      </div>
-      <div>
-        <h4 className="font-bold font-cairo text-foreground text-base mb-1">{title}</h4>
-        <p className="text-muted-foreground text-sm leading-relaxed">{desc}</p>
-      </div>
-    </motion.div>
-  );
-};
-
-/* ═══════════════════════ MAIN LANDING PAGE ═══════════════════════ */
 const LandingPage = () => {
   const navigate = useNavigate();
-  const heroRef = useRef(null);
-  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
-  const heroY = useTransform(scrollYProgress, [0, 1], [0, 150]);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
+  const { language, isRtl } = useAppLanguage();
+  const t = texts[language];
 
   return (
-    <div className="bg-background overflow-x-hidden" dir="rtl">
-
-      {/* ─── Hero Section ─── */}
-      <section ref={heroRef} className="relative min-h-[80vh] flex items-center justify-center pt-8 overflow-hidden">
-        {/* Background gradient */}
-        <div className="absolute inset-0 bg-gradient-to-b from-ocean-50 via-background to-background" />
-
-        {/* Animated waves background */}
-        <div className="absolute bottom-0 left-0 right-0 h-64 overflow-hidden">
-          <svg viewBox="0 0 1440 320" className="absolute bottom-0 w-full animate-wave-slow opacity-20" preserveAspectRatio="none">
-            <path fill="hsl(var(--ocean-300))" d="M0,192L48,186.7C96,181,192,171,288,186.7C384,203,480,245,576,250.7C672,256,768,224,864,192C960,160,1056,128,1152,133.3C1248,139,1344,181,1392,202.7L1440,224L1440,320L0,320Z" />
-          </svg>
-          <svg viewBox="0 0 1440 320" className="absolute bottom-0 w-full animate-wave-medium opacity-15" preserveAspectRatio="none">
-            <path fill="hsl(var(--ocean-400))" d="M0,256L48,240C96,224,192,192,288,181.3C384,171,480,181,576,202.7C672,224,768,256,864,261.3C960,267,1056,245,1152,224C1248,203,1344,181,1392,170.7L1440,160L1440,320L0,320Z" />
-          </svg>
+    <div className="bg-background overflow-x-hidden" dir={isRtl ? "rtl" : "ltr"}>
+      <section className="relative overflow-hidden bg-gradient-to-b from-ocean-50 via-background to-background">
+        <div className="absolute inset-0 opacity-60">
+          <div className="absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-ocean-200 blur-3xl" />
+          <div className="absolute bottom-0 left-0 h-64 w-64 rounded-full bg-ocean-100 blur-3xl" />
+          <div className="absolute right-0 top-1/4 h-56 w-56 rounded-full bg-sky-100 blur-3xl" />
         </div>
 
-        <Bubbles />
-        <SparkleEffect />
-
-        <motion.div style={{ y: heroY, opacity: heroOpacity }} className="relative z-10 max-w-4xl mx-auto px-4 text-center">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div className="inline-flex items-center gap-2 bg-ocean-100 border border-ocean-200 rounded-full px-4 py-1.5 mb-6">
-              <Sparkles className="h-4 w-4 text-ocean-500" />
-              <span className="text-sm font-medium text-ocean-700">منصة ذكية لغسيل السيارات</span>
+        <div className="relative mx-auto max-w-7xl px-4 py-20 md:py-28">
+          <motion.div {...fadeUp} className="mx-auto max-w-4xl text-center">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-ocean-200 bg-ocean-100 px-4 py-2 text-sm font-medium text-ocean-700">
+              <Sparkles className="h-4 w-4" />
+              {t.badge}
             </div>
-          </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.15 }}
-            className="text-4xl sm:text-5xl md:text-7xl font-black font-cairo text-foreground leading-tight mb-6"
-          >
-            سيارتك تستحق
-            <span className="block bg-gradient-to-l from-ocean-400 via-ocean-500 to-ocean-600 bg-clip-text text-transparent">
-              عناية استثنائية
-            </span>
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
-            className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed"
-          >
-            احجز موعد غسيل سيارتك عبر واتساب بثوانٍ معدودة. اختر المحطة الأقرب، 
-            حدد الخدمة المناسبة، واستلم سيارتك نظيفة بدون أي انتظار.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.45 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center items-center"
-          >
-            <Button
-              size="lg"
-              onClick={() => navigate("/map")}
-              className="bg-ocean-500 hover:bg-ocean-600 text-white text-base px-8 py-6 rounded-2xl shadow-xl shadow-ocean-500/30 hover:shadow-ocean-500/40 transition-all"
-            >
-              <MapPin className="h-5 w-5 ml-2" />
-              اكتشف المحطات القريبة
-            </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => navigate("/owner")}
-                className="text-ocean-600 border-ocean-200 hover:bg-ocean-50 text-base px-8 py-6 rounded-2xl"
-              >
-                <Users className="h-5 w-5 ml-2" />
-                سجل محطتك الآن
+            <h1 className="mb-6 text-4xl font-black leading-tight text-foreground sm:text-5xl md:text-7xl">
+              {t.heroTitle1}
+              <span className="block bg-gradient-to-l from-ocean-400 via-ocean-500 to-ocean-600 bg-clip-text text-transparent">
+                {t.heroTitle2}
+              </span>
+            </h1>
+            <p className="mx-auto mb-10 max-w-3xl text-lg leading-relaxed text-muted-foreground md:text-xl">
+              {t.heroDescription}
+            </p>
+            <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <Button size="lg" onClick={() => navigate("/map")} className="rounded-2xl bg-ocean-500 px-8 py-6 text-base text-white shadow-xl shadow-ocean-500/30 hover:bg-ocean-600">
+                <MapPin className="ml-2 h-5 w-5" />
+                {t.exploreStations}
               </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => {
-                const el = document.getElementById("how-it-works");
-                el?.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="text-ocean-600 border-ocean-200 hover:bg-ocean-50 text-base px-8 py-6 rounded-2xl"
-            >
-              كيف يعمل؟
-              <ArrowLeft className="h-4 w-4 mr-2" />
-            </Button>
-          </motion.div>
-
-          {/* Scroll indicator */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.2 }}
-            className="mt-16"
-          >
-            <ChevronDown className="h-6 w-6 text-ocean-300 mx-auto animate-bounce" />
-          </motion.div>
-        </motion.div>
-      </section>
-
-      {/* ─── Stats Bar ─── */}
-      <Section className="relative z-10 -mt-8 mb-12">
-        <div className="max-w-4xl mx-auto px-4">
-          <div className="bg-card rounded-2xl shadow-xl border border-border p-8 grid grid-cols-2 md:grid-cols-4 gap-6">
-            <StatCounter value={50} suffix="+" label="محطة متاحة" />
-            <StatCounter value={1200} suffix="+" label="حجز مكتمل" />
-            <StatCounter value={98} suffix="%" label="رضا العملاء" />
-            <StatCounter value={3} label="ثوانٍ للحجز" />
-          </div>
-        </div>
-      </Section>
-
-      {/* ─── Features Section ─── */}
-      <section id="features" className="py-20 relative">
-        <div className="max-w-7xl mx-auto px-4">
-          <Section className="text-center mb-14">
-            <div className="inline-flex items-center gap-2 bg-ocean-100 border border-ocean-200 rounded-full px-4 py-1.5 mb-4">
-              <Zap className="h-4 w-4 text-ocean-500" />
-              <span className="text-sm font-medium text-ocean-700">لماذا واشلي؟</span>
+              <Button variant="outline" size="lg" onClick={() => navigate("/owner")} className="rounded-2xl border-ocean-200 px-8 py-6 text-base text-ocean-700 hover:bg-ocean-50">
+                <Users className="ml-2 h-5 w-5" />
+                {t.registerStation}
+              </Button>
+              <Button variant="ghost" size="lg" onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })} className="rounded-2xl px-6 py-6 text-base text-ocean-700">
+                {t.howItWorksButton}
+                <ArrowLeft className="mr-2 h-4 w-4" />
+              </Button>
             </div>
-            <h2 className="text-3xl md:text-4xl font-black font-cairo text-foreground mb-4">مميزات تجعلنا مختلفين</h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">نوفر تجربة متكاملة لأصحاب السيارات ومحطات الغسيل</p>
-          </Section>
+          </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <FeatureCard icon={<MessageSquare className="h-6 w-6 text-ocean-500" />} title="حجز عبر واتساب" desc="احجز موعدك مباشرة عبر واتساب بمحادثة ذكية تفاعلية. بدون تحميل تطبيقات إضافية." delay={0} />
-            <FeatureCard icon={<MapPin className="h-6 w-6 text-ocean-500" />} title="أقرب محطة لك" desc="خريطة تفاعلية تعرض جميع محطات الغسيل القريبة مع تفاصيل الخدمات والأسعار." delay={0.1} />
-            <FeatureCard icon={<Clock className="h-6 w-6 text-ocean-500" />} title="بدون انتظار" desc="حدد موعدك مسبقاً واستلم سيارتك جاهزة. لا طوابير ولا تأخير." delay={0.2} />
-            <FeatureCard icon={<Shield className="h-6 w-6 text-ocean-500" />} title="خدمة مضمونة" desc="محطات مختارة بعناية مع تقييمات العملاء لضمان أعلى مستوى جودة." delay={0.3} />
-            <FeatureCard icon={<Bell className="h-6 w-6 text-ocean-500" />} title="تذكير تلقائي" desc="إشعارات تذكيرية قبل موعدك لضمان عدم نسيان حجزك." delay={0.4} />
-            <FeatureCard icon={<Droplets className="h-6 w-6 text-ocean-500" />} title="خدمات متنوعة" desc="من الغسيل الخارجي البسيط إلى التنظيف الداخلي الشامل والتلميع." delay={0.5} />
+          <motion.div {...fadeUp} transition={{ delay: 0.15, duration: 0.6 }} className="mx-auto mt-16 grid max-w-5xl grid-cols-2 gap-4 rounded-[2rem] border border-border/60 bg-card/80 p-6 shadow-xl shadow-ocean-500/10 backdrop-blur md:grid-cols-4">
+            {t.stats.map((item) => (
+              <div key={item.label} className="text-center">
+                <p className="text-3xl font-black text-ocean-500 md:text-5xl">{item.value}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{item.label}</p>
+              </div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      <section className="py-20">
+        <div className="mx-auto max-w-7xl px-4">
+          <motion.div {...fadeUp} className="mb-12 text-center">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-ocean-200 bg-ocean-100 px-4 py-1.5 text-sm font-medium text-ocean-700">
+              <Waves className="h-4 w-4" />
+              {t.featuresBadge}
+            </div>
+            <h2 className="mb-4 text-3xl font-black text-foreground md:text-4xl">{t.featuresTitle}</h2>
+            <p className="mx-auto max-w-3xl text-muted-foreground">{t.featuresDescription}</p>
+          </motion.div>
+
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {t.features.map((feature, index) => (
+              <motion.div key={feature.title} {...fadeUp} transition={{ duration: 0.5, delay: index * 0.06 }} className="rounded-3xl border border-border bg-card p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-ocean-100 text-ocean-600">
+                  <feature.icon className="h-5 w-5" />
+                </div>
+                <h3 className="mb-2 text-lg font-bold text-foreground">{feature.title}</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">{feature.desc}</p>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
 
-      <WaveDivider color="hsl(var(--ocean-50))" />
-
-      {/* ─── For Car Owners ─── */}
-      <section id="car-owners" className="py-20 bg-ocean-50 relative">
-        <SparkleEffect />
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <Section>
-              <div className="inline-flex items-center gap-2 bg-ocean-200/60 rounded-full px-4 py-1.5 mb-4">
-                <Car className="h-4 w-4 text-ocean-600" />
-                <span className="text-sm font-medium text-ocean-700">لأصحاب السيارات</span>
+      <section className="bg-ocean-900 py-20 text-white">
+        <div className="mx-auto grid max-w-7xl gap-12 px-4 lg:grid-cols-2">
+          <motion.div {...fadeUp} className="order-2 lg:order-1">
+            <div className="rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur">
+              <div className="mb-5 flex items-center gap-3 rounded-2xl bg-ocean-600 px-4 py-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
+                  <BarChart3 className="h-5 w-5 text-white" />
+                </div>
+                <span className="font-bold">{t.dashboardLabel}</span>
               </div>
-              <h2 className="text-3xl md:text-4xl font-black font-cairo text-foreground mb-6">
-                غسيل سيارتك
-                <span className="text-ocean-500"> أسهل من أي وقت</span>
-              </h2>
-              <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
                 {[
-                  { icon: <MessageSquare className="h-5 w-5" />, text: "أرسل رسالة واتساب واحجز في ثوانٍ" },
-                  { icon: <MapPin className="h-5 w-5" />, text: "اعثر على أقرب محطة بسهولة عبر الخريطة" },
-                  { icon: <Clock className="h-5 w-5" />, text: "اختر الوقت المناسب لك بدون انتظار" },
-                  { icon: <Star className="h-5 w-5" />, text: "خدمات متنوعة وأسعار شفافة" },
-                  { icon: <Bell className="h-5 w-5" />, text: "تذكيرات تلقائية قبل الموعد" },
-                ].map((item, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: 20 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.1 }}
-                    className="flex items-center gap-3 bg-card rounded-xl px-4 py-3 border border-border"
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-ocean-100 flex items-center justify-center text-ocean-500 flex-shrink-0">
-                      {item.icon}
-                    </div>
-                    <span className="text-foreground text-sm font-medium">{item.text}</span>
-                  </motion.div>
+                  { label: t.bookingsToday, value: "12" },
+                  { label: t.revenueToday, value: "180K" },
+                  { label: t.rating, value: "4.8" },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl bg-white/10 p-4 text-center">
+                    <p className="text-2xl font-black text-white">{item.value}</p>
+                    <p className="mt-1 text-xs text-ocean-100">{item.label}</p>
+                  </div>
                 ))}
               </div>
-            </Section>
-
-            <Section delay={0.2} className="flex justify-center">
-              {/* Decorative phone mockup */}
-              <div className="relative">
-                <div className="w-64 h-[500px] bg-ocean-800 rounded-[2.5rem] p-3 shadow-2xl shadow-ocean-900/40 relative overflow-hidden">
-                  {/* Phone screen */}
-                  <div className="w-full h-full rounded-[2rem] bg-gradient-to-b from-ocean-600 to-ocean-700 overflow-hidden relative">
-                    {/* Status bar */}
-                    <div className="flex justify-between items-center px-6 pt-4 pb-2">
-                      <span className="text-white/80 text-[10px]">9:41</span>
-                      <div className="w-20 h-5 bg-ocean-900 rounded-full" />
-                      <span className="text-white/80 text-[10px]">100%</span>
-                    </div>
-                    {/* WhatsApp-like chat */}
-                    <div className="px-3 pt-2 space-y-2">
-                      <div className="bg-white/20 backdrop-blur rounded-2xl rounded-tr-sm px-3 py-2 max-w-[80%] mr-auto">
-                        <p className="text-white text-xs">مرحباً! أريد حجز غسيل لسيارتي 🚗</p>
-                      </div>
-                      <div className="bg-ocean-400/50 backdrop-blur rounded-2xl rounded-tl-sm px-3 py-2 max-w-[85%] ml-auto">
-                        <p className="text-white text-xs">أهلاً بك! 👋 اختر المحطة:</p>
-                        <div className="mt-1 space-y-1">
-                          {["محطة الكرادة", "محطة المنصور", "محطة الزيونة"].map((s, i) => (
-                            <div key={i} className="bg-white/15 rounded-lg px-2 py-1 text-[10px] text-white/90">{i + 1}. {s}</div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="bg-white/20 backdrop-blur rounded-2xl rounded-tr-sm px-3 py-2 max-w-[60%] mr-auto">
-                        <p className="text-white text-xs">1</p>
-                      </div>
-                      <div className="bg-ocean-400/50 backdrop-blur rounded-2xl rounded-tl-sm px-3 py-2 max-w-[85%] ml-auto">
-                        <p className="text-white text-xs">تم حجزك بنجاح! ✅</p>
-                        <p className="text-white/70 text-[10px] mt-1">📅 الأحد 20 مارس - 10:00 ص</p>
-                      </div>
-                    </div>
-                    {/* Sparkle overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-ocean-800/30 to-transparent pointer-events-none" />
+              <div className="mt-5 rounded-2xl bg-white/5 p-4">
+                <p className="mb-3 text-sm font-bold">{t.latestBookings}</p>
+                {[
+                  { name: "أحمد م.", service: t.fullWash, status: t.confirmed },
+                  { name: "سارة ع.", service: "Exterior", status: t.pending },
+                  { name: "محمد ك.", service: "Polish", status: t.completed },
+                ].map((booking, index) => (
+                  <div key={`${booking.name}-${index}`} className="flex items-center justify-between border-b border-white/10 py-3 last:border-b-0">
+                    <span className="text-sm">{booking.name}</span>
+                    <span className="text-xs text-ocean-100">{booking.service}</span>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-[11px]">{booking.status}</span>
                   </div>
-                </div>
-                {/* Floating decorations */}
-                <div className="absolute -top-4 -right-4 w-16 h-16 bg-ocean-200 rounded-2xl rotate-12 animate-float opacity-60" />
-                <div className="absolute -bottom-3 -left-3 w-12 h-12 bg-sparkle/30 rounded-full animate-float" style={{ animationDelay: "2s" }} />
+                ))}
               </div>
-            </Section>
-          </div>
-        </div>
-      </section>
-
-      <WaveDivider flip color="hsl(var(--ocean-50))" />
-
-      {/* ─── For Stations ─── */}
-      <section id="stations" className="py-20 relative">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <Section delay={0.1} className="order-2 lg:order-1 flex justify-center">
-              {/* Dashboard mockup */}
-              <div className="relative w-full max-w-md">
-                <div className="bg-card rounded-2xl border border-border shadow-2xl shadow-ocean-500/10 overflow-hidden">
-                  {/* Header */}
-                  <div className="bg-ocean-600 px-5 py-3 flex items-center gap-3">
-                    <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                      <BarChart3 className="h-4 w-4 text-white" />
-                    </div>
-                    <span className="text-white font-bold text-sm font-cairo">لوحة تحكم المحطة</span>
-                  </div>
-                  {/* Stats */}
-                  <div className="p-4 grid grid-cols-3 gap-3">
-                    {[
-                      { label: "حجوزات اليوم", val: "12" },
-                      { label: "إيرادات اليوم", val: "180K" },
-                      { label: "تقييم", val: "4.8⭐" },
-                    ].map((s, i) => (
-                      <div key={i} className="bg-ocean-50 rounded-xl p-3 text-center">
-                        <p className="text-ocean-600 font-bold font-cairo text-lg">{s.val}</p>
-                        <p className="text-muted-foreground text-[10px]">{s.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Recent bookings */}
-                  <div className="px-4 pb-4">
-                    <p className="text-xs font-bold text-foreground mb-2 font-cairo">آخر الحجوزات</p>
-                    {[
-                      { name: "أحمد م.", service: "غسيل شامل", status: "مؤكد" },
-                      { name: "سارة ع.", service: "غسيل خارجي", status: "معلق" },
-                      { name: "محمد ك.", service: "تلميع", status: "مكتمل" },
-                    ].map((b, i) => (
-                      <div key={i} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0 text-xs">
-                        <span className="font-medium text-foreground">{b.name}</span>
-                        <span className="text-muted-foreground">{b.service}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${b.status === "مؤكد" ? "bg-ocean-100 text-ocean-700" : b.status === "معلق" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
-                          {b.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+              <div className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 py-3">
+                <Bell className="h-4 w-4 text-yellow-300" />
+                <div>
+                  <p className="text-sm font-bold">{t.newBooking}</p>
+                  <p className="text-xs text-ocean-100">{t.fullWash} - {t.now}</p>
                 </div>
-                {/* Floating notifications */}
-                <motion.div
-                  initial={{ opacity: 0, x: 40 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.5 }}
-                  className="absolute -left-6 top-10 bg-card border border-border rounded-xl p-3 shadow-xl flex items-center gap-2 max-w-[180px]"
-                >
-                  <div className="w-7 h-7 bg-ocean-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Bell className="h-3.5 w-3.5 text-ocean-500" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-foreground">حجز جديد!</p>
-                    <p className="text-[9px] text-muted-foreground">غسيل شامل — الآن</p>
-                  </div>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div {...fadeUp} className="order-1 lg:order-2">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-sm font-medium text-ocean-100">
+              <Users className="h-4 w-4" />
+              {t.ownersBadge}
+            </div>
+            <h2 className="mb-6 text-3xl font-black md:text-5xl">
+              {t.ownersTitle1}
+              <span className="text-ocean-300"> {t.ownersTitle2}</span>
+            </h2>
+            <p className="mb-8 leading-relaxed text-ocean-100">{t.ownersDescription}</p>
+            <div className="space-y-3">
+              {t.ownersList.map((item, index) => (
+                <motion.div key={item} {...fadeUp} transition={{ duration: 0.45, delay: index * 0.06 }} className="flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 text-ocean-300" />
+                  <span className="text-sm text-white">{item}</span>
                 </motion.div>
-              </div>
-            </Section>
+              ))}
+            </div>
+            <Button size="lg" onClick={() => navigate("/owner")} className="mt-8 rounded-2xl bg-white px-8 py-6 text-base text-ocean-700 hover:bg-ocean-50">
+              {t.registerStation}
+              <ArrowLeft className="mr-2 h-4 w-4" />
+            </Button>
+          </motion.div>
+        </div>
+      </section>
 
-            <Section className="order-1 lg:order-2">
-              <div className="inline-flex items-center gap-2 bg-ocean-100 border border-ocean-200 rounded-full px-4 py-1.5 mb-4">
-                <Users className="h-4 w-4 text-ocean-600" />
-                <span className="text-sm font-medium text-ocean-700">لأصحاب المحطات</span>
-              </div>
-              <h2 className="text-3xl md:text-4xl font-black font-cairo text-foreground mb-6">
-                أدر محطتك
-                <span className="text-ocean-500"> باحترافية كاملة</span>
-              </h2>
-              <p className="text-muted-foreground mb-8 leading-relaxed">
-                لوحة تحكم ذكية تمنحك رؤية شاملة لحجوزاتك، إيراداتك، وخدماتك. 
-                استقبل الإشعارات فوراً وتابع أداء محطتك بسهولة.
-              </p>
-              <div className="space-y-3">
-                {[
-                  "لوحة تحكم شاملة بالإحصائيات والرسوم البيانية",
-                  "إشعارات فورية عبر واتساب لكل حجز جديد",
-                  "إدارة الخدمات والأسعار وساعات العمل",
-                  "تقارير مفصلة للإيرادات والأداء",
-                  "ظهور محطتك على خريطة التطبيق التفاعلية",
-                ].map((item, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -15 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.08 }}
-                    className="flex items-center gap-3"
-                  >
-                    <CheckCircle className="h-5 w-5 text-ocean-500 flex-shrink-0" />
-                    <span className="text-foreground text-sm">{item}</span>
-                  </motion.div>
-                ))}
-              </div>
-              <div className="mt-8">
-                <Button
-                  size="lg"
-                  onClick={() => navigate("/owner")}
-                  className="bg-ocean-500 hover:bg-ocean-600 text-white px-8 py-6 rounded-2xl shadow-lg shadow-ocean-500/25"
-                >
-                  سجّل محطتك الآن
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                </Button>
-              </div>
-            </Section>
+      <section id="how-it-works" className="py-20">
+        <div className="mx-auto max-w-5xl px-4">
+          <motion.div {...fadeUp} className="mb-12 text-center">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-ocean-200 bg-ocean-100 px-4 py-1.5 text-sm font-medium text-ocean-700">
+              <Sparkles className="h-4 w-4" />
+              {t.howBadge}
+            </div>
+            <h2 className="mb-4 text-3xl font-black text-foreground md:text-4xl">{t.howTitle}</h2>
+            <p className="mx-auto max-w-2xl text-muted-foreground">{t.howDescription}</p>
+          </motion.div>
+
+          <div className="grid gap-5 md:grid-cols-3">
+            {t.howSteps.map((step, index) => (
+              <motion.div key={step.title} {...fadeUp} transition={{ duration: 0.5, delay: index * 0.07 }} className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-ocean-500 text-lg font-black text-white">
+                  {index + 1}
+                </div>
+                <h3 className="mb-2 text-lg font-bold text-foreground">{step.title}</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">{step.desc}</p>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
 
-      <WaveDivider color="hsl(var(--ocean-800))" />
-
-      {/* ─── How it Works ─── */}
-      <section id="how-it-works" className="py-20 bg-ocean-800 text-white relative overflow-hidden">
-        <Bubbles />
-        <div className="max-w-3xl mx-auto px-4 relative z-10">
-          <Section className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-white/10 rounded-full px-4 py-1.5 mb-4">
-              <Waves className="h-4 w-4 text-ocean-300" />
-              <span className="text-sm font-medium text-ocean-200">خطوات بسيطة</span>
+      <section className="py-20">
+        <div className="mx-auto max-w-4xl px-4">
+          <motion.div {...fadeUp} className="rounded-[2rem] border border-border bg-gradient-to-br from-ocean-50 to-card p-8 text-center shadow-xl shadow-ocean-500/10 md:p-12">
+            <h2 className="mb-4 text-3xl font-black text-foreground md:text-5xl">
+              {t.ctaTitle1} <span className="text-ocean-500">{t.ctaTitle2}</span>
+            </h2>
+            <p className="mx-auto mb-8 max-w-2xl text-muted-foreground">{t.ctaDescription}</p>
+            <div className="flex flex-col justify-center gap-4 sm:flex-row">
+              <Button size="lg" onClick={() => navigate("/map")} className="rounded-2xl bg-ocean-500 px-8 py-6 text-base text-white hover:bg-ocean-600">
+                <Car className="ml-2 h-5 w-5" />
+                {t.bookNow}
+              </Button>
+              <Button variant="outline" size="lg" onClick={() => navigate("/owner")} className="rounded-2xl border-ocean-200 px-8 py-6 text-base text-ocean-700 hover:bg-ocean-50">
+                <Users className="ml-2 h-5 w-5" />
+                {t.registerStation}
+              </Button>
             </div>
-            <h2 className="text-3xl md:text-4xl font-black font-cairo mb-4">كيف يعمل واشلي؟</h2>
-            <p className="text-ocean-200 max-w-lg mx-auto">ثلاث خطوات فقط تفصلك عن سيارة نظيفة ولامعة</p>
-          </Section>
-
-          <div className="space-y-8 max-w-md mx-auto">
-            <Step number={1} title="أرسل رسالة واتساب" desc="افتح واتساب وأرسل 'مرحبا' لرقمنا. البوت الذكي سيرحب بك ويعرض المحطات المتاحة." delay={0.1} />
-            <Step number={2} title="اختر المحطة والخدمة" desc="حدد المحطة الأقرب لك، اختر الخدمة المناسبة (غسيل خارجي، شامل، تلميع...)، ثم اختر الموعد." delay={0.2} />
-            <Step number={3} title="استلم سيارتك نظيفة!" desc="اذهب في الموعد المحدد، لا انتظار ولا طوابير. ستصلك رسالة تذكير قبل الموعد." delay={0.3} />
-          </div>
+          </motion.div>
         </div>
       </section>
 
-      <WaveDivider flip color="hsl(var(--ocean-800))" />
-
-      {/* ─── CTA Section ─── */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-ocean-50/50 to-background" />
-        <SparkleEffect />
-        <Section className="relative z-10 max-w-3xl mx-auto px-4 text-center">
-          <h2 className="text-3xl md:text-5xl font-black font-cairo text-foreground mb-6">
-            جاهز تجرب
-            <span className="text-ocean-500"> واشلي</span>؟
-          </h2>
-          <p className="text-muted-foreground text-lg mb-10 max-w-xl mx-auto leading-relaxed">
-            انضم لآلاف العملاء الذين يحجزون مواعيد غسيل سياراتهم بسهولة تامة. 
-            أو سجّل محطتك وابدأ باستقبال الحجوزات اليوم.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              size="lg"
-              onClick={() => navigate("/map")}
-              className="bg-ocean-500 hover:bg-ocean-600 text-white text-base px-10 py-6 rounded-2xl shadow-xl shadow-ocean-500/30 hover:shadow-ocean-500/40"
-            >
-              <Car className="h-5 w-5 ml-2" />
-              احجز الآن
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => navigate("/owner")}
-              className="text-ocean-600 border-ocean-200 hover:bg-ocean-50 text-base px-10 py-6 rounded-2xl"
-            >
-              <Users className="h-5 w-5 ml-2" />
-              سجّل محطتك
-            </Button>
-          </div>
-        </Section>
-      </section>
-
-      {/* ─── Footer ─── */}
-      <footer className="bg-ocean-900 text-ocean-200 py-12 border-t border-ocean-800">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid md:grid-cols-3 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-ocean-500 flex items-center justify-center">
-                  <Car className="h-4 w-4 text-white" />
-                </div>
-                <span className="text-lg font-bold font-cairo text-white">واشلي</span>
+      <footer className="border-t border-ocean-800 bg-ocean-950 py-12 text-ocean-200">
+        <div className="mx-auto grid max-w-7xl gap-8 px-4 md:grid-cols-3">
+          <div>
+            <div className="mb-4 flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ocean-500">
+                <Car className="h-4 w-4 text-white" />
               </div>
-              <p className="text-ocean-300 text-sm leading-relaxed">
-                منصة ذكية تربط أصحاب السيارات بمحطات الغسيل، 
-                توفر تجربة حجز سلسة وإدارة متكاملة.
-              </p>
+              <span className="text-lg font-bold text-white">Washlly</span>
             </div>
-            <div>
-              <h4 className="font-bold font-cairo text-white mb-3">روابط سريعة</h4>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#features" className="hover:text-white transition-colors">المميزات</a></li>
-                <li><a href="#car-owners" className="hover:text-white transition-colors">أصحاب السيارات</a></li>
-                <li><a href="#stations" className="hover:text-white transition-colors">أصحاب المحطات</a></li>
-                <li><a href="#how-it-works" className="hover:text-white transition-colors">كيف يعمل</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold font-cairo text-white mb-3">تواصل معنا</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  <span>+964 XXX XXX XXXX</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  <span>واتساب: +964 XXX XXX XXXX</span>
-                </div>
+            <p className="text-sm leading-relaxed text-ocean-200">{t.footerDescription}</p>
+          </div>
+          <div>
+            <h4 className="mb-3 font-bold text-white">{t.quickLinks}</h4>
+            <ul className="space-y-2 text-sm text-ocean-200">
+              {t.links.map((link) => (
+                <li key={link}>{link}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h4 className="mb-3 font-bold text-white">{t.contactUs}</h4>
+            <div className="space-y-2 text-sm text-ocean-200">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                <span>WhatsApp: +964 XXX XXX XXXX</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Star className="h-4 w-4" />
+                <span>support@washlly.com</span>
               </div>
             </div>
           </div>
-          <div className="border-t border-ocean-800 pt-6 text-center text-xs text-ocean-400">
-            <p>© {new Date().getFullYear()} واشلي. جميع الحقوق محفوظة.</p>
-          </div>
+        </div>
+        <div className="mx-auto mt-8 max-w-7xl border-t border-white/10 px-4 pt-6 text-center text-xs text-ocean-300">
+          © {new Date().getFullYear()} Washlly. {t.copyright}
         </div>
       </footer>
     </div>

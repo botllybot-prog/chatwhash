@@ -6,12 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/components/ui/use-toast";
+import { useAppLanguage } from "@/lib/language";
 import {
   CalendarCheck,
   CheckCircle2,
   Clock,
   Gift,
+  Globe2,
   Loader2,
   LocateFixed,
   MapPin,
@@ -19,7 +28,6 @@ import {
   RotateCw,
   Search,
   ShieldCheck,
-  Sparkles,
   Wrench,
   X,
 } from "lucide-react";
@@ -27,37 +35,403 @@ import {
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 const DEFAULT_CENTER = { lat: 33.3152, lng: 44.3661 };
 
-const SPIN_SEGMENTS = [
-  { key: "discount_0", label: "0%", subtitle: "بدون خصم", color: "#f6f7fb", discountPercent: 0, size: 24, textColor: "#111827" },
-  { key: "discount_5", label: "5%", subtitle: "خصم فوري", color: "#47b2ff", discountPercent: 5, size: 84, textColor: "#ffffff" },
-  { key: "discount_10", label: "10%", subtitle: "خصم فوري", color: "#2b7fff", discountPercent: 10, size: 84, textColor: "#ffffff" },
-  { key: "discount_15", label: "15%", subtitle: "خصم فوري", color: "#185fdb", discountPercent: 15, size: 84, textColor: "#ffffff" },
-  { key: "retry", label: "أعد", subtitle: "المحاولة", color: "#0f49b8", discountPercent: 0, size: 84, textColor: "#ffffff" },
-] as const;
+type Language = "ar" | "en" | "ku" | "tr";
 
-const SPIN_SEGMENT_ARCS = SPIN_SEGMENTS.reduce<
-  Array<(typeof SPIN_SEGMENTS)[number] & { startAngle: number; endAngle: number; midAngle: number }>
->((acc, segment) => {
-  const startAngle = acc.length === 0 ? 0 : acc[acc.length - 1].endAngle;
-  const endAngle = startAngle + segment.size;
+const LANGUAGE_OPTIONS: { value: Language; label: string }[] = [
+  { value: "ar", label: "العربية" },
+  { value: "en", label: "English" },
+  { value: "ku", label: "کوردی" },
+  { value: "tr", label: "Türkçe" },
+];
 
-  acc.push({
-    ...segment,
-    startAngle,
-    endAngle,
-    midAngle: startAngle + segment.size / 2,
-  });
+const translations = {
+  ar: {
+    locale: "ar-IQ",
+    currency: "د.ع",
+    dir: "rtl",
+    languageLabel: "اللغة",
+    languagePlaceholder: "اختر اللغة",
+    searchPlaceholder: "ابحث عن محطة أو منطقة",
+    myLocation: "موقعي",
+    loadingMap: "جاري تحميل الخريطة...",
+    stationOpen: "المحطة مفتوحة الآن",
+    stationClosed: "المحطة مغلقة الآن",
+    googleMaps: "Google Maps",
+    waze: "Waze",
+    searchLoadErrorTitle: "تعذر تحميل المحطات",
+    browserLocationTitle: "المتصفح لا يدعم الموقع",
+    browserLocationDescription: "تعذر الوصول إلى موقعك الحالي من هذا المتصفح.",
+    locationErrorTitle: "تعذر تحديد الموقع",
+    locationErrorDescription: "اسمح بالوصول إلى الموقع لعرض أقرب المحطات إليك.",
+    schedulingLabels: {
+      slots: "حجز بموعد",
+      instant: "حجز فوري",
+      daily: "حجز يومي",
+    },
+    step1Title: "اختر الخدمة",
+    step1Description: "ابدأ بتحديد الخدمة المناسبة. بعدها سنحسب الخصم والسعر النهائي بوضوح.",
+    step2TitleSlots: "اختر اليوم والوقت",
+    step2TitleDaily: "اختر اليوم",
+    step2Description: "اختر اليوم المناسب، وإذا كانت المحطة تعمل بالمواعيد ستظهر لك الأوقات المتاحة فقط.",
+    step3Title: "بيانات الحجز",
+    step3Description: "أدخل اسمك ورقم واتساب الصحيح. هذا الرقم سيصلك عليه تأكيد أو إلغاء الحجز.",
+    step4Title: "عجلة الخصم",
+    step4Description: "اختر الخدمة أولاً ثم لف العجلة. النسبة التي يقف عندها المؤشر هي الخصم المعتمد لهذا الحجز.",
+    step5Title: "الخطوة الأخيرة",
+    step5Description: "راجع التفاصيل ثم اختر إما تأكيد الحجز أو إلغاءه. بعد كل إجراء ستعود الخريطة بدون الاختيارات القديمة.",
+    loadingServices: "جاري تحميل الخدمات...",
+    noServices: "لا توجد خدمات متاحة لهذه المحطة حالياً.",
+    loadingSlots: "جاري تحميل الأوقات المتاحة...",
+    noSlots: "لا توجد أوقات متاحة في هذا اليوم. اختر يوماً آخر.",
+    namePlaceholder: "الاسم",
+    phonePlaceholder: "رقم الهاتف",
+    importantNotice: "تنبيه مهم",
+    bookingLimitNotice: "يمكنك الاحتفاظ بحجزين نشطين فقط على نفس الرقم. إذا أردت إنشاء حجز جديد بعد ذلك، يجب أولاً إلغاء أحد الحجوزات القديمة.",
+    wheelHintDefault: "لف العجلة مرة واحدة قبل تأكيد الحجز. إذا ظهرت لك محاولة إضافية يمكنك الدوران مرة أخرى لنفس الطلب فقط.",
+    wheelHintSpinning: "جاري تدوير عجلة الخصم الآن...",
+    wheelHintRetry: "ظهرت لك محاولة إضافية. اضغط مرة أخرى لتدوير العجلة لنفس الحجز.",
+    wheelHintSaved: "تم تثبيت الخصم لهذا الحجز",
+    wheelCurrentBookingDiscount: "خصم الحجز الحالي",
+    wheelButton: "اضغط للف العجلة",
+    wheelSpinningButton: "تدور العجلة الآن...",
+    wheelRetryButton: "حاول مرة أخرى",
+    wheelSavedButton: "تم تثبيت الخصم",
+    price: "السعر",
+    discount: "الخصم",
+    afterDiscount: "بعد الخصم",
+    summaryBoxLine1: "بعد تأكيد الحجز سيصل طلبك إلى صاحب المحطة عبر واتساب مع الخصم الذي حصلت عليه.",
+    summaryBoxLine2: "إذا ألغيت الحجز بعد إنشائه سنرسل إشعار إلغاء عبر واتساب لك ولصاحب المحطة.",
+    confirmBooking: "تأكيد الحجز",
+    confirmingBooking: "جاري تأكيد الحجز...",
+    cancelBooking: "إلغاء الحجز",
+    returnToMap: "العودة إلى الخريطة",
+    cancellingBooking: "جاري الإلغاء...",
+    bookingSentTitle: "تم إرسال طلب الحجز بنجاح",
+    bookingNumber: "رقم الحجز",
+    fixedDiscount: "الخصم المثبت",
+    waitingApproval: "الطلب الآن بانتظار موافقة المحطة. إذا رغبت بإلغائه يمكنك فعل ذلك من هنا مباشرة.",
+    successResetNote: "بعد الإلغاء أو العودة ستظهر الخريطة من جديد بدون الاختيارات السابقة.",
+    serviceDuration: "دقيقة",
+    completeDataTitle: "أكمل البيانات أولاً",
+    completeSpinDataDescription: "اختر الخدمة والموعد وأدخل اسمك ورقم هاتفك قبل تدوير عجلة الخصم.",
+    completeBookingDataDescription: "يرجى إدخال الاسم ورقم الهاتف قبل تأكيد الحجز.",
+    chooseTimeTitle: "اختر الموعد",
+    chooseTimeDescription: "يرجى اختيار وقت مناسب من الأوقات المتاحة.",
+    spinFirstTitle: "لف عجلة الخصم أولاً",
+    spinFirstDescription: "يجب تثبيت نتيجة العجلة قبل إرسال طلب الحجز للمحطة.",
+    spinFailedTitle: "فشل تدوير العجلة",
+    spinFailedDescription: "حاول مرة أخرى بعد قليل.",
+    bookingFailedTitle: "فشل إنشاء الحجز",
+    bookingBlockedTitle: "تعذر إكمال الحجز",
+    bookingCancelledTitle: "تم إلغاء الحجز",
+    bookingCancelledDescription: "أرسلنا إشعار الإلغاء عبر واتساب.",
+    bookingCreatedToastTitle: "تم إرسال طلب الحجز",
+    bookingCreatedToastDescription: "والخصم المثبت هو",
+    cancelFailedTitle: "تعذر إلغاء الحجز",
+    spinSegments: {
+      discount0Label: "0%",
+      discount0Subtitle: "بدون خصم",
+      discount5Label: "5%",
+      discount5Subtitle: "خصم فوري",
+      discount10Label: "10%",
+      discount10Subtitle: "خصم فوري",
+      discount15Label: "15%",
+      discount15Subtitle: "خصم فوري",
+      retryLabel: "أعد",
+      retrySubtitle: "المحاولة",
+    },
+  },
+  en: {
+    locale: "en-US",
+    currency: "IQD",
+    dir: "ltr",
+    languageLabel: "Language",
+    languagePlaceholder: "Choose language",
+    searchPlaceholder: "Search for a station or area",
+    myLocation: "My location",
+    loadingMap: "Loading map...",
+    stationOpen: "Station open now",
+    stationClosed: "Station closed now",
+    googleMaps: "Google Maps",
+    waze: "Waze",
+    searchLoadErrorTitle: "Could not load stations",
+    browserLocationTitle: "Browser location unavailable",
+    browserLocationDescription: "Your browser could not access your current location.",
+    locationErrorTitle: "Could not detect location",
+    locationErrorDescription: "Allow location access to show the nearest stations.",
+    schedulingLabels: {
+      slots: "Timed booking",
+      instant: "Instant booking",
+      daily: "Daily booking",
+    },
+    step1Title: "Choose service",
+    step1Description: "Start by selecting the service you want. We will then show the discount and final price clearly.",
+    step2TitleSlots: "Choose day and time",
+    step2TitleDaily: "Choose day",
+    step2Description: "Pick the suitable date. If the station works with time slots, only available times will appear.",
+    step3Title: "Booking details",
+    step3Description: "Enter your name and correct WhatsApp number. Approval or cancellation updates will be sent to this number.",
+    step4Title: "Discount wheel",
+    step4Description: "Choose the service first, then spin the wheel. The slice under the pointer is the saved discount for this booking.",
+    step5Title: "Final step",
+    step5Description: "Review everything, then confirm or cancel. After either action, the map returns without the previous selection.",
+    loadingServices: "Loading services...",
+    noServices: "No services are currently available for this station.",
+    loadingSlots: "Loading available times...",
+    noSlots: "No available times for this day. Please choose another day.",
+    namePlaceholder: "Name",
+    phonePlaceholder: "Phone number",
+    importantNotice: "Important notice",
+    bookingLimitNotice: "You can keep only 2 active reservations per phone number. To make another one, cancel one of your older bookings first.",
+    wheelHintDefault: "Spin the wheel once before confirming. If you get an extra try, you can spin again for the same booking only.",
+    wheelHintSpinning: "Spinning the discount wheel now...",
+    wheelHintRetry: "You got an extra try. Press again to spin the wheel for the same booking.",
+    wheelHintSaved: "Discount saved for this booking",
+    wheelCurrentBookingDiscount: "Current booking discount",
+    wheelButton: "Spin the wheel",
+    wheelSpinningButton: "Wheel is spinning...",
+    wheelRetryButton: "Try again",
+    wheelSavedButton: "Discount saved",
+    price: "Price",
+    discount: "Discount",
+    afterDiscount: "After discount",
+    summaryBoxLine1: "After you confirm, your request is sent to the station owner on WhatsApp with the saved discount.",
+    summaryBoxLine2: "If you cancel after creating the booking, a WhatsApp cancellation message will be sent to you and the station owner.",
+    confirmBooking: "Confirm booking",
+    confirmingBooking: "Confirming booking...",
+    cancelBooking: "Cancel booking",
+    returnToMap: "Back to map",
+    cancellingBooking: "Cancelling...",
+    bookingSentTitle: "Booking request sent successfully",
+    bookingNumber: "Booking number",
+    fixedDiscount: "Saved discount",
+    waitingApproval: "Your request is now waiting for station approval. You can still cancel it from here.",
+    successResetNote: "After cancel or return, the map will appear again without the previous selection.",
+    serviceDuration: "min",
+    completeDataTitle: "Complete the details first",
+    completeSpinDataDescription: "Choose the service and time, then enter your name and phone before spinning the wheel.",
+    completeBookingDataDescription: "Please enter your name and phone number before confirming the booking.",
+    chooseTimeTitle: "Choose a time",
+    chooseTimeDescription: "Please choose one of the available times.",
+    spinFirstTitle: "Spin the discount wheel first",
+    spinFirstDescription: "The wheel result must be saved before the booking request can be sent.",
+    spinFailedTitle: "Spin failed",
+    spinFailedDescription: "Please try again in a moment.",
+    bookingFailedTitle: "Booking failed",
+    bookingBlockedTitle: "Could not complete booking",
+    bookingCancelledTitle: "Booking cancelled",
+    bookingCancelledDescription: "We sent the cancellation notice through WhatsApp.",
+    bookingCreatedToastTitle: "Booking request sent",
+    bookingCreatedToastDescription: "Saved discount",
+    cancelFailedTitle: "Could not cancel booking",
+    spinSegments: {
+      discount0Label: "0%",
+      discount0Subtitle: "No discount",
+      discount5Label: "5%",
+      discount5Subtitle: "Instant off",
+      discount10Label: "10%",
+      discount10Subtitle: "Instant off",
+      discount15Label: "15%",
+      discount15Subtitle: "Instant off",
+      retryLabel: "Try",
+      retrySubtitle: "again",
+    },
+  },
+  ku: {
+    locale: "ckb-IQ",
+    currency: "د.ع",
+    dir: "rtl",
+    languageLabel: "زمان",
+    languagePlaceholder: "زمان هەڵبژێرە",
+    searchPlaceholder: "گەڕان بۆ وێستگە یان ناوچە",
+    myLocation: "شوێنی من",
+    loadingMap: "نەخشە بار دەکرێت...",
+    stationOpen: "وێستگەکە ئێستا کراوەیە",
+    stationClosed: "وێستگەکە ئێستا داخراوە",
+    googleMaps: "Google Maps",
+    waze: "Waze",
+    searchLoadErrorTitle: "ناتوانرێت وێستگەکان بار بکرێن",
+    browserLocationTitle: "وێبگەڕ شوێن ناسین پشتگیری ناکات",
+    browserLocationDescription: "ناتوانرا شوێنی ئێستات بخوێنرێتەوە.",
+    locationErrorTitle: "ناتوانرا شوێن دیاری بکرێت",
+    locationErrorDescription: "ڕێگە بدە بە شوێن ناسین بۆ پیشاندانی نزیکترین وێستگەکان.",
+    schedulingLabels: {
+      slots: "حجز بە کات",
+      instant: "حجزی خێرا",
+      daily: "حجزی ڕۆژانە",
+    },
+    step1Title: "خزمەتگوزاری هەڵبژێرە",
+    step1Description: "یەکەم خزمەتگوزارییەکە هەڵبژێرە. دوای ئەوە داشکاندن و نرخی کۆتایی بە ڕوونی پیشان دەدرێت.",
+    step2TitleSlots: "ڕۆژ و کات هەڵبژێرە",
+    step2TitleDaily: "ڕۆژ هەڵبژێرە",
+    step2Description: "ڕۆژی گونجاو هەڵبژێرە. ئەگەر وێستگەکە بە کات کار بکات تەنها کاتە بەردەستەکان دەردەکەون.",
+    step3Title: "زانیاری حجز",
+    step3Description: "ناو و ژمارەی واتساپی دروست بنووسە. پەیامی پشتڕاستکردنەوە یان هەڵوەشاندنەوە بۆ ئەم ژمارەیە دێت.",
+    step4Title: "گەردی داشکاندن",
+    step4Description: "سەرەتا خزمەتگوزارییەکە هەڵبژێرە، پاشان گەردەکە بگێڕە. ئەو بەشەی کە ژێر نیشاندەرەکەیە داشکاندنی تۆیە.",
+    step5Title: "قۆناغی کۆتایی",
+    step5Description: "وردبینی لە هەموو شتێک بکە، پاشان حجزەکە پشتڕاست بکەرەوە یان هەڵیبوەشێنەوە. دوای هەردوو هەڵبژاردەکە نەخشەکە بەبێ هەڵبژاردنی پێشوو دەگەڕێتەوە.",
+    loadingServices: "خزمەتگوزاریەکان بار دەکرێن...",
+    noServices: "ئەم وێستگەیە ئێستا هیچ خزمەتگوزارییەکی بەردەستی نییە.",
+    loadingSlots: "کاتە بەردەستەکان بار دەکرێن...",
+    noSlots: "بۆ ئەم ڕۆژە هیچ کاتێکی بەردەست نییە. تکایە ڕۆژێکی تر هەڵبژێرە.",
+    namePlaceholder: "ناو",
+    phonePlaceholder: "ژمارەی تەلەفۆن",
+    importantNotice: "ئاگاداری گرنگ",
+    bookingLimitNotice: "تەنها دەتوانیت دوو حجزی چالاکت هەبێت بۆ هەمان ژمارە. بۆ دروستکردنی حجزێکی نوێ، یەکێک لە حجزەکانی پێشوو هەڵبوەشێنەوە.",
+    wheelHintDefault: "پێش پشتڕاستکردنەوە یەکجار گەردەکە بگێڕە. ئەگەر هەوڵێکی زیادە دەرکەوت، تەنها بۆ هەمان داواکاری دەتوانیت دووبارە بگێڕیت.",
+    wheelHintSpinning: "گەردی داشکاندن ئێستا دەسووڕێت...",
+    wheelHintRetry: "هەوڵێکی زیادەت بەدەست هێنا. دووبارە داگرە بۆ سووڕاندنی گەردەکە بۆ هەمان حجز.",
+    wheelHintSaved: "داشکاندن بۆ ئەم حجزە پاشەکەوت کرا",
+    wheelCurrentBookingDiscount: "داشکاندنی حجزی ئێستا",
+    wheelButton: "گەردەکە بگێڕە",
+    wheelSpinningButton: "گەردەکە دەسووڕێت...",
+    wheelRetryButton: "دووبارە هەوڵ بدە",
+    wheelSavedButton: "داشکاندن پاشەکەوت کرا",
+    price: "نرخ",
+    discount: "داشکاندن",
+    afterDiscount: "دوای داشکاندن",
+    summaryBoxLine1: "دوای پشتڕاستکردنەوە، داواکارییەکەت لەگەڵ داشکاندنی پاشەکەوتکراودا بۆ خاوەنی وێستگە لە واتساپ دەنێردرێت.",
+    summaryBoxLine2: "ئەگەر دوای دروستکردنی حجزەکە هەڵیبوەشێنیتەوە، پەیامی واتساپی هەڵوەشاندنەوە بۆ تۆ و خاوەنی وێستگەکە دەنێردرێت.",
+    confirmBooking: "پشتڕاستکردنەوەی حجز",
+    confirmingBooking: "حجزەکە پشتڕاست دەکرێتەوە...",
+    cancelBooking: "هەڵوەشاندنەوەی حجز",
+    returnToMap: "گەڕانەوە بۆ نەخشە",
+    cancellingBooking: "هەڵوەشاندنەوە...",
+    bookingSentTitle: "داواکاری حجز بە سەرکەوتوویی نێردرا",
+    bookingNumber: "ژمارەی حجز",
+    fixedDiscount: "داشکاندنی پاشەکەوتکراو",
+    waitingApproval: "داواکارییەکە ئێستا چاوەڕێی پەسەندکردنی وێستگەیە. دەتوانیت لێرەوە هەڵیبوەشێنیتەوە.",
+    successResetNote: "دوای هەڵوەشاندنەوە یان گەڕانەوە، نەخشەکە دوبارە بەبێ هەڵبژاردنی پێشوو دەردەکەوێت.",
+    serviceDuration: "خولەک",
+    completeDataTitle: "سەرەتا زانیاریەکان تەواو بکە",
+    completeSpinDataDescription: "خزمەتگوزاری و کات هەڵبژێرە، پاشان ناو و ژمارەی تەلەفۆن بنووسە پێش سووڕاندنی گەردەکە.",
+    completeBookingDataDescription: "تکایە ناو و ژمارەی تەلەفۆن بنووسە پێش پشتڕاستکردنی حجزەکە.",
+    chooseTimeTitle: "کات هەڵبژێرە",
+    chooseTimeDescription: "تکایە یەکێک لە کاتە بەردەستەکان هەڵبژێرە.",
+    spinFirstTitle: "سەرەتا گەردی داشکاندن بگێڕە",
+    spinFirstDescription: "دەبێت ئەنجامی گەردەکە پاشەکەوت بکرێت پێش ناردنی داواکاریی حجز.",
+    spinFailedTitle: "سووڕاندنی گەردەکە سەرکەوتوو نەبوو",
+    spinFailedDescription: "تکایە دوای کەمێک دووبارە هەوڵ بدە.",
+    bookingFailedTitle: "حجز سەرکەوتوو نەبوو",
+    bookingBlockedTitle: "نەتوانرا حجزەکە تەواو بکرێت",
+    bookingCancelledTitle: "حجزەکە هەڵوەشێنرایەوە",
+    bookingCancelledDescription: "ئاگادارکردنەوەی هەڵوەشاندنەوەمان لە واتساپ نارد.",
+    bookingCreatedToastTitle: "داواکاری حجز نێردرا",
+    bookingCreatedToastDescription: "داشکاندنی پاشەکەوتکراو",
+    cancelFailedTitle: "نەتوانرا حجزەکە هەڵبوەشێندرێتەوە",
+    spinSegments: {
+      discount0Label: "0%",
+      discount0Subtitle: "بێ داشکاندن",
+      discount5Label: "5%",
+      discount5Subtitle: "داشکاندنی خێرا",
+      discount10Label: "10%",
+      discount10Subtitle: "داشکاندنی خێرا",
+      discount15Label: "15%",
+      discount15Subtitle: "داشکاندنی خێرا",
+      retryLabel: "دووبارە",
+      retrySubtitle: "هەوڵ بدە",
+    },
+  },
+  tr: {
+    locale: "tr-TR",
+    currency: "IQD",
+    dir: "ltr",
+    languageLabel: "Dil",
+    languagePlaceholder: "Dil seçin",
+    searchPlaceholder: "İstasyon veya bölge ara",
+    myLocation: "Konumum",
+    loadingMap: "Harita yükleniyor...",
+    stationOpen: "İstasyon şu anda açık",
+    stationClosed: "İstasyon şu anda kapalı",
+    googleMaps: "Google Maps",
+    waze: "Waze",
+    searchLoadErrorTitle: "İstasyonlar yüklenemedi",
+    browserLocationTitle: "Tarayıcı konumu desteklemiyor",
+    browserLocationDescription: "Tarayıcı mevcut konumunuza erişemedi.",
+    locationErrorTitle: "Konum alınamadı",
+    locationErrorDescription: "En yakın istasyonları göstermek için konum erişimine izin verin.",
+    schedulingLabels: {
+      slots: "Saatli rezervasyon",
+      instant: "Hızlı rezervasyon",
+      daily: "Günlük rezervasyon",
+    },
+    step1Title: "Hizmeti seçin",
+    step1Description: "Önce istediğiniz hizmeti seçin. Ardından indirim ve son fiyat net şekilde gösterilir.",
+    step2TitleSlots: "Gün ve saat seçin",
+    step2TitleDaily: "Gün seçin",
+    step2Description: "Uygun günü seçin. İstasyon saatli çalışıyorsa sadece uygun saatler görünür.",
+    step3Title: "Rezervasyon bilgileri",
+    step3Description: "Adınızı ve doğru WhatsApp numaranızı girin. Onay veya iptal bildirimleri bu numaraya gönderilir.",
+    step4Title: "İndirim çarkı",
+    step4Description: "Önce hizmeti seçin, sonra çarkı çevirin. Gösterge hangi dilimde durursa o indirim kaydedilir.",
+    step5Title: "Son adım",
+    step5Description: "Bilgileri kontrol edin, sonra rezervasyonu onaylayın veya iptal edin. Her iki işlemden sonra harita eski seçimler olmadan geri gelir.",
+    loadingServices: "Hizmetler yükleniyor...",
+    noServices: "Bu istasyon için şu anda uygun hizmet yok.",
+    loadingSlots: "Uygun saatler yükleniyor...",
+    noSlots: "Bu gün için uygun saat yok. Lütfen başka bir gün seçin.",
+    namePlaceholder: "Ad",
+    phonePlaceholder: "Telefon numarası",
+    importantNotice: "Önemli not",
+    bookingLimitNotice: "Aynı numara ile en fazla 2 aktif rezervasyon tutabilirsiniz. Yeni rezervasyon için önce eski rezervasyonlardan birini iptal edin.",
+    wheelHintDefault: "Onaylamadan önce çarkı bir kez çevirin. Ek deneme çıkarsa sadece aynı rezervasyon için tekrar çevirebilirsiniz.",
+    wheelHintSpinning: "İndirim çarkı dönüyor...",
+    wheelHintRetry: "Ek deneme kazandınız. Aynı rezervasyon için tekrar çevirebilirsiniz.",
+    wheelHintSaved: "Bu rezervasyon için indirim kaydedildi",
+    wheelCurrentBookingDiscount: "Mevcut rezervasyon indirimi",
+    wheelButton: "Çarkı çevir",
+    wheelSpinningButton: "Çark dönüyor...",
+    wheelRetryButton: "Tekrar dene",
+    wheelSavedButton: "İndirim kaydedildi",
+    price: "Fiyat",
+    discount: "İndirim",
+    afterDiscount: "İndirim sonrası",
+    summaryBoxLine1: "Onaydan sonra talebiniz kaydedilen indirim ile birlikte WhatsApp üzerinden istasyon sahibine gönderilir.",
+    summaryBoxLine2: "Rezervasyonu oluşturduktan sonra iptal ederseniz size ve istasyon sahibine WhatsApp iptal bildirimi gönderilir.",
+    confirmBooking: "Rezervasyonu onayla",
+    confirmingBooking: "Rezervasyon onaylanıyor...",
+    cancelBooking: "Rezervasyonu iptal et",
+    returnToMap: "Haritaya dön",
+    cancellingBooking: "İptal ediliyor...",
+    bookingSentTitle: "Rezervasyon talebi başarıyla gönderildi",
+    bookingNumber: "Rezervasyon numarası",
+    fixedDiscount: "Kaydedilen indirim",
+    waitingApproval: "Talebiniz istasyon onayını bekliyor. Buradan yine iptal edebilirsiniz.",
+    successResetNote: "İptal veya dönüşten sonra harita eski seçimler olmadan tekrar görünür.",
+    serviceDuration: "dk",
+    completeDataTitle: "Önce bilgileri tamamlayın",
+    completeSpinDataDescription: "Çarkı çevirmeden önce hizmeti ve saati seçin, sonra adınızı ve telefonunuzu girin.",
+    completeBookingDataDescription: "Lütfen rezervasyonu onaylamadan önce adınızı ve telefon numaranızı girin.",
+    chooseTimeTitle: "Saat seçin",
+    chooseTimeDescription: "Lütfen uygun saatlerden birini seçin.",
+    spinFirstTitle: "Önce indirim çarkını çevirin",
+    spinFirstDescription: "Rezervasyon isteği gönderilmeden önce çark sonucu kaydedilmelidir.",
+    spinFailedTitle: "Çark döndürülemedi",
+    spinFailedDescription: "Lütfen biraz sonra tekrar deneyin.",
+    bookingFailedTitle: "Rezervasyon başarısız oldu",
+    bookingBlockedTitle: "Rezervasyon tamamlanamadı",
+    bookingCancelledTitle: "Rezervasyon iptal edildi",
+    bookingCancelledDescription: "WhatsApp üzerinden iptal bildirimi gönderdik.",
+    bookingCreatedToastTitle: "Rezervasyon talebi gönderildi",
+    bookingCreatedToastDescription: "Kaydedilen indirim",
+    cancelFailedTitle: "Rezervasyon iptal edilemedi",
+    spinSegments: {
+      discount0Label: "0%",
+      discount0Subtitle: "İndirim yok",
+      discount5Label: "5%",
+      discount5Subtitle: "Anında indirim",
+      discount10Label: "10%",
+      discount10Subtitle: "Anında indirim",
+      discount15Label: "15%",
+      discount15Subtitle: "Anında indirim",
+      retryLabel: "Tekrar",
+      retrySubtitle: "dene",
+    },
+  },
+} as const;
 
-  return acc;
-}, []);
-
-const WHEEL_BACKGROUND = `conic-gradient(from -90deg, ${SPIN_SEGMENT_ARCS.map((segment) => {
-  return `${segment.color} ${segment.startAngle}deg ${segment.endAngle}deg`;
-}).join(", ")})`;
-
-const WHEEL_LIGHTS = Array.from({ length: 12 }, (_, index) => index);
-
-interface Station {
+type Station = {
   id: string;
   name: string;
   address: string | null;
@@ -70,41 +444,79 @@ interface Station {
   scheduling_type: "slots" | "instant" | "daily";
   slot_duration_minutes: number;
   is_active: boolean;
-}
+};
 
-interface Service {
+type Service = {
   id: string;
   name: string;
   price: number;
   duration_minutes: number;
   station_id: string | null;
-}
+};
 
-interface BookingResult {
+type BookingResult = {
   bookingId: string;
   bookingNumber: number;
   discountPercent: number;
-}
+};
 
-interface SpinResult {
+type SpinResult = {
   segmentKey: string;
   discountPercent: number;
   label: string;
   token: string;
-}
+};
 
-interface SpinDiscountResponse {
+type SpinDiscountResponse = {
   segmentKey?: string;
   discountPercent?: number;
   label?: string;
   token?: string;
   requiresRespin?: boolean;
   error?: string;
-}
+};
 
-interface CancelBookingResponse {
+type CancelBookingResponse = {
   success?: boolean;
   error?: string;
+};
+
+function getSpinSegments(language: Language) {
+  const t = translations[language].spinSegments;
+
+  return [
+    { key: "discount_0", label: t.discount0Label, subtitle: t.discount0Subtitle, color: "#f6f7fb", discountPercent: 0, size: 24, textColor: "#111827" },
+    { key: "discount_5", label: t.discount5Label, subtitle: t.discount5Subtitle, color: "#47b2ff", discountPercent: 5, size: 84, textColor: "#ffffff" },
+    { key: "discount_10", label: t.discount10Label, subtitle: t.discount10Subtitle, color: "#2b7fff", discountPercent: 10, size: 84, textColor: "#ffffff" },
+    { key: "discount_15", label: t.discount15Label, subtitle: t.discount15Subtitle, color: "#185fdb", discountPercent: 15, size: 84, textColor: "#ffffff" },
+    { key: "retry", label: t.retryLabel, subtitle: t.retrySubtitle, color: "#0f49b8", discountPercent: 0, size: 84, textColor: "#ffffff" },
+  ] as const;
+}
+
+function getSpinSegmentArcs(language: Language) {
+  return getSpinSegments(language).reduce<
+    Array<ReturnType<typeof getSpinSegments>[number] & { startAngle: number; endAngle: number; midAngle: number }>
+  >((acc, segment) => {
+    const startAngle = acc.length === 0 ? 0 : acc[acc.length - 1].endAngle;
+    const endAngle = startAngle + segment.size;
+
+    acc.push({
+      ...segment,
+      startAngle,
+      endAngle,
+      midAngle: startAngle + segment.size / 2,
+    });
+
+    return acc;
+  }, []);
+}
+
+function getWheelBackground(language: Language) {
+  const arcs = getSpinSegmentArcs(language);
+
+  return `conic-gradient(from -90deg, ${arcs.map((segment) => {
+    return `${segment.color} ${segment.startAngle}deg ${segment.endAngle}deg`;
+  }).join(", ")})`;
 }
 
 function isStationOpen(station: Station): boolean {
@@ -144,8 +556,11 @@ function normalizePhone(phone: string) {
   return cleaned;
 }
 
-function formatCurrency(amount: number) {
-  return `${Math.round(amount)} د.ع`;
+function formatCurrency(amount: number, language: Language) {
+  const currency = translations[language].currency;
+  return language === "en" || language === "tr"
+    ? `${Math.round(amount)} ${currency}`
+    : `${Math.round(amount)} ${currency}`;
 }
 
 function calculateSpinRotation(currentRotation: number, targetMidAngle: number) {
@@ -183,28 +598,33 @@ function StepHeader({
 function StationCard({
   station,
   onClose,
+  language,
 }: {
   station: Station;
   onClose: () => void;
+  language: Language;
 }) {
+  const t = translations[language];
+  const isRtl = t.dir === "rtl";
+  const spinSegmentArcs = useMemo(() => getSpinSegmentArcs(language), [language]);
+  const wheelBackground = useMemo(() => getWheelBackground(language), [language]);
+
   const [services, setServices] = useState<Service[]>([]);
   const [loadingServices, setLoadingServices] = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [spinning, setSpinning] = useState(false);
-
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
-
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [bookingResult, setBookingResult] = useState<BookingResult | null>(null);
   const [spinResult, setSpinResult] = useState<SpinResult | null>(null);
   const [spinRotation, setSpinRotation] = useState(0);
-  const [spinHint, setSpinHint] = useState("لف العجلة مرة واحدة قبل تأكيد الحجز، وإذا ظهرت لك محاولة إضافية يمكنك الدوران مرة أخرى لنفس الطلب فقط.");
+  const [spinHint, setSpinHint] = useState(t.wheelHintDefault);
   const [needsRespin, setNeedsRespin] = useState(false);
 
   const open = isStationOpen(station);
@@ -212,12 +632,6 @@ function StationCard({
   const isDailyFlow = station.scheduling_type === "daily";
   const bookingDate = isDailyFlow || isSlotsFlow ? selectedDate : getTodayDate();
   const normalizedPhone = normalizePhone(customerPhone);
-
-  const schedulingLabels: Record<Station["scheduling_type"], string> = {
-    slots: "حجز بموعد",
-    instant: "حجز فوري",
-    daily: "حجز يومي",
-  };
 
   const canSpin =
     !!selectedService &&
@@ -233,10 +647,19 @@ function StationCard({
     : 0;
   const finalPrice = selectedService ? selectedService.price - discountAmount : 0;
 
+  const formatDateLabel = (dateValue: string) =>
+    new Date(dateValue).toLocaleDateString(t.locale, {
+      calendar: "gregory",
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
   const resetSpinState = () => {
     setSpinResult(null);
     setNeedsRespin(false);
-    setSpinHint("لف العجلة مرة واحدة قبل تأكيد الحجز، وإذا ظهرت لك محاولة إضافية يمكنك الدوران مرة أخرى لنفس الطلب فقط.");
+    setSpinHint(t.wheelHintDefault);
   };
 
   const resetSelectionAndClose = () => {
@@ -251,6 +674,10 @@ function StationCard({
     resetSpinState();
     onClose();
   };
+
+  useEffect(() => {
+    setSpinHint(t.wheelHintDefault);
+  }, [language]);
 
   useEffect(() => {
     setSelectedService(null);
@@ -271,7 +698,7 @@ function StationCard({
 
       if (error) {
         toast({
-          title: "تعذر تحميل الخدمات",
+          title: t.searchLoadErrorTitle,
           description: error.message,
           variant: "destructive",
         });
@@ -282,7 +709,7 @@ function StationCard({
     };
 
     void loadServices();
-  }, [station]);
+  }, [station, language]);
 
   useEffect(() => {
     if (!isSlotsFlow || !selectedDate) {
@@ -309,7 +736,7 @@ function StationCard({
 
       if (error) {
         toast({
-          title: "تعذر تحميل الأوقات",
+          title: t.chooseTimeTitle,
           description: error.message,
           variant: "destructive",
         });
@@ -340,7 +767,7 @@ function StationCard({
     };
 
     void loadSlots();
-  }, [isSlotsFlow, selectedDate, station]);
+  }, [isSlotsFlow, selectedDate, station, language]);
 
   useEffect(() => {
     setBookingResult(null);
@@ -372,8 +799,8 @@ function StationCard({
 
     if (!canSpin) {
       toast({
-        title: "أكمل البيانات أولاً",
-        description: "اختر الخدمة والموعد وأدخل اسمك ورقم هاتفك قبل تدوير عجلة الخصم.",
+        title: t.completeDataTitle,
+        description: t.completeSpinDataDescription,
         variant: "destructive",
       });
       return;
@@ -382,7 +809,7 @@ function StationCard({
     if (spinResult && !needsRespin) return;
 
     setSpinning(true);
-    setSpinHint("جاري تدوير عجلة الخصم الآن...");
+    setSpinHint(t.wheelHintSpinning);
 
     const { data, error } = await supabase.functions.invoke<SpinDiscountResponse>("spin-booking-discount", {
       body: {
@@ -396,16 +823,16 @@ function StationCard({
 
     if (error || data?.error || !data?.segmentKey) {
       setSpinning(false);
-      setSpinHint("تعذر تدوير العجلة الآن. حاول مرة أخرى بعد قليل.");
+      setSpinHint(t.spinFailedDescription);
       toast({
-        title: "فشل تدوير العجلة",
-        description: data?.error || error?.message || "حاول مرة أخرى بعد قليل.",
+        title: t.spinFailedTitle,
+        description: data?.error || error?.message || t.spinFailedDescription,
         variant: "destructive",
       });
       return;
     }
 
-    const selectedArc = SPIN_SEGMENT_ARCS.find((segment) => segment.key === data.segmentKey) || SPIN_SEGMENT_ARCS[0];
+    const selectedArc = spinSegmentArcs.find((segment) => segment.key === data.segmentKey) || spinSegmentArcs[0];
     const nextRotation = calculateSpinRotation(spinRotation, selectedArc.midAngle);
     setSpinRotation(nextRotation);
 
@@ -415,7 +842,7 @@ function StationCard({
       if (data.requiresRespin) {
         setSpinResult(null);
         setNeedsRespin(true);
-        setSpinHint("ظهرت لك محاولة إضافية. اضغط مرة أخرى لتدوير العجلة لنفس الحجز.");
+        setSpinHint(t.wheelHintRetry);
         return;
       }
 
@@ -428,7 +855,7 @@ function StationCard({
 
       setSpinResult(resolvedResult);
       setNeedsRespin(false);
-      setSpinHint(`تم تثبيت الخصم لهذا الحجز: (${resolvedResult.discountPercent})%`);
+      setSpinHint(`${t.wheelHintSaved}: (${resolvedResult.discountPercent})%`);
     }, 3800);
   };
 
@@ -437,8 +864,8 @@ function StationCard({
 
     if (!customerName.trim() || !customerPhone.trim()) {
       toast({
-        title: "أكمل البيانات أولاً",
-        description: "يرجى إدخال الاسم ورقم الهاتف قبل تأكيد الحجز.",
+        title: t.completeDataTitle,
+        description: t.completeBookingDataDescription,
         variant: "destructive",
       });
       return;
@@ -446,8 +873,8 @@ function StationCard({
 
     if (isSlotsFlow && !selectedSlot) {
       toast({
-        title: "اختر الموعد",
-        description: "يرجى اختيار وقت مناسب من الأوقات المتاحة.",
+        title: t.chooseTimeTitle,
+        description: t.chooseTimeDescription,
         variant: "destructive",
       });
       return;
@@ -455,8 +882,8 @@ function StationCard({
 
     if (!spinResult?.token) {
       toast({
-        title: "لف عجلة الخصم أولاً",
-        description: "يجب تثبيت نتيجة العجلة قبل إرسال طلب الحجز للمحطة.",
+        title: t.spinFirstTitle,
+        description: t.spinFirstDescription,
         variant: "destructive",
       });
       return;
@@ -481,7 +908,7 @@ function StationCard({
 
     if (error) {
       toast({
-        title: "فشل إنشاء الحجز",
+        title: t.bookingFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -490,7 +917,7 @@ function StationCard({
 
     if (data?.error) {
       toast({
-        title: "تعذر إكمال الحجز",
+        title: t.bookingBlockedTitle,
         description: data.error,
         variant: "destructive",
       });
@@ -504,8 +931,8 @@ function StationCard({
     });
 
     toast({
-      title: "تم إرسال طلب الحجز",
-      description: `رقم الحجز #${data.bookingNumber} والخصم (${spinResult.discountPercent})%`,
+      title: t.bookingCreatedToastTitle,
+      description: `#${data.bookingNumber} - ${t.bookingCreatedToastDescription} (${spinResult.discountPercent})%`,
     });
   };
 
@@ -528,23 +955,23 @@ function StationCard({
 
     if (error || data?.error) {
       toast({
-        title: "تعذر إلغاء الحجز",
-        description: data?.error || error?.message || "حاول مرة أخرى بعد قليل.",
+        title: t.cancelFailedTitle,
+        description: data?.error || error?.message || t.spinFailedDescription,
         variant: "destructive",
       });
       return;
     }
 
     toast({
-      title: "تم إلغاء الحجز",
-      description: `أرسلنا إشعار الإلغاء عبر واتساب للحجز #${bookingResult.bookingNumber}.`,
+      title: t.bookingCancelledTitle,
+      description: t.bookingCancelledDescription,
     });
 
     resetSelectionAndClose();
   };
 
   return (
-    <div className="absolute left-0 top-0 z-[1000] h-full w-full bg-background shadow-2xl sm:w-[440px]" dir="rtl">
+    <div className="absolute left-0 top-0 z-[1000] h-full w-full bg-background shadow-2xl sm:w-[440px]" dir={isRtl ? "rtl" : "ltr"}>
       <ScrollArea className="h-full">
         <div className="space-y-4 p-4">
           <div className="flex items-center justify-between">
@@ -552,7 +979,7 @@ function StationCard({
               <X className="h-5 w-5" />
             </Button>
             <Badge variant={open ? "default" : "destructive"}>
-              {open ? "المحطة مفتوحة الآن" : "المحطة مغلقة الآن"}
+              {open ? t.stationOpen : t.stationClosed}
             </Badge>
           </div>
 
@@ -581,37 +1008,33 @@ function StationCard({
               <Clock className="h-3 w-3" />
               {station.working_hours_start.substring(0, 5)} - {station.working_hours_end.substring(0, 5)}
             </Badge>
-            <Badge variant="secondary">{schedulingLabels[station.scheduling_type]}</Badge>
+            <Badge variant="secondary">{t.schedulingLabels[station.scheduling_type]}</Badge>
           </div>
 
           {station.latitude && station.longitude && (
             <div className="grid grid-cols-2 gap-2">
               <Button variant="outline" className="gap-2" onClick={openGoogleMaps}>
                 <Navigation className="h-4 w-4" />
-                Google Maps
+                {t.googleMaps}
               </Button>
               <Button variant="outline" className="gap-2" onClick={openWaze}>
                 <Navigation className="h-4 w-4" />
-                Waze
+                {t.waze}
               </Button>
             </div>
           )}
 
           <Card>
             <CardContent className="space-y-4 pt-4">
-              <StepHeader
-                number="1"
-                title="اختر الخدمة"
-                description="ابدأ بتحديد الخدمة المناسبة. بعدها سنحسب الخصم والسعر النهائي بوضوح."
-              />
+              <StepHeader number="1" title={t.step1Title} description={t.step1Description} />
 
               {loadingServices ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  جاري تحميل الخدمات...
+                  {t.loadingServices}
                 </div>
               ) : services.length === 0 ? (
-                <p className="text-sm text-muted-foreground">لا توجد خدمات متاحة لهذه المحطة حالياً.</p>
+                <p className="text-sm text-muted-foreground">{t.noServices}</p>
               ) : (
                 <div className="space-y-2">
                   {services.map((service) => {
@@ -623,17 +1046,19 @@ function StationCard({
                         type="button"
                         onClick={() => setSelectedService(service)}
                         className={`w-full rounded-2xl border p-3 text-right transition ${
-                          isSelected
-                            ? "border-sky-500 bg-sky-50"
-                            : "border-border bg-card hover:border-sky-300"
-                        }`}
+                          isSelected ? "border-sky-500 bg-sky-50" : "border-border bg-card hover:border-sky-300"
+                        } ${!isRtl ? "text-left" : ""}`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="font-medium">{service.name}</p>
-                            <p className="mt-1 text-xs text-muted-foreground">{service.duration_minutes} دقيقة</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {service.duration_minutes} {t.serviceDuration}
+                            </p>
                           </div>
-                          <Badge variant={isSelected ? "default" : "secondary"}>{formatCurrency(service.price)}</Badge>
+                          <Badge variant={isSelected ? "default" : "secondary"}>
+                            {formatCurrency(service.price, language)}
+                          </Badge>
                         </div>
                       </button>
                     );
@@ -648,8 +1073,8 @@ function StationCard({
               <CardContent className="space-y-4 pt-4">
                 <StepHeader
                   number="2"
-                  title={isSlotsFlow ? "اختر اليوم والوقت" : "اختر اليوم"}
-                  description="اختر اليوم المناسب، وإذا كانت المحطة تعمل بالمواعيد ستظهر لك الأوقات المتاحة فقط."
+                  title={isSlotsFlow ? t.step2TitleSlots : t.step2TitleDaily}
+                  description={t.step2Description}
                 />
 
                 <Input
@@ -668,10 +1093,10 @@ function StationCard({
                     {loadingSlots ? (
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        جاري تحميل الأوقات المتاحة...
+                        {t.loadingSlots}
                       </div>
                     ) : availableSlots.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">لا توجد أوقات متاحة في هذا اليوم. اختر يوماً آخر.</p>
+                      <p className="text-sm text-muted-foreground">{t.noSlots}</p>
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {availableSlots.map((slot) => (
@@ -698,16 +1123,12 @@ function StationCard({
 
           <Card>
             <CardContent className="space-y-4 pt-4">
-              <StepHeader
-                number="3"
-                title="بيانات الحجز"
-                description="أدخل اسمك ورقم واتساب الصحيح. هذا الرقم سيصلك عليه تأكيد أو إلغاء الحجز."
-              />
+              <StepHeader number="3" title={t.step3Title} description={t.step3Description} />
 
-              <Input placeholder="الاسم" value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
+              <Input placeholder={t.namePlaceholder} value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
               <Input
                 dir="ltr"
-                placeholder="رقم الهاتف"
+                placeholder={t.phonePlaceholder}
                 value={customerPhone}
                 onChange={(event) => setCustomerPhone(event.target.value)}
               />
@@ -715,27 +1136,21 @@ function StationCard({
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
                 <div className="flex items-start gap-2 font-medium">
                   <ShieldCheck className="mt-0.5 h-4 w-4" />
-                  <span>تنبيه مهم</span>
+                  <span>{t.importantNotice}</span>
                 </div>
-                <p className="mt-2">
-                  يمكنك الاحتفاظ بحجزين نشطين فقط على نفس الرقم. إذا أردت إنشاء حجز جديد بعد ذلك، يجب أولاً إلغاء أحد الحجوزات القديمة.
-                </p>
+                <p className="mt-2">{t.bookingLimitNotice}</p>
               </div>
             </CardContent>
           </Card>
 
           <Card className="overflow-hidden border-0 bg-[#070b13] text-white shadow-2xl">
             <CardContent className="space-y-5 pt-5">
-              <StepHeader
-                number="4"
-                title="عجلة الخصم"
-                description="النسبة التي يقف عندها المؤشر هي الخصم المعتمد لهذا الحجز."
-              />
+              <StepHeader number="4" title={t.step4Title} description={t.step4Description} />
 
               <div className="rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,_#15213d,_#0a0f1a_72%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                 <div className="relative mx-auto h-[292px] w-[292px] max-w-full">
-                  {WHEEL_LIGHTS.map((lightIndex) => {
-                    const angle = (360 / WHEEL_LIGHTS.length) * lightIndex;
+                  {Array.from({ length: 12 }, (_, lightIndex) => {
+                    const angle = (360 / 12) * lightIndex;
                     return (
                       <div
                         key={lightIndex}
@@ -758,22 +1173,14 @@ function StationCard({
                   <div
                     className="absolute inset-[16px] rounded-full border-[6px] border-white/15 shadow-[inset_0_2px_16px_rgba(255,255,255,0.08)]"
                     style={{
-                      background: WHEEL_BACKGROUND,
+                      background: wheelBackground,
                       transform: `rotate(${spinRotation}deg)`,
                       transition: spinning ? "transform 3.8s cubic-bezier(0.18, 0.92, 0.24, 1)" : undefined,
                     }}
                   >
-                    {SPIN_SEGMENT_ARCS.map((segment) => {
-                      const radius = segment.key === "discount_0"
-                        ? -72
-                        : segment.key === "retry"
-                          ? -92
-                          : -100;
-                      const labelSize = segment.key === "discount_0"
-                        ? "text-[16px]"
-                        : segment.key === "retry"
-                          ? "text-[18px]"
-                          : "text-[28px]";
+                    {spinSegmentArcs.map((segment) => {
+                      const radius = segment.key === "discount_0" ? -72 : segment.key === "retry" ? -92 : -100;
+                      const labelSize = segment.key === "discount_0" ? "text-[16px]" : segment.key === "retry" ? "text-[18px]" : "text-[28px]";
                       const subtitleSize = segment.key === "discount_0" ? "text-[10px]" : "text-sm";
                       const labelWidth = segment.key === "retry" ? "w-28" : "w-24";
 
@@ -794,9 +1201,9 @@ function StationCard({
 
                     <div className="absolute inset-[34%] flex flex-col items-center justify-center rounded-full border-4 border-white/10 bg-[radial-gradient(circle,_#1a2233,_#090e18)] text-center shadow-[inset_0_2px_10px_rgba(255,255,255,0.05),0_12px_30px_rgba(0,0,0,0.45)]">
                       <div className="text-[11px] font-bold tracking-[0.22em] text-yellow-300">WASHLLY</div>
-                      <div className="mt-2 text-xs leading-5 text-slate-300">خصم الحجز الحالي</div>
+                      <div className="mt-2 text-xs leading-5 text-slate-300">{t.wheelCurrentBookingDiscount}</div>
                       <div className="mt-2 text-2xl font-black text-white">
-                        {spinResult ? `${spinResult.discountPercent}%` : needsRespin ? "↻" : "؟"}
+                        {spinResult ? `${spinResult.discountPercent}%` : needsRespin ? "↻" : "?"}
                       </div>
                     </div>
                   </div>
@@ -809,16 +1216,16 @@ function StationCard({
                 {selectedService && spinResult && (
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-2">
-                      <div className="text-slate-300">السعر</div>
-                      <div className="font-bold text-white">{formatCurrency(selectedService.price)}</div>
+                      <div className="text-slate-300">{t.price}</div>
+                      <div className="font-bold text-white">{formatCurrency(selectedService.price, language)}</div>
                     </div>
                     <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-2">
-                      <div className="text-emerald-200">الخصم</div>
-                      <div className="font-bold text-emerald-100">{formatCurrency(discountAmount)}</div>
+                      <div className="text-emerald-200">{t.discount}</div>
+                      <div className="font-bold text-emerald-100">{formatCurrency(discountAmount, language)}</div>
                     </div>
                     <div className="rounded-2xl border border-sky-400/20 bg-sky-500/10 p-2">
-                      <div className="text-sky-200">بعد الخصم</div>
-                      <div className="font-bold text-white">{formatCurrency(finalPrice)}</div>
+                      <div className="text-sky-200">{t.afterDiscount}</div>
+                      <div className="font-bold text-white">{formatCurrency(finalPrice, language)}</div>
                     </div>
                   </div>
                 )}
@@ -831,22 +1238,22 @@ function StationCard({
                   {spinning ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      تدور العجلة الآن...
+                      {t.wheelSpinningButton}
                     </>
                   ) : needsRespin ? (
                     <>
                       <RotateCw className="h-4 w-4" />
-                      حاول مرة أخرى
+                      {t.wheelRetryButton}
                     </>
                   ) : spinResult ? (
                     <>
                       <CheckCircle2 className="h-4 w-4" />
-                      تم تثبيت الخصم
+                      {t.wheelSavedButton}
                     </>
                   ) : (
                     <>
                       <Gift className="h-4 w-4" />
-                      اضغط للف العجلة
+                      {t.wheelButton}
                     </>
                   )}
                 </Button>
@@ -856,15 +1263,11 @@ function StationCard({
 
           <Card>
             <CardContent className="space-y-4 pt-4">
-              <StepHeader
-                number="5"
-                title="الخطوة الأخيرة"
-                description="راجع التفاصيل ثم اختر إما تأكيد الحجز ليصل للمحطة عبر واتساب، أو إلغاء الحجز للعودة إلى الخريطة بدون حفظ الاختيارات."
-              />
+              <StepHeader number="5" title={t.step5Title} description={t.step5Description} />
 
               <div className="rounded-2xl border bg-slate-50 p-3 text-sm leading-6 text-slate-700">
-                <p>بعد تأكيد الحجز سيصل طلبك إلى صاحب المحطة عبر واتساب مع الخصم الذي حصلت عليه.</p>
-                <p className="mt-1">إذا ألغيت الحجز بعد إنشائه سنرسل إشعار إلغاء عبر واتساب لك ولصاحب المحطة.</p>
+                <p>{t.summaryBoxLine1}</p>
+                <p className="mt-1">{t.summaryBoxLine2}</p>
               </div>
 
               {!bookingResult ? (
@@ -873,15 +1276,15 @@ function StationCard({
                     {submitting ? (
                       <>
                         <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                        جاري تأكيد الحجز...
+                        {t.confirmingBooking}
                       </>
                     ) : (
-                      "تأكيد الحجز"
+                      t.confirmBooking
                     )}
                   </Button>
 
                   <Button variant="outline" className="w-full" disabled={submitting} onClick={handleCancelBooking}>
-                    إلغاء الحجز
+                    {t.cancelBooking}
                   </Button>
                 </div>
               ) : (
@@ -889,26 +1292,27 @@ function StationCard({
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
                     <div className="flex items-center gap-2 font-medium">
                       <CheckCircle2 className="h-4 w-4" />
-                      تم إرسال طلب الحجز بنجاح
+                      {t.bookingSentTitle}
                     </div>
-                    <p className="mt-2">رقم الحجز: #{bookingResult.bookingNumber}</p>
-                    <p className="mt-1">الخصم المثبت: ({bookingResult.discountPercent})%</p>
-                    <p className="mt-1">الطلب الآن بانتظار موافقة المحطة. إذا رغبت بإلغائه يمكنك فعل ذلك من هنا مباشرة.</p>
+                    <p className="mt-2">{t.bookingNumber}: #{bookingResult.bookingNumber}</p>
+                    <p className="mt-1">{t.fixedDiscount}: ({bookingResult.discountPercent})%</p>
+                    <p className="mt-1">{t.waitingApproval}</p>
+                    <p className="mt-1">{t.successResetNote}</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" className="w-full" onClick={resetSelectionAndClose}>
-                      العودة إلى الخريطة
+                      {t.returnToMap}
                     </Button>
 
                     <Button variant="destructive" className="w-full" disabled={cancelling} onClick={handleCancelBooking}>
                       {cancelling ? (
                         <>
                           <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                          جاري الإلغاء...
+                          {t.cancellingBooking}
                         </>
                       ) : (
-                        "إلغاء الحجز"
+                        t.cancelBooking
                       )}
                     </Button>
                   </div>
@@ -928,6 +1332,9 @@ const StationsMap = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const { language, setLanguage, isRtl } = useAppLanguage();
+
+  const t = translations[language];
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_MAPS_KEY,
@@ -944,7 +1351,7 @@ const StationsMap = () => {
 
       if (error) {
         toast({
-          title: "تعذر تحميل المحطات",
+          title: t.searchLoadErrorTitle,
           description: error.message,
           variant: "destructive",
         });
@@ -955,7 +1362,7 @@ const StationsMap = () => {
     };
 
     void loadStations();
-  }, []);
+  }, [language]);
 
   const filteredStations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -1002,8 +1409,8 @@ const StationsMap = () => {
   const handleLocateMe = () => {
     if (!navigator.geolocation) {
       toast({
-        title: "المتصفح لا يدعم الموقع",
-        description: "تعذر الوصول إلى موقعك الحالي من هذا المتصفح.",
+        title: t.browserLocationTitle,
+        description: t.browserLocationDescription,
         variant: "destructive",
       });
       return;
@@ -1020,8 +1427,8 @@ const StationsMap = () => {
       },
       () => {
         toast({
-          title: "تعذر تحديد الموقع",
-          description: "اسمح بالوصول إلى الموقع لعرض أقرب المحطات إليك.",
+          title: t.locationErrorTitle,
+          description: t.locationErrorDescription,
           variant: "destructive",
         });
       },
@@ -1029,24 +1436,42 @@ const StationsMap = () => {
   };
 
   return (
-    <div className="relative h-[100vh] w-full" dir="rtl">
+    <div className="relative h-[100vh] w-full" dir={isRtl ? "rtl" : "ltr"}>
       <div className="absolute left-4 right-4 top-4 z-[900] mx-auto max-w-xl">
         <Card className="border-0 bg-background/95 shadow-xl backdrop-blur">
           <CardContent className="space-y-3 p-3">
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="ابحث عن محطة أو منطقة"
-                className="pr-9"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Search className={`${isRtl ? "right-3" : "left-3"} absolute top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground`} />
+                <Input
+                  placeholder={t.searchPlaceholder}
+                  className={isRtl ? "pr-9" : "pl-9"}
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+              </div>
+
+              <div className="w-full sm:w-52">
+                <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
+                  <SelectTrigger className="gap-2">
+                    <Globe2 className="h-4 w-4" />
+                    <SelectValue placeholder={t.languagePlaceholder} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LANGUAGE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
               <Button variant="outline" size="sm" className="shrink-0 gap-2" onClick={handleLocateMe}>
                 <LocateFixed className="h-4 w-4" />
-                موقعي
+                {t.myLocation}
               </Button>
 
               {filteredStations.slice(0, 5).map((station) => (
@@ -1090,13 +1515,13 @@ const StationsMap = () => {
         <div className="flex h-full w-full items-center justify-center">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            جاري تحميل الخريطة...
+            {t.loadingMap}
           </div>
         </div>
       )}
 
       {selectedStation && (
-        <StationCard station={selectedStation} onClose={() => setSelectedStation(null)} />
+        <StationCard station={selectedStation} onClose={() => setSelectedStation(null)} language={language} />
       )}
     </div>
   );

@@ -3,9 +3,11 @@ import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import AuthGuard from "@/components/AuthGuard";
 import RoleGuard from "@/components/RoleGuard";
 import MobileLayout from "@/components/MobileLayout";
+import { AppLanguageProvider } from "@/lib/language";
 import LandingPage from "./pages/LandingPage";
 import StationsList from "./pages/StationsList";
 import Conversations from "./pages/Conversations";
@@ -63,24 +65,27 @@ const ProtectedRoutes = () => (
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <Routes>
-          {/* Public pages with mobile bottom nav */}
-          <Route element={<MobileLayout />}>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/stations-list" element={<StationsList />} />
-            <Route path="/map" element={<StationsMap />} />
-          </Route>
-          <Route path="/login" element={<Login />} />
-          <Route path="/owner" element={<OwnerAccess />} />
-          <Route path="/app/*" element={<ProtectedRoutes />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AppLanguageProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <LanguageSwitcher />
+          <Routes>
+            {/* Public pages with mobile bottom nav */}
+            <Route element={<MobileLayout />}>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/stations-list" element={<StationsList />} />
+              <Route path="/map" element={<StationsMap />} />
+            </Route>
+            <Route path="/login" element={<Login />} />
+            <Route path="/owner" element={<OwnerAccess />} />
+            <Route path="/app/*" element={<ProtectedRoutes />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AppLanguageProvider>
   </QueryClientProvider>
 );
 
