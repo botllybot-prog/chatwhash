@@ -9,39 +9,72 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { Bot, Bell, MessageSquare, Link2, Eye, EyeOff, Save, ShieldCheck, Wallet } from "lucide-react";
+import { useAppLanguage } from "@/lib/language";
 
-const ALL_KEYS = [
-  "BOT_ENABLED", "BOT_WELCOME_MESSAGE", "BOT_UNKNOWN_MESSAGE",
-  "BOT_CONFIRMATION_MESSAGE", "BOT_CANCELLATION_MESSAGE",
-  "REMINDERS_ENABLED", "REMINDER_HOURS_BEFORE", "REMINDER_MESSAGE",
-  "BOT_AFTER_HOURS_ENABLED", "BOT_AFTER_HOURS_MESSAGE",
-  "BOT_FULLY_BOOKED_MESSAGE", "BOT_THANK_YOU_ENABLED", "BOT_THANK_YOU_MESSAGE",
-  "WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_APP_SECRET",
-  "ADMIN_WHATSAPP_PHONE", "ADMIN_TELEGRAM_CHAT_ID",
-  "PAYMENT_ZAIN_CASH", "PAYMENT_SUPER_KEY", "PAYMENT_NAS_WALLET",
-];
+const ALL_KEYS = ["BOT_ENABLED", "BOT_WELCOME_MESSAGE", "BOT_UNKNOWN_MESSAGE", "BOT_CONFIRMATION_MESSAGE", "BOT_CANCELLATION_MESSAGE", "REMINDERS_ENABLED", "REMINDER_HOURS_BEFORE", "REMINDER_MESSAGE", "BOT_AFTER_HOURS_ENABLED", "BOT_AFTER_HOURS_MESSAGE", "BOT_FULLY_BOOKED_MESSAGE", "BOT_THANK_YOU_ENABLED", "BOT_THANK_YOU_MESSAGE", "WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_APP_SECRET", "ADMIN_WHATSAPP_PHONE", "ADMIN_TELEGRAM_CHAT_ID", "PAYMENT_ZAIN_CASH", "PAYMENT_SUPER_KEY", "PAYMENT_NAS_WALLET", "PUBLIC_CONTACT_WHATSAPP", "PUBLIC_CONTACT_EMAIL"];
 
 const DEFAULTS: Record<string, string> = {
   BOT_ENABLED: "true",
-  BOT_WELCOME_MESSAGE: "مرحباً بك في خدمة غسيل السيارات! 🚗✨\nاختر المحطة للبدء بالحجز.",
-  BOT_UNKNOWN_MESSAGE: "عذراً، لم أفهم طلبك. أرسل 'مرحبا' للبدء من جديد.",
-  BOT_CONFIRMATION_MESSAGE: "✅ تم تأكيد حجزك!\n📍 المحطة: {station}\n🔧 الخدمة: {service}\n📅 التاريخ: {date}\n🕐 الوقت: {time}\n📋 رقم الحجز: #{booking_number}",
-  BOT_CANCELLATION_MESSAGE: "تم إلغاء حجزك رقم #{booking_number}. نتمنى خدمتك مستقبلاً!",
+  BOT_WELCOME_MESSAGE: "?????? ?? ?? ???? ???? ????????! ???\n???? ?????? ????? ??????.",
+  BOT_UNKNOWN_MESSAGE: "?????? ?? ???? ????. ???? '?????' ????? ?? ????.",
+  BOT_CONFIRMATION_MESSAGE: "? ?? ????? ????!\n?? ??????: {station}\n?? ??????: {service}\n?? ???????: {date}\n?? ?????: {time}\n?? ??? ?????: #{booking_number}",
+  BOT_CANCELLATION_MESSAGE: "?? ????? ???? ??? #{booking_number}. ????? ????? ????????!",
   REMINDERS_ENABLED: "true",
   REMINDER_HOURS_BEFORE: "1",
-  REMINDER_MESSAGE: "تذكير: لديك حجز غسيل سيارة خلال ساعة.\n📍 المحطة: {station}\n🔧 الخدمة: {service}\n🕐 الوقت: {time}\n📋 رقم الحجز: #{booking_number}",
+  REMINDER_MESSAGE: "?????: ???? ??? ???? ????? ???? ????.\n?? ??????: {station}\n?? ??????: {service}\n?? ?????: {time}\n?? ??? ?????: #{booking_number}",
   BOT_AFTER_HOURS_ENABLED: "true",
-  BOT_AFTER_HOURS_MESSAGE: "عذراً، المحطة مغلقة حالياً. ساعات العمل: {working_hours_start} - {working_hours_end}",
-  BOT_FULLY_BOOKED_MESSAGE: "عذراً، جميع المواعيد محجوزة لهذا اليوم. يرجى اختيار يوم آخر.",
+  BOT_AFTER_HOURS_MESSAGE: "?????? ?????? ????? ??????. ????? ?????: {working_hours_start} - {working_hours_end}",
+  BOT_FULLY_BOOKED_MESSAGE: "?????? ???? ???????? ?????? ???? ?????. ???? ?????? ??? ???.",
   BOT_THANK_YOU_ENABLED: "true",
-  BOT_THANK_YOU_MESSAGE: "شكراً لاستخدامك خدمتنا! 🚗✨ نتمنى أن تكون الخدمة نالت رضاك.",
+  BOT_THANK_YOU_MESSAGE: "????? ????????? ??????! ??? ????? ?? ???? ?????? ???? ????.",
 };
+
+const texts = {
+  ar: {
+    pageTitle: "?????????", loading: "???? ???????...", saveSuccess: "?? ????? ????? ?", saveError: "??? ?? ?????", saveAll: "??? ???? ?????????", saving: "???? ?????...",
+    botCoreTitle: "??????? ????? ????????", botCoreDesc: "????? ????? ????? ?????? ??????? ?????????", botEnabled: "????? ?????", welcome: "????? ???????", unknown: "????? ??? ??? ?????", confirmation: "????? ????? ?????", cancelMsg: "????? ????? ?????",
+    variablesBooking: "?????????: {station} {service} {time} {date} {booking_number}", remindersTitle: "??????? ???????", remindersDesc: "????? ????? ??????? ??? ???? ?????", remindersEnabled: "????? ???????", reminderBefore: "??? ??????? ??? ??????", reminderMsg: "????? ???????", oneHour: "??? ????", twoHours: "??? ??????", threeHours: "??? 3 ?????", oneDay: "??? ???",
+    autoRepliesTitle: "?????? ?????????", autoRepliesDesc: "????? ??? ??????? ???????? ?? ????? ?????", afterHours: "????? ???? ????? ?????", afterHoursMsg: "?????????: {working_hours_start} {working_hours_end}", fullBooked: "????? ??? ?????? ????????", thankYou: "????? ??? ??? ?????",
+    adminNotifyTitle: "??????? ???????", adminNotifyDesc: "?????? ???? ?? ???? ???????? ??????? ??? ?????", adminWhatsapp: "??? ?????? ??????? (?? ??? ??????)", adminWhatsappHint: "???? ????? ????? ??? ??? ???? ???? ????? ??? ??????", adminTelegram: "Chat ID ?????? ???????", adminTelegramHint: "???? ????? ????? ??? ??? ???? ???? ?????? ??? ??????",
+    whatsappApiTitle: "??? ?????? API", whatsappApiDesc: "?????? ??????? ?? Meta for Developers", accessToken: "Access Token", phoneNumberId: "Phone Number ID", verifyToken: "Verify Token", appSecret: "App Secret", copy: "???", copied: "?? ?????", webhook: "???? ??? Webhook", webhookCopied: "?? ??? ??????",
+    paymentsTitle: "?????? ?????", paymentsDesc: "???? ??? ???????? ????? ??????? ??? ????? ????? ??????", zainCash: "??? ??? — ??? ??????", superKey: "???? ?? — ??? ??????", nasWallet: "??? ???? — ??? ??????", paymentHint: "??? ????? ???? ???? ????? ?????? ???? ?? ??? ???????? ?? ???? ????? ???????.",
+  },
+  en: {
+    pageTitle: "Settings", loading: "Loading...", saveSuccess: "Saved successfully ?", saveError: "Saving failed", saveAll: "Save all settings", saving: "Saving...",
+    botCoreTitle: "Core bot settings", botCoreDesc: "Customize automated bot messages and auto replies", botEnabled: "Enable bot", welcome: "Welcome message", unknown: "Unknown-request message", confirmation: "Booking confirmation message", cancelMsg: "Booking cancellation message",
+    variablesBooking: "Variables: {station} {service} {time} {date} {booking_number}", remindersTitle: "Reminder settings", remindersDesc: "Send reminders to customers before the booking time", remindersEnabled: "Enable reminders", reminderBefore: "Reminder time before booking", reminderMsg: "Reminder message", oneHour: "1 hour before", twoHours: "2 hours before", threeHours: "3 hours before", oneDay: "1 day before",
+    autoRepliesTitle: "Automatic replies", autoRepliesDesc: "Messages sent automatically in specific cases", afterHours: "After-hours message", afterHoursMsg: "Variables: {working_hours_start} {working_hours_end}", fullBooked: "Fully-booked message", thankYou: "Thank-you message after booking",
+    adminNotifyTitle: "Admin notifications", adminNotifyDesc: "Receive a copy of all new bookings on your phone", adminWhatsapp: "Admin WhatsApp number (with country code)", adminWhatsappHint: "A notification will be sent for every new booking to this WhatsApp number", adminTelegram: "Admin Telegram chat ID", adminTelegramHint: "A notification will be sent for every new booking to this Telegram account",
+    whatsappApiTitle: "WhatsApp API connection", whatsappApiDesc: "Connection details from Meta for Developers", accessToken: "Access Token", phoneNumberId: "Phone Number ID", verifyToken: "Verify Token", appSecret: "App Secret", copy: "Copy", copied: "Copied", webhook: "Webhook URL", webhookCopied: "Webhook copied",
+    paymentsTitle: "Payment accounts", paymentsDesc: "These payment accounts are shown to the station owner when the account is suspended temporarily", zainCash: "Zain Cash — account number", superKey: "Super Key — account number", nasWallet: "NAS Wallet — account number", paymentHint: "These accounts appear for station owners when their account is suspended temporarily.",
+  },
+  ku: {
+    pageTitle: "???????????", loading: "??????? ?? ???????...", saveSuccess: "?? ??????????? ???????? ??? ?", saveError: "??????? ?? ?????????????? ?????", saveAll: "????????????? ????? ???????????", saving: "???????????? ?? ???????...",
+    botCoreTitle: "???????? ???????????? ???", botCoreDesc: "?????? ??????????????? ? ?????? ????????? ????????", botEnabled: "?????????? ???", welcome: "?????? ?????????", unknown: "?????? ???????? ????????", confirmation: "?????? ??????????????? ???", cancelMsg: "?????? ?????????????? ???",
+    variablesBooking: "?????????: {station} {service} {time} {date} {booking_number}", remindersTitle: "???????????? ??????????", remindersDesc: "??? ???? ??? ?????????? ?? ??????? ?????", remindersEnabled: "?????????? ??????????", reminderBefore: "???? ?????????? ??? ???", reminderMsg: "?????? ??????????", oneHour: "??? ??????? ???", twoHours: "??? ??????? ???", threeHours: "?? ??????? ???", oneDay: "??? ??? ???",
+    autoRepliesTitle: "?????? ?????????", autoRepliesDesc: "????????? ?? ?????? ??????????????? ???????? ?????????", afterHours: "?????? ??????? ???? ???", afterHoursMsg: "?????????: {working_hours_start} {working_hours_end}", fullBooked: "?????? ??????? ????? ?????????", thankYou: "?????? ????? ???? ???",
+    adminNotifyTitle: "??????????????? ?????????", adminNotifyDesc: "???????? ???? ????? ???? ???????? ????? ??????????", adminWhatsapp: "?????? ??????? ????????? (????? ???? ????)", adminWhatsappHint: "?????????????? ?? ??? ?????? ??? ?? ??? ??????? ?????????", adminTelegram: "Chat ID ? ????????? ?????????", adminTelegramHint: "?????????????? ?? ??? ?????? ??? ?? ??? ???????? ?????????",
+    whatsappApiTitle: "?????? WhatsApp API", whatsappApiDesc: "??????? ???????? ?? Meta for Developers", accessToken: "Access Token", phoneNumberId: "Phone Number ID", verifyToken: "Verify Token", appSecret: "App Secret", copy: "????", copied: "???? ???", webhook: "??????? Webhook", webhookCopied: "????????? ???? ???",
+    paymentsTitle: "??????????? ???????", paymentsDesc: "??? ????????? ?? ?????? ?????? ????? ?????? ????? ?????????? ?? ???????? ???? ???????????", zainCash: "Zain Cash — ?????? ??????", superKey: "Super Key — ?????? ??????", nasWallet: "NAS Wallet — ?????? ??????", paymentHint: "??? ????????? ?? ????? ????? ??????????? ????????? ????? ????????? ????? ???????????.",
+  },
+  tr: {
+    pageTitle: "Ayarlar", loading: "Yükleniyor...", saveSuccess: "Basariyla kaydedildi ?", saveError: "Kaydetme hatasi", saveAll: "Tüm ayarlari kaydet", saving: "Kaydediliyor...",
+    botCoreTitle: "Temel bot ayarlari", botCoreDesc: "Otomatik bot mesajlarini ve yanitlarini özellestirin", botEnabled: "Botu etkinlestir", welcome: "Karsilama mesaji", unknown: "Anlasilmayan istek mesaji", confirmation: "Rezervasyon onay mesaji", cancelMsg: "Rezervasyon iptal mesaji",
+    variablesBooking: "Degiskenler: {station} {service} {time} {date} {booking_number}", remindersTitle: "Hatirlatma ayarlari", remindersDesc: "Rezervasyon saatinden önce müsterilere hatirlatma gönder", remindersEnabled: "Hatirlatmalari etkinlestir", reminderBefore: "Rezervasyon öncesi hatirlatma süresi", reminderMsg: "Hatirlatma mesaji", oneHour: "1 saat önce", twoHours: "2 saat önce", threeHours: "3 saat önce", oneDay: "1 gün önce",
+    autoRepliesTitle: "Otomatik yanitlar", autoRepliesDesc: "Belirli durumlarda otomatik gönderilen mesajlar", afterHours: "Çalisma saati disi mesaji", afterHoursMsg: "Degiskenler: {working_hours_start} {working_hours_end}", fullBooked: "Tam dolu gün mesaji", thankYou: "Rezervasyon sonrasi tesekkür mesaji",
+    adminNotifyTitle: "Yönetici bildirimleri", adminNotifyDesc: "Tüm yeni rezervasyonlarin kopyasini telefonunuzda alin", adminWhatsapp: "Yönetici WhatsApp numarasi (ülke koduyla)", adminWhatsappHint: "Her yeni rezervasyon için bu WhatsApp numarasina bildirim gönderilir", adminTelegram: "Yönetici Telegram chat ID", adminTelegramHint: "Her yeni rezervasyon için bu Telegram hesabina bildirim gönderilir",
+    whatsappApiTitle: "WhatsApp API baglantisi", whatsappApiDesc: "Meta for Developers baglanti bilgileri", accessToken: "Access Token", phoneNumberId: "Phone Number ID", verifyToken: "Verify Token", appSecret: "App Secret", copy: "Kopyala", copied: "Kopyalandi", webhook: "Webhook baglantisi", webhookCopied: "Webhook kopyalandi",
+    paymentsTitle: "Ödeme hesaplari", paymentsDesc: "Bu ödeme hesaplari istasyon sahibine hesap geçici olarak durduruldugunda gösterilir", zainCash: "Zain Cash — hesap numarasi", superKey: "Super Key — hesap numarasi", nasWallet: "NAS Wallet — hesap numarasi", paymentHint: "Bu hesaplar, istasyon sahibinin hesabi geçici olarak askiya alindiginda görünür.",
+  },
+} as const;
 
 const AdminSettings = () => {
   const [values, setValues] = useState<Record<string, string>>({});
   const [showSecret, setShowSecret] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const { language } = useAppLanguage();
+  const t = texts[language];
 
   useEffect(() => {
     const load = async () => {
@@ -60,249 +93,103 @@ const AdminSettings = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const upserts = ALL_KEYS.filter((k) => values[k] !== undefined).map((k) =>
-        (supabase as any).from("app_settings").upsert({ key: k, value: values[k] || "" }, { onConflict: "key" })
-      );
+      const upserts = ALL_KEYS.filter((k) => values[k] !== undefined).map((k) => (supabase as any).from("app_settings").upsert({ key: k, value: values[k] || "" }, { onConflict: "key" }));
       await Promise.all(upserts);
-      toast({ title: "تم الحفظ بنجاح ✅" });
+      toast({ title: t.saveSuccess });
     } catch {
-      toast({ title: "خطأ في الحفظ", variant: "destructive" });
+      toast({ title: t.saveError, variant: "destructive" });
     }
     setSaving(false);
   };
 
-  if (loading) return <p className="text-muted-foreground text-center py-12">جاري التحميل...</p>;
+  if (loading) return <p className="text-muted-foreground text-center py-12">{t.loading}</p>;
 
   const webhookUrl = `https://yhklvtzonvgzkodysawu.supabase.co/functions/v1/whatsapp-webhook`;
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <h2 className="text-xl font-bold text-foreground">الإعدادات</h2>
+      <h2 className="text-xl font-bold text-foreground">{t.pageTitle}</h2>
 
-      {/* Bot Core */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary" />إعدادات البوت الأساسية</CardTitle>
-          <CardDescription>تخصيص رسائل البوت الآلية والردود التلقائية</CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary" />{t.botCoreTitle}</CardTitle><CardDescription>{t.botCoreDesc}</CardDescription></CardHeader>
         <CardContent className="space-y-5">
-          <div className="flex items-center justify-between">
-            <Label>تفعيل البوت</Label>
-            <Switch checked={values.BOT_ENABLED === "true"} onCheckedChange={() => toggle("BOT_ENABLED")} />
-          </div>
-          <div className="space-y-1">
-            <Label>رسالة الترحيب</Label>
-            <Textarea value={values.BOT_WELCOME_MESSAGE || ""} onChange={(e) => set("BOT_WELCOME_MESSAGE", e.target.value)} rows={3} />
-          </div>
-          <div className="space-y-1">
-            <Label>رسالة عند عدم الفهم</Label>
-            <Textarea value={values.BOT_UNKNOWN_MESSAGE || ""} onChange={(e) => set("BOT_UNKNOWN_MESSAGE", e.target.value)} rows={2} />
-          </div>
-          <div className="space-y-1">
-            <Label>رسالة تأكيد الحجز</Label>
-            <Textarea value={values.BOT_CONFIRMATION_MESSAGE || ""} onChange={(e) => set("BOT_CONFIRMATION_MESSAGE", e.target.value)} rows={4} />
-            <p className="text-xs text-muted-foreground">المتغيرات: {"{station}"} {"{service}"} {"{time}"} {"{date}"} {"{booking_number}"}</p>
-          </div>
-          <div className="space-y-1">
-            <Label>رسالة إلغاء الحجز</Label>
-            <Textarea value={values.BOT_CANCELLATION_MESSAGE || ""} onChange={(e) => set("BOT_CANCELLATION_MESSAGE", e.target.value)} rows={2} />
-          </div>
+          <div className="flex items-center justify-between"><Label>{t.botEnabled}</Label><Switch checked={values.BOT_ENABLED === "true"} onCheckedChange={() => toggle("BOT_ENABLED")} /></div>
+          <div className="space-y-1"><Label>{t.welcome}</Label><Textarea value={values.BOT_WELCOME_MESSAGE || ""} onChange={(e) => set("BOT_WELCOME_MESSAGE", e.target.value)} rows={3} /></div>
+          <div className="space-y-1"><Label>{t.unknown}</Label><Textarea value={values.BOT_UNKNOWN_MESSAGE || ""} onChange={(e) => set("BOT_UNKNOWN_MESSAGE", e.target.value)} rows={2} /></div>
+          <div className="space-y-1"><Label>{t.confirmation}</Label><Textarea value={values.BOT_CONFIRMATION_MESSAGE || ""} onChange={(e) => set("BOT_CONFIRMATION_MESSAGE", e.target.value)} rows={4} /><p className="text-xs text-muted-foreground">{t.variablesBooking}</p></div>
+          <div className="space-y-1"><Label>{t.cancelMsg}</Label><Textarea value={values.BOT_CANCELLATION_MESSAGE || ""} onChange={(e) => set("BOT_CANCELLATION_MESSAGE", e.target.value)} rows={2} /></div>
         </CardContent>
       </Card>
 
-      {/* Reminders */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5 text-primary" />إعدادات التذكير</CardTitle>
-          <CardDescription>إرسال تذكير للعملاء قبل موعد الحجز</CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5 text-primary" />{t.remindersTitle}</CardTitle><CardDescription>{t.remindersDesc}</CardDescription></CardHeader>
         <CardContent className="space-y-5">
-          <div className="flex items-center justify-between">
-            <Label>تفعيل التذكير</Label>
-            <Switch checked={values.REMINDERS_ENABLED === "true"} onCheckedChange={() => toggle("REMINDERS_ENABLED")} />
-          </div>
-          <div className="space-y-1">
-            <Label>وقت التذكير قبل الموعد</Label>
-            <Select value={values.REMINDER_HOURS_BEFORE || "1"} onValueChange={(v) => set("REMINDER_HOURS_BEFORE", v)}>
-              <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">قبل ساعة</SelectItem>
-                <SelectItem value="2">قبل ساعتين</SelectItem>
-                <SelectItem value="3">قبل 3 ساعات</SelectItem>
-                <SelectItem value="24">قبل يوم</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>رسالة التذكير</Label>
-            <Textarea value={values.REMINDER_MESSAGE || ""} onChange={(e) => set("REMINDER_MESSAGE", e.target.value)} rows={4} />
-            <p className="text-xs text-muted-foreground">المتغيرات: {"{station}"} {"{service}"} {"{time}"} {"{date}"} {"{booking_number}"}</p>
-          </div>
+          <div className="flex items-center justify-between"><Label>{t.remindersEnabled}</Label><Switch checked={values.REMINDERS_ENABLED === "true"} onCheckedChange={() => toggle("REMINDERS_ENABLED")} /></div>
+          <div className="space-y-1"><Label>{t.reminderBefore}</Label><Select value={values.REMINDER_HOURS_BEFORE || "1"} onValueChange={(v) => set("REMINDER_HOURS_BEFORE", v)}><SelectTrigger className="w-48"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">{t.oneHour}</SelectItem><SelectItem value="2">{t.twoHours}</SelectItem><SelectItem value="3">{t.threeHours}</SelectItem><SelectItem value="24">{t.oneDay}</SelectItem></SelectContent></Select></div>
+          <div className="space-y-1"><Label>{t.reminderMsg}</Label><Textarea value={values.REMINDER_MESSAGE || ""} onChange={(e) => set("REMINDER_MESSAGE", e.target.value)} rows={4} /><p className="text-xs text-muted-foreground">{t.variablesBooking}</p></div>
         </CardContent>
       </Card>
 
-      {/* Auto replies */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-primary" />الردود التلقائية</CardTitle>
-          <CardDescription>رسائل يتم إرسالها تلقائياً في حالات معينة</CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-primary" />{t.autoRepliesTitle}</CardTitle><CardDescription>{t.autoRepliesDesc}</CardDescription></CardHeader>
         <CardContent className="space-y-5">
-          <div className="space-y-3 p-4 rounded-lg border border-border">
-            <div className="flex items-center justify-between">
-              <Label>رسالة خارج ساعات العمل</Label>
-              <Switch checked={values.BOT_AFTER_HOURS_ENABLED === "true"} onCheckedChange={() => toggle("BOT_AFTER_HOURS_ENABLED")} />
-            </div>
-            <Textarea value={values.BOT_AFTER_HOURS_MESSAGE || ""} onChange={(e) => set("BOT_AFTER_HOURS_MESSAGE", e.target.value)} rows={2} />
-            <p className="text-xs text-muted-foreground">المتغيرات: {"{working_hours_start}"} {"{working_hours_end}"}</p>
-          </div>
-
-          <div className="space-y-3 p-4 rounded-lg border border-border">
-            <Label>رسالة عند امتلاء المواعيد</Label>
-            <Textarea value={values.BOT_FULLY_BOOKED_MESSAGE || ""} onChange={(e) => set("BOT_FULLY_BOOKED_MESSAGE", e.target.value)} rows={2} />
-          </div>
-
-          <div className="space-y-3 p-4 rounded-lg border border-border">
-            <div className="flex items-center justify-between">
-              <Label>رسالة شكر بعد الحجز</Label>
-              <Switch checked={values.BOT_THANK_YOU_ENABLED === "true"} onCheckedChange={() => toggle("BOT_THANK_YOU_ENABLED")} />
-            </div>
-            <Textarea value={values.BOT_THANK_YOU_MESSAGE || ""} onChange={(e) => set("BOT_THANK_YOU_MESSAGE", e.target.value)} rows={2} />
-          </div>
+          <div className="space-y-3 p-4 rounded-lg border border-border"><div className="flex items-center justify-between"><Label>{t.afterHours}</Label><Switch checked={values.BOT_AFTER_HOURS_ENABLED === "true"} onCheckedChange={() => toggle("BOT_AFTER_HOURS_ENABLED")} /></div><Textarea value={values.BOT_AFTER_HOURS_MESSAGE || ""} onChange={(e) => set("BOT_AFTER_HOURS_MESSAGE", e.target.value)} rows={2} /><p className="text-xs text-muted-foreground">{t.afterHoursMsg}</p></div>
+          <div className="space-y-3 p-4 rounded-lg border border-border"><Label>{t.fullBooked}</Label><Textarea value={values.BOT_FULLY_BOOKED_MESSAGE || ""} onChange={(e) => set("BOT_FULLY_BOOKED_MESSAGE", e.target.value)} rows={2} /></div>
+          <div className="space-y-3 p-4 rounded-lg border border-border"><div className="flex items-center justify-between"><Label>{t.thankYou}</Label><Switch checked={values.BOT_THANK_YOU_ENABLED === "true"} onCheckedChange={() => toggle("BOT_THANK_YOU_ENABLED")} /></div><Textarea value={values.BOT_THANK_YOU_MESSAGE || ""} onChange={(e) => set("BOT_THANK_YOU_MESSAGE", e.target.value)} rows={2} /></div>
         </CardContent>
       </Card>
 
-      {/* Admin Notifications */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary" />إشعارات المسؤول</CardTitle>
-          <CardDescription>استلام نسخة من جميع الحجوزات الجديدة على هاتفك</CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary" />{t.adminNotifyTitle}</CardTitle><CardDescription>{t.adminNotifyDesc}</CardDescription></CardHeader>
         <CardContent className="space-y-5">
-          <div className="space-y-1">
-            <Label>رقم واتساب المسؤول (مع رمز الدولة)</Label>
-            <Input
-              value={values.ADMIN_WHATSAPP_PHONE || ""}
-              onChange={(e) => set("ADMIN_WHATSAPP_PHONE", e.target.value)}
-              placeholder="964750XXXXXXX"
-              dir="ltr"
-            />
-            <p className="text-xs text-muted-foreground">سيتم إرسال إشعار بكل حجز جديد لهذا الرقم عبر واتساب</p>
-          </div>
-          <div className="space-y-1">
-            <Label>Chat ID تلقرام المسؤول</Label>
-            <Input
-              value={values.ADMIN_TELEGRAM_CHAT_ID || ""}
-              onChange={(e) => set("ADMIN_TELEGRAM_CHAT_ID", e.target.value)}
-              placeholder="123456789"
-              dir="ltr"
-            />
-            <p className="text-xs text-muted-foreground">سيتم إرسال إشعار بكل حجز جديد لهذا الحساب عبر تلقرام</p>
-          </div>
+          <div className="space-y-1"><Label>{t.adminWhatsapp}</Label><Input value={values.ADMIN_WHATSAPP_PHONE || ""} onChange={(e) => set("ADMIN_WHATSAPP_PHONE", e.target.value)} placeholder="964750XXXXXXX" dir="ltr" /><p className="text-xs text-muted-foreground">{t.adminWhatsappHint}</p></div>
+          <div className="space-y-1"><Label>{t.adminTelegram}</Label><Input value={values.ADMIN_TELEGRAM_CHAT_ID || ""} onChange={(e) => set("ADMIN_TELEGRAM_CHAT_ID", e.target.value)} placeholder="123456789" dir="ltr" /><p className="text-xs text-muted-foreground">{t.adminTelegramHint}</p></div>
         </CardContent>
       </Card>
 
-      {/* WhatsApp API */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Link2 className="h-5 w-5 text-primary" />ربط واتساب API</CardTitle>
-          <CardDescription>بيانات الاتصال من Meta for Developers</CardDescription>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Link2 className="h-5 w-5 text-primary" />{t.whatsappApiTitle}</CardTitle><CardDescription>{t.whatsappApiDesc}</CardDescription></CardHeader>
         <CardContent className="space-y-5">
           {[
-            { key: "WHATSAPP_ACCESS_TOKEN", label: "Access Token", sensitive: true },
-            { key: "WHATSAPP_PHONE_NUMBER_ID", label: "Phone Number ID", sensitive: false },
-            { key: "WHATSAPP_VERIFY_TOKEN", label: "Verify Token", sensitive: false, readOnly: true },
-            { key: "WHATSAPP_APP_SECRET", label: "App Secret", sensitive: true },
+            { key: "WHATSAPP_ACCESS_TOKEN", label: t.accessToken, sensitive: true },
+            { key: "WHATSAPP_PHONE_NUMBER_ID", label: t.phoneNumberId, sensitive: false },
+            { key: "WHATSAPP_VERIFY_TOKEN", label: t.verifyToken, sensitive: false, readOnly: true },
+            { key: "WHATSAPP_APP_SECRET", label: t.appSecret, sensitive: true },
           ].map((field) => (
-            <div key={field.key} className="space-y-1">
-              <Label>{field.label}</Label>
-              <div className="relative flex gap-2">
-                <Input
-                  type={field.sensitive && !showSecret[field.key] ? "password" : "text"}
-                  value={values[field.key] || ""}
-                  onChange={(e) => !field.readOnly && set(field.key, e.target.value)}
-                  readOnly={field.readOnly}
-                  className={field.readOnly ? "bg-muted" : ""}
-                />
-                {field.sensitive && (
-                  <button
-                    type="button"
-                    onClick={() => setShowSecret((s) => ({ ...s, [field.key]: !s[field.key] }))}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showSecret[field.key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                )}
-                {field.readOnly && values[field.key] && (
-                  <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(values[field.key]); toast({ title: "تم النسخ" }); }}>نسخ</Button>
-                )}
-              </div>
-            </div>
+            <div key={field.key} className="space-y-1"><Label>{field.label}</Label><div className="relative flex gap-2"><Input type={field.sensitive && !showSecret[field.key] ? "password" : "text"} value={values[field.key] || ""} onChange={(e) => !field.readOnly && set(field.key, e.target.value)} readOnly={field.readOnly} className={field.readOnly ? "bg-muted" : ""} />{field.sensitive && <button type="button" onClick={() => setShowSecret((s) => ({ ...s, [field.key]: !s[field.key] }))} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">{showSecret[field.key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>}{field.readOnly && values[field.key] && <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(values[field.key]); toast({ title: t.copied }); }}>{t.copy}</Button>}</div></div>
           ))}
-
-          <div className="space-y-2 pt-2">
-            <Label>رابط الـ Webhook</Label>
-            <div className="bg-muted rounded-md p-3 font-mono text-sm break-all text-foreground">{webhookUrl}</div>
-            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(webhookUrl); toast({ title: "تم نسخ الرابط" }); }}>نسخ الرابط</Button>
-          </div>
+          <div className="space-y-2 pt-2"><Label>{t.webhook}</Label><div className="bg-muted rounded-md p-3 font-mono text-sm break-all text-foreground">{webhookUrl}</div><Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(webhookUrl); toast({ title: t.webhookCopied }); }}>{t.copy}</Button></div>
         </CardContent>
       </Card>
 
-      {/* Payment Accounts */}
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Wallet className="h-5 w-5 text-primary" />{t.paymentsTitle}</CardTitle><CardDescription>{t.paymentsDesc}</CardDescription></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5"><Label className="flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-full bg-green-500"></span>{t.zainCash}</Label><Input value={values.PAYMENT_ZAIN_CASH || ""} onChange={(e) => set("PAYMENT_ZAIN_CASH", e.target.value)} placeholder="07XXXXXXXXX" dir="ltr" /></div>
+          <div className="space-y-1.5"><Label className="flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-full bg-blue-500"></span>{t.superKey}</Label><Input value={values.PAYMENT_SUPER_KEY || ""} onChange={(e) => set("PAYMENT_SUPER_KEY", e.target.value)} placeholder="07XXXXXXXXX" dir="ltr" /></div>
+          <div className="space-y-1.5"><Label className="flex items-center gap-2"><span className="inline-block w-3 h-3 rounded-full bg-orange-500"></span>{t.nasWallet}</Label><Input value={values.PAYMENT_NAS_WALLET || ""} onChange={(e) => set("PAYMENT_NAS_WALLET", e.target.value)} placeholder="07XXXXXXXXX" dir="ltr" /></div>
+          <p className="text-xs text-muted-foreground pt-1">{t.paymentHint}</p>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Wallet className="h-5 w-5 text-primary" />حسابات الدفع</CardTitle>
-          <CardDescription>تظهر هذه الحسابات لصاحب المغسلة عند إيقاف حسابه مؤقتاً</CardDescription>
+          <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-primary" />بيانات التواصل في الواجهة الرئيسية</CardTitle>
+          <CardDescription>يمكنك تعديل رقم واتساب والإيميل الظاهرين في أسفل الصفحة الرئيسية.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="flex items-center gap-2">
-              <span className="inline-block w-3 h-3 rounded-full bg-green-500"></span>
-              زين كاش — رقم الحساب
-            </Label>
-            <Input
-              value={values.PAYMENT_ZAIN_CASH || ""}
-              onChange={(e) => set("PAYMENT_ZAIN_CASH", e.target.value)}
-              placeholder="07XXXXXXXXX"
-              dir="ltr"
-            />
+          <div className="space-y-1">
+            <Label>رقم واتساب الظاهر في الفوتر</Label>
+            <Input value={values.PUBLIC_CONTACT_WHATSAPP || ""} onChange={(e) => set("PUBLIC_CONTACT_WHATSAPP", e.target.value)} placeholder="+9647736939153" dir="ltr" />
           </div>
-          <div className="space-y-1.5">
-            <Label className="flex items-center gap-2">
-              <span className="inline-block w-3 h-3 rounded-full bg-blue-500"></span>
-              سوبر كي — رقم الحساب
-            </Label>
-            <Input
-              value={values.PAYMENT_SUPER_KEY || ""}
-              onChange={(e) => set("PAYMENT_SUPER_KEY", e.target.value)}
-              placeholder="07XXXXXXXXX"
-              dir="ltr"
-            />
+          <div className="space-y-1">
+            <Label>الإيميل الظاهر في الفوتر</Label>
+            <Input value={values.PUBLIC_CONTACT_EMAIL || ""} onChange={(e) => set("PUBLIC_CONTACT_EMAIL", e.target.value)} placeholder="info@washlly.com" dir="ltr" />
           </div>
-          <div className="space-y-1.5">
-            <Label className="flex items-center gap-2">
-              <span className="inline-block w-3 h-3 rounded-full bg-orange-500"></span>
-              ناس وولت — رقم الحساب
-            </Label>
-            <Input
-              value={values.PAYMENT_NAS_WALLET || ""}
-              onChange={(e) => set("PAYMENT_NAS_WALLET", e.target.value)}
-              placeholder="07XXXXXXXXX"
-              dir="ltr"
-            />
-          </div>
-          <p className="text-xs text-muted-foreground pt-1">
-            عند إيقاف حساب صاحب مغسلة مؤقتاً ← صفحة أصحاب المحطات
-          </p>
         </CardContent>
       </Card>
 
-      {/* Save */}
-      <Button onClick={handleSave} disabled={saving} className="w-full" size="lg">
-        <Save className="h-4 w-4 ml-2" />
-        {saving ? "جاري الحفظ..." : "حفظ جميع الإعدادات"}
-      </Button>
+      <Button onClick={handleSave} disabled={saving} className="w-full" size="lg"><Save className="h-4 w-4 ml-2" />{saving ? t.saving : t.saveAll}</Button>
     </div>
   );
 };

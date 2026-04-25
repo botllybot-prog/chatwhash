@@ -1,8 +1,10 @@
-﻿import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { ArrowLeft, BarChart3, Bell, Car, CheckCircle, Clock, Droplets, MapPin, MessageSquare, Shield, Sparkles, Star, Users, Waves, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAppLanguage } from "@/lib/language";
+import { supabase } from "@/integrations/supabase/client";
 
 const texts = {
   ar: {
@@ -274,6 +276,55 @@ const LandingPage = () => {
   const navigate = useNavigate();
   const { language, isRtl } = useAppLanguage();
   const t = texts[language];
+  const [footerInfo, setFooterInfo] = useState({
+    whatsapp: "+9647736939153",
+    email: "info@washlly.com",
+  });
+
+  const [liveStats, setLiveStats] = useState({
+    activeStations: 50,
+    completedBookings: 1200,
+  });
+
+  useEffect(() => {
+    const loadPublicData = async () => {
+      const [{ data: settingsData }, { count: activeStations }, { count: completedBookings }] = await Promise.all([
+        (supabase as any)
+          .from("app_settings")
+          .select("key, value")
+          .in("key", ["PUBLIC_CONTACT_WHATSAPP", "PUBLIC_CONTACT_EMAIL"]),
+        (supabase as any)
+          .from("stations")
+          .select("id", { count: "exact", head: true })
+          .eq("is_active", true),
+        (supabase as any)
+          .from("bookings")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "completed"),
+      ]);
+
+      if (settingsData) {
+        const map = Object.fromEntries((settingsData as { key: string; value: string }[]).map((row) => [row.key, row.value]));
+        setFooterInfo({
+          whatsapp: map.PUBLIC_CONTACT_WHATSAPP || "+9647736939153",
+          email: map.PUBLIC_CONTACT_EMAIL || "info@washlly.com",
+        });
+      }
+
+      setLiveStats({
+        activeStations: activeStations || 50,
+        completedBookings: completedBookings || 1200,
+      });
+    };
+
+    loadPublicData();
+  }, []);
+
+  const statsToRender = t.stats.map((item, index) => {
+    if (index === 0) return { ...item, value: `+${liveStats.activeStations}` };
+    if (index === 1) return { ...item, value: `+${liveStats.completedBookings}` };
+    return item;
+  });
 
   return (
     <div className="bg-background overflow-x-hidden" dir={isRtl ? "rtl" : "ltr"}>
@@ -290,9 +341,9 @@ const LandingPage = () => {
               <Sparkles className="h-4 w-4" />
               {t.badge}
             </div>
-            <h1 className="mb-6 text-4xl font-black leading-tight text-foreground sm:text-5xl md:text-7xl">
+            <h1 className="mb-6 text-4xl font-black leading-[1.12] text-foreground sm:text-5xl md:text-7xl">
               {t.heroTitle1}
-              <span className="block bg-gradient-to-l from-ocean-400 via-ocean-500 to-ocean-600 bg-clip-text text-transparent">
+              <span className="relative -mt-1 block bg-gradient-to-l from-ocean-400 via-ocean-500 to-ocean-600 bg-clip-text pt-2 text-transparent md:-mt-2 md:pt-3">
                 {t.heroTitle2}
               </span>
             </h1>
@@ -316,7 +367,7 @@ const LandingPage = () => {
           </motion.div>
 
           <motion.div {...fadeUp} transition={{ delay: 0.15, duration: 0.6 }} className="mx-auto mt-16 grid max-w-5xl grid-cols-2 gap-4 rounded-[2rem] border border-border/60 bg-card/80 p-6 shadow-xl shadow-ocean-500/10 backdrop-blur md:grid-cols-4">
-            {t.stats.map((item) => (
+            {statsToRender.map((item) => (
               <div key={item.label} className="text-center">
                 <p className="text-3xl font-black text-ocean-500 md:text-5xl">{item.value}</p>
                 <p className="mt-2 text-sm text-muted-foreground">{item.label}</p>
@@ -469,40 +520,40 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <footer className="border-t border-ocean-800 bg-ocean-950 py-12 text-ocean-200">
+      <footer className="border-t border-slate-200 bg-slate-50 py-12 text-slate-900">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 md:grid-cols-3">
           <div>
             <div className="mb-4 flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ocean-500">
                 <Car className="h-4 w-4 text-white" />
               </div>
-              <span className="text-lg font-bold text-white">Washlly</span>
+              <span className="text-lg font-bold text-slate-950">Washlly</span>
             </div>
-            <p className="text-sm leading-relaxed text-ocean-200">{t.footerDescription}</p>
+            <p className="text-sm leading-relaxed text-slate-800">{t.footerDescription}</p>
           </div>
           <div>
-            <h4 className="mb-3 font-bold text-white">{t.quickLinks}</h4>
-            <ul className="space-y-2 text-sm text-ocean-200">
+            <h4 className="mb-3 font-bold text-slate-950">{t.quickLinks}</h4>
+            <ul className="space-y-2 text-sm text-slate-800">
               {t.links.map((link) => (
                 <li key={link}>{link}</li>
               ))}
             </ul>
           </div>
           <div>
-            <h4 className="mb-3 font-bold text-white">{t.contactUs}</h4>
-            <div className="space-y-2 text-sm text-ocean-200">
+            <h4 className="mb-3 font-bold text-slate-950">{t.contactUs}</h4>
+            <div className="space-y-2 text-sm text-slate-900">
               <div className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" />
-                <span>WhatsApp: +964 XXX XXX XXXX</span>
+                <MessageSquare className="h-4 w-4 text-ocean-600" />
+                <span dir="ltr">WhatsApp: {footerInfo.whatsapp}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Star className="h-4 w-4" />
-                <span>support@washlly.com</span>
+                <Star className="h-4 w-4 text-ocean-600" />
+                <span dir="ltr">{footerInfo.email}</span>
               </div>
             </div>
           </div>
         </div>
-        <div className="mx-auto mt-8 max-w-7xl border-t border-white/10 px-4 pt-6 text-center text-xs text-ocean-300">
+        <div className="mx-auto mt-8 max-w-7xl border-t border-slate-200 px-4 pt-6 text-center text-xs text-slate-700">
           © {new Date().getFullYear()} Washlly. {t.copyright}
         </div>
       </footer>
