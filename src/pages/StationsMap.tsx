@@ -26,21 +26,36 @@ import {
 
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 const DEFAULT_CENTER = { lat: 33.3152, lng: 44.3661 };
-const SEGMENT_ANGLE = 72;
 
 const SPIN_SEGMENTS = [
-  { key: "discount_5", label: "5%", color: "#0ea5e9", discountPercent: 5 },
-  { key: "discount_10", label: "10%", color: "#0284c7", discountPercent: 10 },
-  { key: "discount_15", label: "15%", color: "#0369a1", discountPercent: 15 },
-  { key: "retry", label: "أعد", color: "#f59e0b", discountPercent: 0 },
-  { key: "discount_0", label: "0%", color: "#94a3b8", discountPercent: 0 },
+  { key: "discount_5", label: "5%", subtitle: "خصم فوري", color: "#1ea7ff", discountPercent: 5, size: 80, textColor: "#ffffff" },
+  { key: "discount_10", label: "10%", subtitle: "خصم فوري", color: "#155ed1", discountPercent: 10, size: 80, textColor: "#ffffff" },
+  { key: "discount_15", label: "15%", subtitle: "خصم فوري", color: "#0b43aa", discountPercent: 15, size: 80, textColor: "#ffffff" },
+  { key: "retry", label: "أعد", subtitle: "حاول مرة أخرى", color: "#0f72d5", discountPercent: 0, size: 84, textColor: "#ffffff" },
+  { key: "discount_0", label: "0%", subtitle: "لا يوجد خصم", color: "#f3f4f6", discountPercent: 0, size: 36, textColor: "#111827" },
 ] as const;
 
-const WHEEL_BACKGROUND = `conic-gradient(from -126deg, ${SPIN_SEGMENTS.map((segment, index) => {
-  const start = index * SEGMENT_ANGLE;
-  const end = start + SEGMENT_ANGLE;
-  return `${segment.color} ${start}deg ${end}deg`;
+const SPIN_SEGMENT_ARCS = SPIN_SEGMENTS.reduce<
+  Array<(typeof SPIN_SEGMENTS)[number] & { startAngle: number; endAngle: number; midAngle: number }>
+>((acc, segment) => {
+  const startAngle = acc.length === 0 ? 0 : acc[acc.length - 1].endAngle;
+  const endAngle = startAngle + segment.size;
+
+  acc.push({
+    ...segment,
+    startAngle,
+    endAngle,
+    midAngle: startAngle + segment.size / 2,
+  });
+
+  return acc;
+}, []);
+
+const WHEEL_BACKGROUND = `conic-gradient(from -90deg, ${SPIN_SEGMENT_ARCS.map((segment) => {
+  return `${segment.color} ${segment.startAngle}deg ${segment.endAngle}deg`;
 }).join(", ")})`;
+
+const WHEEL_LIGHTS = Array.from({ length: 12 }, (_, index) => index);
 
 interface Station {
   id: string;
@@ -127,9 +142,9 @@ function formatCurrency(amount: number) {
   return `${Math.round(amount)} د.ع`;
 }
 
-function calculateSpinRotation(currentRotation: number, segmentIndex: number) {
+function calculateSpinRotation(currentRotation: number, targetMidAngle: number) {
   const currentNormalized = ((currentRotation % 360) + 360) % 360;
-  const targetNormalized = ((360 - segmentIndex * SEGMENT_ANGLE) % 360 + 360) % 360;
+  const targetNormalized = ((360 - targetMidAngle) % 360 + 360) % 360;
   let delta = targetNormalized - currentNormalized;
 
   if (delta <= 0) delta += 360;
@@ -194,6 +209,19 @@ function StationCard({
     setSpinResult(null);
     setNeedsRespin(false);
     setSpinHint("لف العجلة مرة واحدة لكل حجز قبل تأكيد الطلب.");
+  };
+
+  const resetSelectionAndClose = () => {
+    setSelectedService(null);
+    setSelectedDate(getTodayDate());
+    setSelectedSlot(null);
+    setAvailableSlots([]);
+    setCustomerName("");
+    setCustomerPhone("");
+    setBookingResult(null);
+    setSpinRotation(0);
+    resetSpinState();
+    onClose();
   };
 
   useEffect(() => {
@@ -349,8 +377,8 @@ function StationCard({
       return;
     }
 
-    const segmentIndex = SPIN_SEGMENTS.findIndex((segment) => segment.key === data.segmentKey);
-    const nextRotation = calculateSpinRotation(spinRotation, segmentIndex >= 0 ? segmentIndex : 0);
+    const selectedArc = SPIN_SEGMENT_ARCS.find((segment) => segment.key === data.segmentKey) || SPIN_SEGMENT_ARCS[0];
+    const nextRotation = calculateSpinRotation(spinRotation, selectedArc.midAngle);
     setSpinRotation(nextRotation);
 
     window.setTimeout(() => {
@@ -451,13 +479,12 @@ function StationCard({
 
     toast({
       title: "تم إرسال الحجز بنجاح",
-      description: `رقم الحجز #${data.bookingNumber}`,
+      description: `رقم الحجز #${data.bookingNumber} - الخصم (${spinResult.discountPercent})%`,
     });
 
-    if (isSlotsFlow) {
-      setAvailableSlots((currentSlots) => currentSlots.filter((slot) => slot !== selectedSlot));
-      setSelectedSlot(null);
-    }
+    window.setTimeout(() => {
+      resetSelectionAndClose();
+    }, 1200);
   };
 
   return (
@@ -633,73 +660,92 @@ function StationCard({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="pt-4 space-y-4">
-              <div className="flex items-center gap-2">
-                <Gift className="h-4 w-4 text-primary" />
-                <h3 className="font-semibold">عجلة الخصم</h3>
+          <Card className="overflow-hidden border-0 bg-[#06080d] text-white shadow-2xl">
+            <CardContent className="pt-5 space-y-5">
+              <div className="text-center">
+                <div className="inline-flex items-center gap-2 rounded-full border border-yellow-400/30 bg-yellow-400/10 px-3 py-1 text-xs text-yellow-200">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  لف العجلة واربح خصم فوري
+                </div>
+                <h3 className="mt-3 text-2xl font-extrabold">عجلة الخصم</h3>
+                <p className="mt-2 text-sm text-slate-300">{spinHint}</p>
               </div>
 
-              <div className="rounded-2xl border bg-slate-50/80 p-4">
-                <div className="relative mx-auto h-64 w-64">
-                  <div className="absolute left-1/2 top-0 z-20 -translate-x-1/2">
-                    <div className="h-0 w-0 border-l-[14px] border-r-[14px] border-b-[22px] border-l-transparent border-r-transparent border-b-rose-500" />
+              <div className="rounded-[32px] border border-white/10 bg-[#0b1220] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                <div className="relative mx-auto h-72 w-72 max-w-full">
+                  {WHEEL_LIGHTS.map((lightIndex) => {
+                    const angle = (360 / WHEEL_LIGHTS.length) * lightIndex;
+                    return (
+                      <div
+                        key={lightIndex}
+                        className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-yellow-300 shadow-[0_0_14px_rgba(253,224,71,0.95)]"
+                        style={{
+                          transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-148px)`,
+                        }}
+                      />
+                    );
+                  })}
+
+                  <div className="absolute left-1/2 top-1 z-20 -translate-x-1/2">
+                    <div className="rounded-full bg-gradient-to-b from-yellow-300 to-amber-500 p-1 shadow-lg shadow-amber-400/30">
+                      <div className="h-0 w-0 border-l-[16px] border-r-[16px] border-b-[32px] border-l-transparent border-r-transparent border-b-[#111827]" />
+                    </div>
                   </div>
 
+                  <div className="absolute inset-0 rounded-full border-[12px] border-white/15 bg-white/5 shadow-[0_0_0_2px_rgba(255,255,255,0.08),0_20px_60px_rgba(0,0,0,0.5)]" />
+
                   <div
-                    className="relative h-full w-full rounded-full border-[10px] border-white shadow-xl"
+                    className="absolute inset-[16px] rounded-full border-[6px] border-white/20 shadow-[inset_0_2px_16px_rgba(255,255,255,0.08)]"
                     style={{
                       background: WHEEL_BACKGROUND,
                       transform: `rotate(${spinRotation}deg)`,
                       transition: spinning ? "transform 4s cubic-bezier(0.22, 1, 0.36, 1)" : undefined,
                     }}
                   >
-                    {SPIN_SEGMENTS.map((segment, index) => (
+                    {SPIN_SEGMENT_ARCS.map((segment) => (
                       <div
                         key={segment.key}
-                        className="absolute left-1/2 top-1/2 w-16 -translate-x-1/2 -translate-y-1/2 text-center text-sm font-bold text-white"
+                        className="absolute left-1/2 top-1/2 w-24 -translate-x-1/2 -translate-y-1/2 text-center"
                         style={{
-                          transform: `translate(-50%, -50%) rotate(${index * SEGMENT_ANGLE}deg) translateY(-98px) rotate(-${index * SEGMENT_ANGLE}deg)`,
+                          transform: `translate(-50%, -50%) rotate(${segment.midAngle}deg) translateY(-92px) rotate(-${segment.midAngle}deg)`,
+                          color: segment.textColor,
                         }}
                       >
-                        {segment.label}
+                        <div className="text-[30px] font-black leading-none">{segment.label}</div>
+                        <div className="mt-1 text-sm font-semibold leading-4">{segment.subtitle}</div>
                       </div>
                     ))}
 
-                    <div className="absolute inset-[28%] rounded-full bg-white/95 shadow-inner flex flex-col items-center justify-center text-center px-4">
-                      <Sparkles className="h-5 w-5 text-ocean-500 mb-2" />
-                      <div className="text-sm text-muted-foreground">العرض الحالي</div>
-                      <div className="mt-1 text-2xl font-extrabold text-ocean-700">
+                    <div className="absolute inset-[30%] rounded-full border-4 border-white/20 bg-[#0a0f18] shadow-[inset_0_2px_10px_rgba(255,255,255,0.06),0_12px_30px_rgba(0,0,0,0.45)] flex flex-col items-center justify-center text-center px-4">
+                      <div className="text-[10px] font-bold tracking-[0.35em] text-yellow-300">WASHLLY</div>
+                      <div className="mt-2 text-xs text-slate-300">خدمات سيارتك أسهل</div>
+                      <div className="mt-2 text-2xl font-black text-white">
                         {spinResult ? `${spinResult.discountPercent}%` : needsRespin ? "↻" : "؟"}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <p className="mt-4 rounded-2xl bg-white px-3 py-2 text-sm text-slate-700">
-                  {spinHint}
-                </p>
-
                 {selectedService && spinResult && (
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
-                    <div className="rounded-2xl bg-white p-2">
-                      <div className="text-muted-foreground">السعر</div>
-                      <div className="font-bold">{formatCurrency(selectedService.price)}</div>
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-2">
+                      <div className="text-slate-300">السعر</div>
+                      <div className="font-bold text-white">{formatCurrency(selectedService.price)}</div>
                     </div>
-                    <div className="rounded-2xl bg-white p-2">
-                      <div className="text-muted-foreground">الخصم</div>
-                      <div className="font-bold text-emerald-700">{formatCurrency(discountAmount)}</div>
+                    <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-2">
+                      <div className="text-emerald-200">الخصم</div>
+                      <div className="font-bold text-emerald-100">{formatCurrency(discountAmount)}</div>
                     </div>
-                    <div className="rounded-2xl bg-white p-2">
-                      <div className="text-muted-foreground">بعد الخصم</div>
-                      <div className="font-bold text-ocean-700">{formatCurrency(finalPrice)}</div>
+                    <div className="rounded-2xl border border-sky-400/20 bg-sky-500/10 p-2">
+                      <div className="text-sky-200">بعد الخصم</div>
+                      <div className="font-bold text-white">{formatCurrency(finalPrice)}</div>
                     </div>
                   </div>
                 )}
 
                 <Button
                   variant={needsRespin ? "secondary" : "default"}
-                  className="mt-4 w-full gap-2"
+                  className="mt-5 h-12 w-full gap-2 bg-gradient-to-l from-yellow-400 via-amber-400 to-yellow-300 text-slate-950 hover:from-yellow-300 hover:to-amber-300"
                   disabled={spinning || !!spinResult || !canSpin}
                   onClick={handleSpin}
                 >
@@ -721,7 +767,7 @@ function StationCard({
                   ) : (
                     <>
                       <Gift className="h-4 w-4" />
-                      لف عجلة الخصم
+                      اضغط للف العجلة
                     </>
                   )}
                 </Button>
@@ -731,24 +777,35 @@ function StationCard({
 
           <Card>
             <CardContent className="pt-4 space-y-3">
-              <Button
-                className="w-full"
-                disabled={!canSubmit || submitting}
-                onClick={handleCreateBooking}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                    جاري تأكيد الحجز...
-                  </>
-                ) : (
-                  "تأكيد الحجز من الخريطة"
-                )}
-              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  className="w-full"
+                  disabled={!canSubmit || submitting}
+                  onClick={handleCreateBooking}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                      جاري التأكيد...
+                    </>
+                  ) : (
+                    "تأكيد الحجز"
+                  )}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={submitting}
+                  onClick={resetSelectionAndClose}
+                >
+                  إلغاء
+                </Button>
+              </div>
 
               {!spinResult && (
                 <p className="text-xs text-muted-foreground">
-                  يجب تدوير عجلة الخصم أولاً. إذا ظهرت لك "أعد" يمكنك المحاولة مرة إضافية لنفس الحجز.
+                  يجب تدوير عجلة الخصم أولاً. إذا ظهرت لك "حاول مرة أخرى" يمكنك المحاولة مرة إضافية لنفس الحجز.
                 </p>
               )}
 
@@ -761,7 +818,7 @@ function StationCard({
                   <p className="mt-2">رقم الحجز: #{bookingResult.bookingNumber}</p>
                   <p className="mt-1">الخصم المحفوظ: ({bookingResult.discountPercent})%</p>
                   <p className="mt-1 text-emerald-700">
-                    تم إرسال الطلب إلى صاحب المحطة عبر واتساب، وسيظهر له الخصم قبل الضغط على تأكيد أو رفض.
+                    ستعود الخريطة الآن بدون الاختيارات القديمة.
                   </p>
                 </div>
               )}

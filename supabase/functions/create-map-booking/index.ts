@@ -315,6 +315,31 @@ Deno.serve(async (req) => {
       );
     }
 
+    const { count: activeBookingsCount, error: activeBookingsError } = await supabase
+      .from("bookings")
+      .select("id", { count: "exact", head: true })
+      .eq("customer_phone", customerPhone)
+      .in("status", ["pending", "confirmed"]);
+
+    if (activeBookingsError) {
+      return new Response(JSON.stringify({ error: "تعذر التحقق من عدد الحجوزات الحالية." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if ((activeBookingsCount || 0) >= 2) {
+      return new Response(
+        JSON.stringify({
+          error: "لا يمكن إنشاء أكثر من حجزين نشطين لنفس الرقم. ألغ أحد الحجوزات الحالية أولاً.",
+        }),
+        {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const spinSecret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!spinSecret) {
       return new Response(JSON.stringify({ error: "تعذر التحقق من خصم عجلة الحظ." }), {
