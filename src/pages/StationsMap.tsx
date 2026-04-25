@@ -546,8 +546,20 @@ function generateTimeSlots(start: string, end: string, duration: number): string
   return slots;
 }
 
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function getTodayDate() {
-  return new Date().toISOString().split("T")[0];
+  return formatLocalDate(new Date());
+}
+
+function parseLocalDate(dateValue: string) {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
 function normalizePhone(phone: string) {
@@ -648,7 +660,7 @@ function StationCard({
   const finalPrice = selectedService ? selectedService.price - discountAmount : 0;
 
   const formatDateLabel = (dateValue: string) =>
-    new Date(dateValue).toLocaleDateString(t.locale, {
+    parseLocalDate(dateValue).toLocaleDateString(t.locale, {
       calendar: "gregory",
       weekday: "long",
       year: "numeric",
@@ -710,6 +722,11 @@ function StationCard({
 
     void loadServices();
   }, [station, language]);
+
+  useEffect(() => {
+    const today = getTodayDate();
+    setSelectedDate((currentDate) => (!currentDate || currentDate < today ? today : currentDate));
+  }, []);
 
   useEffect(() => {
     if (!isSlotsFlow || !selectedDate) {
