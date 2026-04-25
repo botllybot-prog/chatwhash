@@ -6,11 +6,11 @@ const corsHeaders = {
 };
 
 const DISCOUNT_SEGMENTS = [
-  { key: "discount_5", discountPercent: 5, label: "خصم 5%" },
-  { key: "discount_10", discountPercent: 10, label: "خصم 10%" },
-  { key: "discount_15", discountPercent: 15, label: "خصم 15%" },
-  { key: "retry", discountPercent: 0, label: "حاول مرة أخرى" },
-  { key: "discount_0", discountPercent: 0, label: "0%" },
+  { key: "discount_5", discountPercent: 5, label: "خصم 5%", weight: 80 },
+  { key: "discount_10", discountPercent: 10, label: "خصم 10%", weight: 80 },
+  { key: "discount_15", discountPercent: 15, label: "خصم 15%", weight: 80 },
+  { key: "retry", discountPercent: 0, label: "حاول مرة أخرى", weight: 84 },
+  { key: "discount_0", discountPercent: 0, label: "0%", weight: 36 },
 ] as const;
 
 type DiscountSegment = (typeof DISCOUNT_SEGMENTS)[number];
@@ -44,8 +44,15 @@ async function signValue(value: string, secret: string): Promise<string> {
 }
 
 function pickDiscountSegment(): DiscountSegment {
-  const index = Math.floor(Math.random() * DISCOUNT_SEGMENTS.length);
-  return DISCOUNT_SEGMENTS[index];
+  const totalWeight = DISCOUNT_SEGMENTS.reduce((sum, segment) => sum + segment.weight, 0);
+  let randomPoint = Math.random() * totalWeight;
+
+  for (const segment of DISCOUNT_SEGMENTS) {
+    randomPoint -= segment.weight;
+    if (randomPoint < 0) return segment;
+  }
+
+  return DISCOUNT_SEGMENTS[0];
 }
 
 Deno.serve(async (req) => {
