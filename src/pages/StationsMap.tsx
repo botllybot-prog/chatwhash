@@ -628,6 +628,7 @@ function StationCard({
   const [cancelling, setCancelling] = useState(false);
   const [spinning, setSpinning] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [currentLocalDate, setCurrentLocalDate] = useState(getTodayDate());
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
@@ -676,6 +677,7 @@ function StationCard({
 
   const resetSelectionAndClose = () => {
     setSelectedService(null);
+    setCurrentLocalDate(getTodayDate());
     setSelectedDate(getTodayDate());
     setSelectedSlot(null);
     setAvailableSlots([]);
@@ -688,12 +690,24 @@ function StationCard({
   };
 
   useEffect(() => {
+    const syncCurrentLocalDate = () => {
+      setCurrentLocalDate(getTodayDate());
+    };
+
+    syncCurrentLocalDate();
+    const timer = window.setInterval(syncCurrentLocalDate, 60 * 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     setSpinHint(t.wheelHintDefault);
   }, [language]);
 
   useEffect(() => {
     setSelectedService(null);
     setSelectedSlot(null);
+    setCurrentLocalDate(getTodayDate());
     setSelectedDate(getTodayDate());
     setBookingResult(null);
     setLoadingServices(true);
@@ -724,9 +738,8 @@ function StationCard({
   }, [station, language]);
 
   useEffect(() => {
-    const today = getTodayDate();
-    setSelectedDate((currentDate) => (!currentDate || currentDate < today ? today : currentDate));
-  }, []);
+    setSelectedDate((currentDate) => (!currentDate || currentDate < currentLocalDate ? currentLocalDate : currentDate));
+  }, [currentLocalDate]);
 
   useEffect(() => {
     if (!isSlotsFlow || !selectedDate) {
@@ -766,7 +779,7 @@ function StationCard({
       );
 
       const now = new Date();
-      const isToday = selectedDate === getTodayDate();
+      const isToday = selectedDate === currentLocalDate;
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
       const filteredSlots = allSlots.filter((slot) => {
@@ -1094,15 +1107,18 @@ function StationCard({
                   description={t.step2Description}
                 />
 
-                <Input
-                  type="date"
-                  min={getTodayDate()}
-                  value={selectedDate}
-                  onChange={(event) => {
-                    setSelectedDate(event.target.value);
-                    setSelectedSlot(null);
-                    setBookingResult(null);
-                  }}
+                  <Input
+                    type="date"
+                    min={currentLocalDate}
+                    value={selectedDate}
+                    onChange={(event) => {
+                      const nextDate = event.target.value && event.target.value >= currentLocalDate
+                        ? event.target.value
+                        : currentLocalDate;
+                      setSelectedDate(nextDate);
+                      setSelectedSlot(null);
+                      setBookingResult(null);
+                    }}
                 />
 
                 {isSlotsFlow && (
