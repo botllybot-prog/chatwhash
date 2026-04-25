@@ -8,21 +8,39 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/components/ui/use-toast";
 import {
-  MapPin,
-  Clock,
-  Navigation,
-  Wrench,
   CalendarCheck,
-  X,
-  Search,
-  LocateFixed,
   Car,
-  Loader2,
   CheckCircle2,
+  Clock,
+  Gift,
+  Loader2,
+  LocateFixed,
+  MapPin,
+  Navigation,
+  RotateCw,
+  Search,
+  Sparkles,
+  Wrench,
+  X,
 } from "lucide-react";
 
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 const DEFAULT_CENTER = { lat: 33.3152, lng: 44.3661 };
+const SEGMENT_ANGLE = 72;
+
+const SPIN_SEGMENTS = [
+  { key: "discount_5", label: "5%", color: "#0ea5e9", discountPercent: 5 },
+  { key: "discount_10", label: "10%", color: "#0284c7", discountPercent: 10 },
+  { key: "discount_15", label: "15%", color: "#0369a1", discountPercent: 15 },
+  { key: "retry", label: "أعد", color: "#f59e0b", discountPercent: 0 },
+  { key: "discount_0", label: "0%", color: "#94a3b8", discountPercent: 0 },
+] as const;
+
+const WHEEL_BACKGROUND = `conic-gradient(from -126deg, ${SPIN_SEGMENTS.map((segment, index) => {
+  const start = index * SEGMENT_ANGLE;
+  const end = start + SEGMENT_ANGLE;
+  return `${segment.color} ${start}deg ${end}deg`;
+}).join(", ")})`;
 
 interface Station {
   id: string;
@@ -50,6 +68,23 @@ interface Service {
 interface BookingResult {
   bookingId: string;
   bookingNumber: number;
+  discountPercent: number;
+}
+
+interface SpinResult {
+  segmentKey: string;
+  discountPercent: number;
+  label: string;
+  token: string;
+}
+
+interface SpinDiscountResponse {
+  segmentKey?: string;
+  discountPercent?: number;
+  label?: string;
+  token?: string;
+  requiresRespin?: boolean;
+  error?: string;
 }
 
 function isStationOpen(station: Station): boolean {
@@ -88,6 +123,20 @@ function normalizePhone(phone: string) {
   return cleaned;
 }
 
+function formatCurrency(amount: number) {
+  return `${Math.round(amount)} د.ع`;
+}
+
+function calculateSpinRotation(currentRotation: number, segmentIndex: number) {
+  const currentNormalized = ((currentRotation % 360) + 360) % 360;
+  const targetNormalized = ((360 - segmentIndex * SEGMENT_ANGLE) % 360 + 360) % 360;
+  let delta = targetNormalized - currentNormalized;
+
+  if (delta <= 0) delta += 360;
+
+  return currentRotation + 360 * 5 + delta;
+}
+
 function StationCard({
   station,
   onClose,
@@ -99,6 +148,7 @@ function StationCard({
   const [loadingServices, setLoadingServices] = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [spinning, setSpinning] = useState(false);
 
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
@@ -108,15 +158,42 @@ function StationCard({
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [bookingResult, setBookingResult] = useState<BookingResult | null>(null);
+  const [spinResult, setSpinResult] = useState<SpinResult | null>(null);
+  const [spinRotation, setSpinRotation] = useState(0);
+  const [spinHint, setSpinHint] = useState("لف العجلة مرة واحدة لكل حجز قبل تأكيد الطلب.");
+  const [needsRespin, setNeedsRespin] = useState(false);
 
   const open = isStationOpen(station);
   const isSlotsFlow = station.scheduling_type === "slots";
   const isDailyFlow = station.scheduling_type === "daily";
 
+  const bookingDate = isDailyFlow || isSlotsFlow ? selectedDate : getTodayDate();
+  const normalizedPhone = normalizePhone(customerPhone);
+
   const schedulingLabels: Record<Station["scheduling_type"], string> = {
     slots: "حجز بموعد",
     instant: "حجز فوري",
     daily: "حجز يومي",
+  };
+
+  const canSpin =
+    !!selectedService &&
+    !!customerName.trim() &&
+    !!customerPhone.trim() &&
+    (!isDailyFlow || !!selectedDate) &&
+    (!isSlotsFlow || (!!selectedDate && !!selectedSlot));
+
+  const canSubmit = canSpin && !!spinResult && !spinning && !loadingServices;
+
+  const discountAmount = selectedService && spinResult
+    ? (selectedService.price * spinResult.discountPercent) / 100
+    : 0;
+  const finalPrice = selectedService ? selectedService.price - discountAmount : 0;
+
+  const resetSpinState = () => {
+    setSpinResult(null);
+    setNeedsRespin(false);
+    setSpinHint("لف العجلة مرة واحدة لكل حجز قبل تأكيد الطلب.");
   };
 
   useEffect(() => {
@@ -125,6 +202,8 @@ function StationCard({
     setSelectedDate(getTodayDate());
     setBookingResult(null);
     setLoadingServices(true);
+    setSpinRotation(0);
+    resetSpinState();
 
     const loadServices = async () => {
       const { data, error } = await supabase
@@ -162,7 +241,7 @@ function StationCard({
       const allSlots = generateTimeSlots(
         station.working_hours_start,
         station.working_hours_end,
-        station.slot_duration_minutes
+        station.slot_duration_minutes,
       );
 
       const { data, error } = await supabase
@@ -183,7 +262,7 @@ function StationCard({
       }
 
       const bookedSet = new Set(
-        (data || []).map((booking) => booking.booking_time?.substring(0, 5)).filter(Boolean)
+        (data || []).map((booking) => booking.booking_time?.substring(0, 5)).filter(Boolean),
       );
 
       const now = new Date();
@@ -207,18 +286,18 @@ function StationCard({
     void loadSlots();
   }, [isSlotsFlow, selectedDate, station]);
 
-  const canSubmit =
-    !!selectedService &&
-    !!customerName.trim() &&
-    !!customerPhone.trim() &&
-    (!isDailyFlow || !!selectedDate) &&
-    (!isSlotsFlow || (!!selectedDate && !!selectedSlot));
+  useEffect(() => {
+    setBookingResult(null);
+    if (!spinning) {
+      resetSpinState();
+    }
+  }, [selectedService?.id, selectedDate, selectedSlot, customerPhone, station.id]);
 
   const openGoogleMaps = () => {
     if (station.latitude && station.longitude) {
       window.open(
         `https://www.google.com/maps/dir/?api=1&destination=${station.latitude},${station.longitude}`,
-        "_blank"
+        "_blank",
       );
     }
   };
@@ -227,9 +306,74 @@ function StationCard({
     if (station.latitude && station.longitude) {
       window.open(
         `https://waze.com/ul?ll=${station.latitude},${station.longitude}&navigate=yes`,
-        "_blank"
+        "_blank",
       );
     }
+  };
+
+  const handleSpin = async () => {
+    if (!selectedService) return;
+
+    if (!canSpin) {
+      toast({
+        title: "أكمل بيانات الحجز أولاً",
+        description: "اختر الخدمة والموعد وأدخل الاسم ورقم الهاتف قبل تدوير العجلة.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (spinResult && !needsRespin) return;
+
+    setSpinning(true);
+    setSpinHint("جاري تدوير عجلة الخصم...");
+
+    const { data, error } = await supabase.functions.invoke<SpinDiscountResponse>("spin-booking-discount", {
+      body: {
+        station_id: station.id,
+        service_id: selectedService.id,
+        customer_phone: normalizedPhone,
+        booking_date: bookingDate,
+        booking_time: isSlotsFlow ? selectedSlot : null,
+      },
+    });
+
+    if (error || data?.error || !data?.segmentKey) {
+      setSpinning(false);
+      setSpinHint("تعذر تدوير العجلة الآن.");
+      toast({
+        title: "فشل تدوير العجلة",
+        description: data?.error || error?.message || "حاول مرة أخرى بعد قليل.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const segmentIndex = SPIN_SEGMENTS.findIndex((segment) => segment.key === data.segmentKey);
+    const nextRotation = calculateSpinRotation(spinRotation, segmentIndex >= 0 ? segmentIndex : 0);
+    setSpinRotation(nextRotation);
+
+    window.setTimeout(() => {
+      setSpinning(false);
+
+      if (data.requiresRespin) {
+        setSpinResult(null);
+        setNeedsRespin(true);
+        setSpinHint("ظهرت لك محاولة إضافية. اضغط مرة أخرى لتدوير العجلة.");
+        return;
+      }
+
+      const resolvedResult = {
+        segmentKey: data.segmentKey!,
+        discountPercent: data.discountPercent || 0,
+        label: data.label || `${data.discountPercent || 0}%`,
+        token: data.token || "",
+      };
+
+      setSpinResult(resolvedResult);
+      setNeedsRespin(false);
+      setSpinHint(`تم حفظ الخصم لهذا الحجز: (${resolvedResult.discountPercent})%`);
+    }, 4000);
   };
 
   const handleCreateBooking = async () => {
@@ -253,15 +397,26 @@ function StationCard({
       return;
     }
 
+    if (!spinResult?.token) {
+      toast({
+        title: "لف عجلة الخصم أولاً",
+        description: "العرض يثبت مرة واحدة لكل حجز قبل إرسال الطلب.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSubmitting(true);
 
     const payload = {
       station_id: station.id,
       service_id: selectedService.id,
       customer_name: customerName.trim(),
-      customer_phone: normalizePhone(customerPhone),
-      booking_date: isDailyFlow || isSlotsFlow ? selectedDate : getTodayDate(),
+      customer_phone: normalizedPhone,
+      booking_date: bookingDate,
       booking_time: isSlotsFlow ? selectedSlot : null,
+      spin_discount_percent: spinResult.discountPercent,
+      spin_token: spinResult.token,
     };
 
     const { data, error } = await supabase.functions.invoke("create-map-booking", {
@@ -291,6 +446,7 @@ function StationCard({
     setBookingResult({
       bookingId: data.bookingId,
       bookingNumber: data.bookingNumber,
+      discountPercent: spinResult.discountPercent,
     });
 
     toast({
@@ -371,7 +527,7 @@ function StationCard({
                   جاري تحميل الخدمات...
                 </div>
               ) : services.length === 0 ? (
-                <p className="text-sm text-muted-foreground">لا توجد خدمات متاحة لهذه المحطة حالياً.</p>
+                <p className="text-sm text-muted-foreground">لا توجد خدمات متاحة لهذه المحطة حاليا.</p>
               ) : (
                 <div className="space-y-2">
                   {services.map((service) => {
@@ -434,7 +590,7 @@ function StationCard({
                       </div>
                     ) : availableSlots.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        لا توجد أوقات متاحة في هذا اليوم. اختر يوماً آخر.
+                        لا توجد أوقات متاحة في هذا اليوم. اختر يوما آخر.
                       </p>
                     ) : (
                       <div className="flex flex-wrap gap-2">
@@ -474,10 +630,110 @@ function StationCard({
                 value={customerPhone}
                 onChange={(event) => setCustomerPhone(event.target.value)}
               />
+            </CardContent>
+          </Card>
 
+          <Card>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Gift className="h-4 w-4 text-primary" />
+                <h3 className="font-semibold">عجلة الخصم</h3>
+              </div>
+
+              <div className="rounded-2xl border bg-slate-50/80 p-4">
+                <div className="relative mx-auto h-64 w-64">
+                  <div className="absolute left-1/2 top-0 z-20 -translate-x-1/2">
+                    <div className="h-0 w-0 border-l-[14px] border-r-[14px] border-b-[22px] border-l-transparent border-r-transparent border-b-rose-500" />
+                  </div>
+
+                  <div
+                    className="relative h-full w-full rounded-full border-[10px] border-white shadow-xl"
+                    style={{
+                      background: WHEEL_BACKGROUND,
+                      transform: `rotate(${spinRotation}deg)`,
+                      transition: spinning ? "transform 4s cubic-bezier(0.22, 1, 0.36, 1)" : undefined,
+                    }}
+                  >
+                    {SPIN_SEGMENTS.map((segment, index) => (
+                      <div
+                        key={segment.key}
+                        className="absolute left-1/2 top-1/2 w-16 -translate-x-1/2 -translate-y-1/2 text-center text-sm font-bold text-white"
+                        style={{
+                          transform: `translate(-50%, -50%) rotate(${index * SEGMENT_ANGLE}deg) translateY(-98px) rotate(-${index * SEGMENT_ANGLE}deg)`,
+                        }}
+                      >
+                        {segment.label}
+                      </div>
+                    ))}
+
+                    <div className="absolute inset-[28%] rounded-full bg-white/95 shadow-inner flex flex-col items-center justify-center text-center px-4">
+                      <Sparkles className="h-5 w-5 text-ocean-500 mb-2" />
+                      <div className="text-sm text-muted-foreground">العرض الحالي</div>
+                      <div className="mt-1 text-2xl font-extrabold text-ocean-700">
+                        {spinResult ? `${spinResult.discountPercent}%` : needsRespin ? "↻" : "؟"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="mt-4 rounded-2xl bg-white px-3 py-2 text-sm text-slate-700">
+                  {spinHint}
+                </p>
+
+                {selectedService && spinResult && (
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
+                    <div className="rounded-2xl bg-white p-2">
+                      <div className="text-muted-foreground">السعر</div>
+                      <div className="font-bold">{formatCurrency(selectedService.price)}</div>
+                    </div>
+                    <div className="rounded-2xl bg-white p-2">
+                      <div className="text-muted-foreground">الخصم</div>
+                      <div className="font-bold text-emerald-700">{formatCurrency(discountAmount)}</div>
+                    </div>
+                    <div className="rounded-2xl bg-white p-2">
+                      <div className="text-muted-foreground">بعد الخصم</div>
+                      <div className="font-bold text-ocean-700">{formatCurrency(finalPrice)}</div>
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  variant={needsRespin ? "secondary" : "default"}
+                  className="mt-4 w-full gap-2"
+                  disabled={spinning || !!spinResult || !canSpin}
+                  onClick={handleSpin}
+                >
+                  {spinning ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      تدور العجلة...
+                    </>
+                  ) : needsRespin ? (
+                    <>
+                      <RotateCw className="h-4 w-4" />
+                      حاول مرة أخرى
+                    </>
+                  ) : spinResult ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      تم حفظ الخصم
+                    </>
+                  ) : (
+                    <>
+                      <Gift className="h-4 w-4" />
+                      لف عجلة الخصم
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-4 space-y-3">
               <Button
                 className="w-full"
-                disabled={!canSubmit || submitting || loadingServices}
+                disabled={!canSubmit || submitting}
                 onClick={handleCreateBooking}
               >
                 {submitting ? (
@@ -490,6 +746,12 @@ function StationCard({
                 )}
               </Button>
 
+              {!spinResult && (
+                <p className="text-xs text-muted-foreground">
+                  يجب تدوير عجلة الخصم أولاً. إذا ظهرت لك "أعد" يمكنك المحاولة مرة إضافية لنفس الحجز.
+                </p>
+              )}
+
               {bookingResult && (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
                   <div className="flex items-center gap-2 font-medium">
@@ -497,8 +759,9 @@ function StationCard({
                     تم إرسال طلب الحجز بنجاح
                   </div>
                   <p className="mt-2">رقم الحجز: #{bookingResult.bookingNumber}</p>
+                  <p className="mt-1">الخصم المحفوظ: ({bookingResult.discountPercent})%</p>
                   <p className="mt-1 text-emerald-700">
-                    تم إرسال الطلب إلى صاحب المحطة عبر واتساب. سيصل للعميل إشعار القبول أو الرفض على نفس الرقم المدخل.
+                    تم إرسال الطلب إلى صاحب المحطة عبر واتساب، وسيظهر له الخصم قبل الضغط على تأكيد أو رفض.
                   </p>
                 </div>
               )}
@@ -555,7 +818,7 @@ const StationsMap = () => {
 
       const distance = Math.hypot(
         station.latitude - userLocation.lat,
-        station.longitude - userLocation.lng
+        station.longitude - userLocation.lng,
       );
 
       return { ...station, distance };
@@ -566,7 +829,7 @@ const StationsMap = () => {
           (station) =>
             station.name.toLowerCase().includes(query) ||
             station.address?.toLowerCase().includes(query) ||
-            station.detailed_address?.toLowerCase().includes(query)
+            station.detailed_address?.toLowerCase().includes(query),
         )
       : mappedStations;
 
@@ -612,7 +875,7 @@ const StationsMap = () => {
           description: "اسمح بالوصول إلى الموقع لعرض أقرب المحطات إليك.",
           variant: "destructive",
         });
-      }
+      },
     );
   };
 

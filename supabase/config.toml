@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.owner-self-register]
 verify_jwt = false
+
+[functions.spin-booking-discount]
+verify_jwt = false

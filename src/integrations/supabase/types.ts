@@ -49,6 +49,7 @@ export type Database = {
           id: string
           reminder_sent: boolean
           service_id: string
+          spin_discount_percent: number
           station_id: string
           status: Database["public"]["Enums"]["booking_status"]
         }
@@ -62,6 +63,7 @@ export type Database = {
           id?: string
           reminder_sent?: boolean
           service_id: string
+          spin_discount_percent?: number
           station_id: string
           status?: Database["public"]["Enums"]["booking_status"]
         }
@@ -75,6 +77,7 @@ export type Database = {
           id?: string
           reminder_sent?: boolean
           service_id?: string
+          spin_discount_percent?: number
           station_id?: string
           status?: Database["public"]["Enums"]["booking_status"]
         }

@@ -15,6 +15,60 @@ function formatTime(time: string | null) {
   return time ? time.substring(0, 5) : "بدون وقت محدد";
 }
 
+function fromBase64Url(input: string): string {
+  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+  return atob(padded);
+}
+
+async function signValue(value: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
+  return btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+async function verifySpinToken(
+  token: string,
+  expected: {
+    station_id: string;
+    service_id: string;
+    booking_date: string;
+    booking_time: string | null;
+    customer_phone: string;
+    discount_percent: number;
+  },
+  secret: string,
+) {
+  const [encodedPayload, signature] = token.split(".");
+  if (!encodedPayload || !signature) return false;
+
+  const expectedSignature = await signValue(encodedPayload, secret);
+  if (expectedSignature !== signature) return false;
+
+  const payload = JSON.parse(fromBase64Url(encodedPayload));
+
+  if (payload.expires_at < Date.now()) return false;
+
+  return (
+    payload.station_id === expected.station_id &&
+    payload.service_id === expected.service_id &&
+    payload.booking_date === expected.booking_date &&
+    (payload.booking_time || null) === expected.booking_time &&
+    payload.customer_phone === expected.customer_phone &&
+    payload.discount_percent === expected.discount_percent
+  );
+}
+
 async function getSettings(supabase: ReturnType<typeof createClient>) {
   const { data } = await supabase.from("app_settings").select("key, value");
   const settings: Record<string, string> = {};
@@ -25,7 +79,7 @@ async function getSettings(supabase: ReturnType<typeof createClient>) {
 async function sendWhatsAppMessage(
   phone: string,
   message: string,
-  settings: Record<string, string>
+  settings: Record<string, string>,
 ) {
   const token = settings.WHATSAPP_ACCESS_TOKEN;
   const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
@@ -51,7 +105,7 @@ async function sendWhatsAppInteractive(
   phone: string,
   body: string,
   buttons: { id: string; title: string }[],
-  settings: Record<string, string>
+  settings: Record<string, string>,
 ) {
   const token = settings.WHATSAPP_ACCESS_TOKEN;
   const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
@@ -122,7 +176,7 @@ async function getOrCreateSession(supabase: ReturnType<typeof createClient>, pho
 async function updateSession(
   supabase: ReturnType<typeof createClient>,
   phone: string,
-  updates: Record<string, unknown>
+  updates: Record<string, unknown>,
 ) {
   await supabase
     .from("bot_sessions")
@@ -149,7 +203,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
     const body = await req.json();
@@ -159,10 +213,19 @@ Deno.serve(async (req) => {
     const rawPhone = (body.customer_phone as string | undefined)?.trim() || "";
     const bookingDate = body.booking_date as string | undefined;
     const bookingTime = (body.booking_time as string | null | undefined) || null;
+    const spinToken = (body.spin_token as string | undefined)?.trim() || "";
+    const spinDiscountPercent = Number(body.spin_discount_percent ?? NaN);
     const customerPhone = normalizePhone(rawPhone);
 
     if (!stationId || !serviceId || !customerName || !customerPhone || !bookingDate) {
       return new Response(JSON.stringify({ error: "البيانات المطلوبة غير مكتملة." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!spinToken || ![0, 5, 10, 15].includes(spinDiscountPercent)) {
+      return new Response(JSON.stringify({ error: "يرجى تدوير عجلة الخصم قبل تأكيد الحجز." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -192,7 +255,7 @@ Deno.serve(async (req) => {
     ]);
 
     if (!station) {
-      return new Response(JSON.stringify({ error: "المحطة غير متاحة حالياً." }), {
+      return new Response(JSON.stringify({ error: "المحطة غير متاحة حاليا." }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -223,7 +286,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existingSlot) {
-        return new Response(JSON.stringify({ error: "هذا الموعد محجوز بالفعل. اختر وقتاً آخر." }), {
+        return new Response(JSON.stringify({ error: "هذا الموعد محجوز بالفعل. اختر وقتا آخر." }), {
           status: 409,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -248,8 +311,36 @@ Deno.serve(async (req) => {
         {
           status: 409,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        },
       );
+    }
+
+    const spinSecret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!spinSecret) {
+      return new Response(JSON.stringify({ error: "تعذر التحقق من خصم عجلة الحظ." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const isSpinValid = await verifySpinToken(
+      spinToken,
+      {
+        station_id: stationId,
+        service_id: serviceId,
+        booking_date: bookingDate,
+        booking_time: bookingTime,
+        customer_phone: customerPhone,
+        discount_percent: spinDiscountPercent,
+      },
+      spinSecret,
+    );
+
+    if (!isSpinValid) {
+      return new Response(JSON.stringify({ error: "تعذر اعتماد نتيجة عجلة الخصم. أعد المحاولة مرة أخرى." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const { data: booking, error: bookingError } = await supabase
@@ -261,6 +352,7 @@ Deno.serve(async (req) => {
         service_id: serviceId,
         booking_date: bookingDate,
         booking_time: bookingTime,
+        spin_discount_percent: spinDiscountPercent,
         status: "pending",
       })
       .select("id, booking_number")
@@ -291,7 +383,7 @@ Deno.serve(async (req) => {
     const owner = ownerResult.data;
     const adminUser = adminResult.data;
     const stationName = owner?.stations?.name || station.name;
-    const summary = `حجز جديد #${booking.booking_number} - ${service.name} - ${bookingDate} ${formatTime(bookingTime)}`;
+    const summary = `حجز جديد #${booking.booking_number} - ${service.name} - ${bookingDate} ${formatTime(bookingTime)} - الخصم ${spinDiscountPercent}%`;
 
     if (owner?.user_id) {
       await supabase.from("notifications").insert({
@@ -321,13 +413,13 @@ Deno.serve(async (req) => {
       day: "numeric",
     });
 
-    const pendingMsg = `📩 تم استلام طلب حجزك من الخريطة.\n\n🏪 المحطة: ${stationName}\n🧽 الخدمة: ${service.name}\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${formatTime(bookingTime)}\n🔢 رقم الحجز: #${booking.booking_number}\n\n⏳ الطلب الآن بانتظار موافقة صاحب المحطة، وسيصلك إشعار القبول أو الرفض على هذا الرقم.`;
+    const pendingMsg = `📩 تم استلام طلب حجزك من الخريطة.\n\n🏪 المحطة: ${stationName}\n🧽 الخدمة: ${service.name}\n🎯 الخصم: (${spinDiscountPercent})%\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${formatTime(bookingTime)}\n🔢 رقم الحجز: #${booking.booking_number}\n\n⏳ الطلب الآن بانتظار موافقة صاحب المحطة، وسيصلك إشعار القبول أو الرفض على هذا الرقم.`;
 
     await sendWhatsAppMessage(customerPhone, pendingMsg, settings);
 
     if (owner?.owner_phone) {
       const ownerPhone = normalizePhone(owner.owner_phone);
-      const ownerMsg = `📢 طلب حجز جديد من الخريطة!\n\n🏪 المحطة: ${stationName}\n🔢 رقم الحجز: #${booking.booking_number}\n👤 العميل: ${customerName}\n📱 الهاتف: ${customerPhone}\n🧽 الخدمة: ${service.name}\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${formatTime(bookingTime)}\n\nاختر أحد الخيارات:`;
+      const ownerMsg = `📢 طلب حجز جديد من الخريطة!\n\n🏪 المحطة: ${stationName}\n🔢 رقم الحجز: #${booking.booking_number}\n👤 العميل: ${customerName}\n📱 الهاتف: ${customerPhone}\n🧽 الخدمة: ${service.name}\n🎯 الخصم: (${spinDiscountPercent})%\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${formatTime(bookingTime)}\n\nاختر أحد الخيارات:`;
 
       await getOrCreateSession(supabase, ownerPhone);
       await updateSession(supabase, ownerPhone, {
@@ -343,7 +435,7 @@ Deno.serve(async (req) => {
           { id: "approve_yes", title: "✅ تأكيد" },
           { id: "approve_no", title: "❌ رفض" },
         ],
-        settings
+        settings,
       );
     }
 
@@ -357,7 +449,7 @@ Deno.serve(async (req) => {
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "حدث خطأ غير متوقع.";
