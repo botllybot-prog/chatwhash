@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { consumeStationRequestQuota } from "../_shared/request-packages.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1902,6 +1903,36 @@ async function createBookingAndNotifyOwner(
   ]);
   const station = stationResult.data;
   const service = serviceResult.data;
+
+  const quotaResult = await consumeStationRequestQuota({
+    supabase,
+    settings,
+    stationId,
+  });
+
+  if (!quotaResult.allowed) {
+    const blockedMsg =
+      "نعتذر، هذه المحطة متوقفة مؤقتاً عن استقبال الحجوزات الجديدة لحين تحديث باقتها. يمكنك اختيار محطة أخرى حالياً.";
+    const blockedWaId = await sendWhatsAppInteractive(
+      phone,
+      blockedMsg,
+      [
+        { id: "btn_restart", title: "🔄 اختيار محطة أخرى" },
+        { id: "btn_menu", title: "🏠 القائمة" },
+      ],
+      settings,
+    );
+    saveBotMessage(supabase, convId, blockedMsg, blockedWaId);
+    updateSession(supabase, phone, {
+      current_step: "idle",
+      selected_station_id: null,
+      selected_service_id: null,
+      selected_date: null,
+      selected_time: null,
+      vehicle_details: null,
+    });
+    return true;
+  }
 
   const insertData: any = {
     customer_phone: phone, customer_name: customerName,

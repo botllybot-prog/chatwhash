@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { consumeStationRequestQuota, loadAppSettings } from "../_shared/request-packages.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -368,6 +369,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    const settings = await loadAppSettings(supabase);
+
+    const quotaResult = await consumeStationRequestQuota({
+      supabase,
+      settings,
+      stationId,
+    });
+
+    if (!quotaResult.allowed) {
+      return new Response(JSON.stringify({ error: quotaResult.message }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: booking, error: bookingError } = await supabase
       .from("bookings")
       .insert({
@@ -390,7 +406,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [ownerResult, adminResult, settings] = await Promise.all([
+    const [ownerResult, adminResult] = await Promise.all([
       supabase
         .from("station_owners")
         .select("user_id, owner_phone, stations(name)")
@@ -402,7 +418,6 @@ Deno.serve(async (req) => {
         .eq("role", "admin")
         .limit(1)
         .maybeSingle(),
-      getSettings(supabase),
     ]);
 
     const owner = ownerResult.data;

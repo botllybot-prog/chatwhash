@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key, CreditCard, AlertTriangle } from "lucide-react";
+import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key, CreditCard, AlertTriangle, Wallet, Sparkles, Gift } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useAppLanguage } from "@/lib/language";
 
@@ -801,17 +801,246 @@ const MyEditRequestsTab = ({ stationId, t, locale }: { stationId: string; t: Por
   );
 };
 
-const SubscriptionTab = ({ stationId, t, locale }: { stationId: string; t: PortalTexts; locale: string }) => {
+const OWNER_PACKAGE_TEXTS = {
+  ar: {
+    title: "الاشتراكات والباقات",
+    subtitle: "اختر الباقة المناسبة لمحطتك، وفعّلها لمدة 30 يوماً لتحافظ على ظهورك في الخريطة واستقبال الحجوزات الجديدة.",
+    freeTitle: "الطلبات المجانية",
+    freeHint: "يتم احتساب الطلبات المجانية أولاً، وبعد انتهائها تنتقل المحطة إلى الباقات المدفوعة.",
+    used: "المستخدم",
+    remaining: "المتبقي",
+    total: "الإجمالي",
+    packageTitle: "باقات الطلبات",
+    packageHint: "كل باقة تبدأ من تاريخ الدفع وتبقى فعالة لمدة 30 يوماً.",
+    validity: "مدة التفعيل",
+    validityValue: "30 يوم",
+    activePackage: "الباقة الحالية",
+    requests: "الطلبات",
+    requestProgress: "استهلاك الطلبات",
+    expiresAt: "ينتهي في",
+    noPackage: "لا توجد باقة فعالة حالياً. يمكنك اختيار باقة وتجديد الظهور في الخريطة بسهولة.",
+    unlimited: "غير محدود",
+    activeNow: "مفعلة الآن",
+    choosePackage: "اختر باقتك التالية",
+    paymentMethods: "طرق الدفع",
+    paymentHint: "بعد الدفع، يقوم فريق Washlly بتفعيل الباقة على حسابك مباشرة. يمكنك أيضاً استخدام رابط البطاقة إن كان مفعلاً.",
+    zainCash: "زين كاش",
+    superKey: "سوبر كي",
+    nasWallet: "ناس والت",
+    cardLink: "الدفع بالبطاقة",
+    openLink: "فتح الرابط",
+    contactCompany: "التواصل مع الشركة",
+    renewNow: "جدد باقتك الآن",
+    history: "سجل الدفعات",
+    noPayments: "لا توجد دفعات مسجلة حتى الآن.",
+    packageEndedTitle: "انتهت الباقة الحالية",
+    packageEndedBody: "تم إيقاف ظهور محطتك مؤقتاً إلى حين تجديد الباقة. جدد الآن للوصول إلى عدد أكبر من الزبائن.",
+    freeEndedTitle: "انتهت الطلبات المجانية",
+    freeEndedBody: "انتهت الطلبات المجانية الممنوحة لمحطتك. اختر إحدى الباقات للعودة إلى الخريطة واستقبال حجوزات جديدة.",
+    expiredTitle: "انتهت مدة الاشتراك",
+    expiredBody: "انتهت مدة الباقة الحالية. يمكنك التجديد الآن ليستمر ظهور محطتك واستقبال الطلبات الجديدة.",
+    manualTitle: "المحطة موقوفة إدارياً",
+    manualBody: "هذا الإيقاف يدوي من قبل الإدارة، لذلك لا يلزم الدفع من هذه الصفحة. يرجى التواصل مع الشركة لمعرفة السبب وإعادة التفعيل.",
+    stationVisible: "المحطة ظاهرة في الخريطة",
+    stationHidden: "المحطة مخفية مؤقتاً",
+    freeRemainingOnly: "المتبقي من المجاني",
+  },
+  en: {
+    title: "Plans & subscriptions",
+    subtitle: "Choose the right plan for your station and activate it for 30 days to keep your map visibility and new bookings flowing.",
+    freeTitle: "Free requests",
+    freeHint: "Free requests are consumed first. Once they end, the station switches to paid plans.",
+    used: "Used",
+    remaining: "Remaining",
+    total: "Total",
+    packageTitle: "Request packages",
+    packageHint: "Each package starts from the payment date and stays active for 30 days.",
+    validity: "Activation period",
+    validityValue: "30 days",
+    activePackage: "Current package",
+    requests: "Requests",
+    requestProgress: "Request usage",
+    expiresAt: "Expires on",
+    noPackage: "There is no active package yet. Choose a package to restore your visibility on the map.",
+    unlimited: "Unlimited",
+    activeNow: "Active now",
+    choosePackage: "Choose your next package",
+    paymentMethods: "Payment methods",
+    paymentHint: "After payment, the Washlly team activates your package directly. If card payment is enabled, you can also use the direct link.",
+    zainCash: "Zain Cash",
+    superKey: "Super Key",
+    nasWallet: "Nas Wallet",
+    cardLink: "Card payment",
+    openLink: "Open link",
+    contactCompany: "Contact company",
+    renewNow: "Renew your package now",
+    history: "Payment history",
+    noPayments: "No payments recorded yet.",
+    packageEndedTitle: "Current package ended",
+    packageEndedBody: "Your station visibility is paused until you renew the package. Renew now to reach more customers.",
+    freeEndedTitle: "Free requests finished",
+    freeEndedBody: "The free requests for your station have finished. Choose a package to return to the map and receive new bookings.",
+    expiredTitle: "Subscription period ended",
+    expiredBody: "The current package duration ended. Renew now to keep your station visible and continue receiving requests.",
+    manualTitle: "Station manually suspended",
+    manualBody: "This is an administrative suspension, so you do not need to pay from this page. Please contact the company for details and reactivation.",
+    stationVisible: "Station is visible on the map",
+    stationHidden: "Station is temporarily hidden",
+    freeRemainingOnly: "Free requests left",
+  },
+  ku: {
+    title: "ئاشتراک و پاکێجەکان",
+    subtitle: "پاکێجی گونجاو بۆ وێستگەکەت هەڵبژێرە و بۆ 30 ڕۆژ چالاکی بکە بۆ ئەوەی لە نەخشەدا دەرکەویت و داواکارییە نوێکان وەربگریت.",
+    freeTitle: "داواکارییە خۆڕاییەکان",
+    freeHint: "سەرەتا داواکارییە خۆڕاییەکان ژمێردەکرێن. دوای تەواوبوونیان، وێستگەکە دەچێتە پاکێجە پارەدراوەکان.",
+    used: "بەکارهاتوو",
+    remaining: "ماوە",
+    total: "کۆی گشتی",
+    packageTitle: "پاکێجی داواکاری",
+    packageHint: "هەر پاکێجێک لە بەرواری پارەدان دەست پێدەکات و بۆ 30 ڕۆژ چالاک دەبێت.",
+    validity: "ماوەی چالاکبوون",
+    validityValue: "30 ڕۆژ",
+    activePackage: "پاکێجی ئێستا",
+    requests: "داواکارییەکان",
+    requestProgress: "بەکارهێنانی داواکاری",
+    expiresAt: "کۆتایی دێت لە",
+    noPackage: "هێشتا هیچ پاکێجێکی چالاک نییە. پاکێجێک هەڵبژێرە بۆ گەڕانەوەی دەرکەوتن لە نەخشەدا.",
+    unlimited: "بێ سنوور",
+    activeNow: "ئێستا چالاکە",
+    choosePackage: "پاکێجی داهاتووت هەڵبژێرە",
+    paymentMethods: "ڕێگاکانی پارەدان",
+    paymentHint: "دوای پارەدان، تیمی Washlly پاکێجەکەت ڕاستەوخۆ لەسەر هەژمارەکەت چالاک دەکات. ئەگەر پارەدانی کارت چالاک بێت، دەتوانیت لینکی ڕاستەوخۆش بەکاربهێنیت.",
+    zainCash: "Zain Cash",
+    superKey: "Super Key",
+    nasWallet: "Nas Wallet",
+    cardLink: "پارەدان بە کارت",
+    openLink: "کردنەوەی لینک",
+    contactCompany: "پەیوەندی بە کۆمپانیا",
+    renewNow: "ئێستا پاکێجەکەت نوێ بکەرەوە",
+    history: "مێژووی پارەدان",
+    noPayments: "هێشتا هیچ پارەدانێک تۆمار نەکراوە.",
+    packageEndedTitle: "پاکێجی ئێستا تەواو بوو",
+    packageEndedBody: "دەرکەوتنی وێستگەکەت کاتیاً وەستێندراوە تا پاکێجەکە نوێ بکەیتەوە. ئێستا نوێی بکەرەوە بۆ گەیشتن بە زبونە زیاتر.",
+    freeEndedTitle: "داواکارییە خۆڕاییەکان تەواو بوون",
+    freeEndedBody: "داواکارییە خۆڕاییەکانی وێستگەکەت تەواو بوون. یەکێک لە پاکێجەکان هەڵبژێرە بۆ گەڕانەوە بۆ نەخشە و وەرگرتنی حجزە نوێکان.",
+    expiredTitle: "ماوەی ئاشتراک کۆتایی هات",
+    expiredBody: "ماوەی پاکێجی ئێستا کۆتایی هات. ئێستا نوێی بکەرەوە بۆ بەردەوامبوونی دەرکەوتنی وێستگەکەت و وەرگرتنی داواکاری نوێ.",
+    manualTitle: "وێستگەکە بە دەستی ئیدارە وەستێندراوە",
+    manualBody: "ئەم وەستاندنە ئیدارییە، بۆیە پێویستت بە پارەدان لەم پەڕەیە نییە. تکایە پەیوەندی بە کۆمپانیا بکە بۆ زانیاری زیاتر و چالاککردنەوە.",
+    stationVisible: "وێستگەکە لە نەخشەدا دەردەکەوێت",
+    stationHidden: "وێستگەکە کاتیاً شاردراوەتەوە",
+    freeRemainingOnly: "ماوەی خۆڕایی",
+  },
+  tr: {
+    title: "Paketler ve abonelikler",
+    subtitle: "İstasyonunuz için uygun paketi seçin ve 30 gün boyunca etkinleştirerek haritadaki görünürlüğünüzü ve yeni rezervasyon akışınızı koruyun.",
+    freeTitle: "Ücretsiz talepler",
+    freeHint: "Önce ücretsiz talepler kullanılır. Bunlar bittiğinde istasyon ücretli paketlere geçer.",
+    used: "Kullanılan",
+    remaining: "Kalan",
+    total: "Toplam",
+    packageTitle: "Talep paketleri",
+    packageHint: "Her paket ödeme tarihinden itibaren başlar ve 30 gün boyunca aktif kalır.",
+    validity: "Aktif süre",
+    validityValue: "30 gün",
+    activePackage: "Mevcut paket",
+    requests: "Talepler",
+    requestProgress: "Talep kullanımı",
+    expiresAt: "Bitiş tarihi",
+    noPackage: "Şu anda aktif bir paket yok. Haritadaki görünürlüğünüzü geri kazanmak için bir paket seçin.",
+    unlimited: "Sınırsız",
+    activeNow: "Şu anda aktif",
+    choosePackage: "Sonraki paketinizi seçin",
+    paymentMethods: "Ödeme yöntemleri",
+    paymentHint: "Ödeme sonrasında Washlly ekibi paketinizi hesabınıza doğrudan tanımlar. Kart bağlantısı açıksa onu da kullanabilirsiniz.",
+    zainCash: "Zain Cash",
+    superKey: "Super Key",
+    nasWallet: "Nas Wallet",
+    cardLink: "Kartla ödeme",
+    openLink: "Bağlantıyı aç",
+    contactCompany: "Şirketle iletişime geç",
+    renewNow: "Paketinizi şimdi yenileyin",
+    history: "Ödeme geçmişi",
+    noPayments: "Henüz kayıtlı bir ödeme yok.",
+    packageEndedTitle: "Mevcut paket sona erdi",
+    packageEndedBody: "Paket yenilenene kadar istasyon görünürlüğünüz geçici olarak duraklatıldı. Daha fazla müşteriye ulaşmak için şimdi yenileyin.",
+    freeEndedTitle: "Ücretsiz talepler bitti",
+    freeEndedBody: "İstasyonunuza tanımlanan ücretsiz talepler bitti. Haritaya dönmek ve yeni rezervasyonlar almak için bir paket seçin.",
+    expiredTitle: "Abonelik süresi bitti",
+    expiredBody: "Mevcut paket süresi sona erdi. İstasyonun görünürlüğünü korumak ve yeni talepler almaya devam etmek için şimdi yenileyin.",
+    manualTitle: "İstasyon yönetim tarafından durduruldu",
+    manualBody: "Bu durum yönetimsel bir durdurmadır; bu sayfadan ödeme yapmanız gerekmez. Sebebi öğrenmek ve yeniden etkinleştirmek için lütfen şirketle iletişime geçin.",
+    stationVisible: "İstasyon haritada görünür",
+    stationHidden: "İstasyon geçici olarak gizli",
+    freeRemainingOnly: "Kalan ücretsiz talep",
+  },
+} as const;
+
+const OWNER_PACKAGES = [
+  {
+    code: "starter_20",
+    requests: 20,
+    priceUsd: 5,
+    gradient: "from-sky-500 to-blue-600",
+  },
+  {
+    code: "growth_50",
+    requests: 50,
+    priceUsd: 10,
+    gradient: "from-blue-600 to-indigo-700",
+  },
+  {
+    code: "scale_110",
+    requests: 110,
+    priceUsd: 20,
+    gradient: "from-indigo-700 to-slate-900",
+  },
+  {
+    code: "unlimited_30",
+    requests: null,
+    priceUsd: 50,
+    gradient: "from-amber-500 to-orange-600",
+  },
+] as const;
+
+const normalizeWhatsappLink = (phone?: string | null) => {
+  if (!phone) return "";
+  const cleaned = phone.replace(/[^\d+]/g, "").replace(/^\+/, "");
+  if (/^07\d{9}$/.test(cleaned)) return `964${cleaned.substring(1)}`;
+  return cleaned;
+};
+
+const SubscriptionTab = ({
+  stationId,
+  t,
+  locale,
+  language,
+  ownerMeta,
+}: {
+  stationId: string;
+  t: PortalTexts;
+  locale: string;
+  language: keyof typeof OWNER_PACKAGE_TEXTS;
+  ownerMeta: any;
+}) => {
+  const copy = OWNER_PACKAGE_TEXTS[language] || OWNER_PACKAGE_TEXTS.ar;
   const [sub, setSub] = useState<any>(null);
   const [payments, setPayments] = useState<any[]>([]);
+  const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
-      const { data: subData } = await supabase.from("subscriptions").select("*").eq("station_id", stationId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const [{ data: subData }, { data: settingsRows }] = await Promise.all([
+        (supabase as any).from("subscriptions").select("*").eq("station_id", stationId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        (supabase as any).from("app_settings").select("key, value"),
+      ]);
       setSub(subData);
+      const settingsMap: Record<string, string> = {};
+      for (const row of settingsRows || []) settingsMap[row.key] = row.value;
+      setSettings(settingsMap);
       if (subData) {
-        const { data: payData } = await supabase.from("payments").select("*").eq("subscription_id", subData.id).order("payment_date", { ascending: false });
+        const { data: payData } = await (supabase as any).from("payments").select("*").eq("subscription_id", subData.id).order("payment_date", { ascending: false });
         setPayments(payData || []);
       }
       setLoading(false);
@@ -820,40 +1049,344 @@ const SubscriptionTab = ({ stationId, t, locale }: { stationId: string; t: Porta
   }, [stationId]);
 
   if (loading) return <p className="text-muted-foreground">{t.loading}</p>;
-  if (!sub) return <Card className="max-w-lg"><CardContent className="pt-6 text-center text-muted-foreground py-12"><CreditCard className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" /><p>{t.noSubscription}</p><p className="text-sm mt-1">{t.contactAdminSubscription}</p></CardContent></Card>;
-
-  const planLabels: Record<string, string> = { basic: t.basic, pro: t.pro, premium: t.premium };
+  const activeSub = sub && ["active", "trial"].includes(sub.status) ? sub : null;
   const statusLabels: Record<string, string> = { active: t.active, trial: t.trial, expired: t.expired, cancelled: t.cancelled };
-  const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = { active: "default", trial: "secondary", expired: "destructive", cancelled: "destructive" };
   const paymentStatusLabels: Record<string, string> = { paid: t.paid, pending: t.paymentPending, failed: t.failed, refunded: t.refunded };
 
-  const startDate = new Date(sub.start_date);
-  const endDate = new Date(sub.end_date);
+  const startDate = activeSub ? new Date(activeSub.start_date) : null;
+  const endDate = activeSub ? new Date(activeSub.end_date) : null;
   const now = new Date();
-  const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
-  const daysRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  const totalDays = startDate && endDate ? Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))) : 30;
+  const daysRemaining = endDate ? Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
   const progressPercent = Math.min(100, Math.max(0, ((totalDays - daysRemaining) / totalDays) * 100));
-  const isExpiringSoon = daysRemaining <= 3 && daysRemaining > 0 && (sub.status === "active" || sub.status === "trial");
+  const isExpiringSoon = daysRemaining <= 3 && daysRemaining > 0 && !!activeSub;
+  const freeQuota = Number(ownerMeta?.free_requests_quota || 0);
+  const freeUsed = Number(ownerMeta?.free_requests_used || 0);
+  const freeRemaining = Math.max(0, freeQuota - freeUsed);
+  const requestLimit = activeSub?.request_limit === null ? null : Number(activeSub?.request_limit ?? 0);
+  const requestsUsed = Number(activeSub?.requests_used || 0);
+  const requestRemaining = requestLimit === null ? null : Math.max(0, requestLimit - requestsUsed);
+  const requestProgress = requestLimit ? Math.min(100, Math.max(0, (requestsUsed / requestLimit) * 100)) : 0;
+  const suspensionReason = ownerMeta?.suspension_reason || null;
+  const cardUrl = settings.PAYMENT_CARD_URL || "";
+  const companyWhatsapp = normalizeWhatsappLink(settings.PUBLIC_CONTACT_WHATSAPP || settings.ADMIN_WHATSAPP_PHONE || "");
+  const companyWhatsappLink = companyWhatsapp
+    ? `https://wa.me/${companyWhatsapp}?text=${encodeURIComponent(`${copy.renewNow} - ${ownerMeta?.station_name || ""}`)}`
+    : "";
+  const activePackageCode = (activeSub?.package_code || "") as string;
+  const packageEnded = suspensionReason === "package_exhausted";
+  const freeEnded = suspensionReason === "free_quota_exhausted";
+  const expiredByDate = suspensionReason === "subscription_expired";
+  const manualSuspended = suspensionReason === "manual";
+
+  const renderBanner = () => {
+    if (manualSuspended) {
+      return (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="pt-5 text-amber-950">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-bold">{copy.manualTitle}</p>
+                <p className="mt-1 text-sm leading-7">{copy.manualBody}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    if (freeEnded) {
+      return (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-5 text-blue-950">
+            <div className="flex items-start gap-3">
+              <Sparkles className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-bold">{copy.freeEndedTitle}</p>
+                <p className="mt-1 text-sm leading-7">{copy.freeEndedBody}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    if (packageEnded) {
+      return (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-5 text-blue-950">
+            <div className="flex items-start gap-3">
+              <CreditCard className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-bold">{copy.packageEndedTitle}</p>
+                <p className="mt-1 text-sm leading-7">{copy.packageEndedBody}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    if (expiredByDate) {
+      return (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-5 text-blue-950">
+            <div className="flex items-start gap-3">
+              <Hourglass className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-bold">{copy.expiredTitle}</p>
+                <p className="mt-1 text-sm leading-7">{copy.expiredBody}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-foreground">{t.subscriptionDetails}</h3>
-      <Card className="max-w-lg">
-        <CardContent className="pt-6 space-y-5">
-          <div className="flex items-center justify-between"><span className="text-muted-foreground">{t.plan}</span><span className="font-bold text-foreground text-lg">{planLabels[sub.plan] || sub.plan}</span></div>
-          <div className="flex items-center justify-between"><span className="text-muted-foreground">{t.status}</span><Badge variant={statusColors[sub.status] || "outline"}>{statusLabels[sub.status] || sub.status}</Badge></div>
-          <div className="flex items-center justify-between"><span className="text-muted-foreground">{t.amount}</span><span className="font-semibold text-foreground">{Number(sub.amount).toLocaleString()} د.ع</span></div>
-          <div className="flex items-center justify-between"><span className="text-muted-foreground">{t.startDate}</span><span className="text-foreground">{new Date(sub.start_date).toLocaleDateString(locale)}</span></div>
-          <div className="flex items-center justify-between"><span className="text-muted-foreground">{t.endDate}</span><span className="text-foreground">{new Date(sub.end_date).toLocaleDateString(locale)}</span></div>
-          <div className="space-y-2 pt-2"><div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">{t.remainingDuration}</span><span className={`font-medium ${isExpiringSoon ? "text-destructive" : "text-foreground"}`}>{daysRemaining > 0 ? `${daysRemaining} ${t.day}` : t.expired}</span></div><Progress value={progressPercent} className="h-2" /></div>
-          {isExpiringSoon && <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm"><AlertTriangle className="h-4 w-4 shrink-0" /><span>{t.expiringSoon}</span></div>}
-          {sub.status === "expired" && <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm"><AlertTriangle className="h-4 w-4 shrink-0" /><span>{t.expiredMsg}</span></div>}
-        </CardContent>
-      </Card>
-      {payments.length > 0 && <>
-        <h3 className="text-lg font-semibold text-foreground">{t.paymentsHistory}</h3>
-        <Table><TableHeader><TableRow><TableHead>{t.date}</TableHead><TableHead>{t.amount}</TableHead><TableHead>{t.method}</TableHead><TableHead>{t.status}</TableHead><TableHead>{t.notes}</TableHead></TableRow></TableHeader><TableBody>{payments.map((p) => <TableRow key={p.id}><TableCell>{new Date(p.payment_date).toLocaleDateString(locale)}</TableCell><TableCell>{Number(p.amount).toLocaleString()} د.ع</TableCell><TableCell>{p.method}</TableCell><TableCell><Badge variant={p.status === "paid" ? "default" : "secondary"}>{paymentStatusLabels[p.status] || p.status}</Badge></TableCell><TableCell className="text-sm">{p.notes || "-"}</TableCell></TableRow>)}</TableBody></Table>
-      </>}
+      <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 px-6 py-8 text-white shadow-2xl">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
+            <Badge className="mb-4 bg-white/10 text-white hover:bg-white/10">{copy.title}</Badge>
+            <h3 className="text-2xl font-bold">{copy.title}</h3>
+            <p className="mt-3 text-sm leading-7 text-blue-100">{copy.subtitle}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4 backdrop-blur">
+              <p className="text-xs text-blue-100">{copy.freeRemainingOnly}</p>
+              <p className="mt-2 text-3xl font-bold">{freeRemaining}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4 backdrop-blur">
+              <p className="text-xs text-blue-100">{ownerMeta?.station_active ? copy.stationVisible : copy.stationHidden}</p>
+              <p className="mt-2 text-sm font-semibold">{ownerMeta?.station_name || "-"}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {renderBanner()}
+
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_1.4fr]">
+        <Card className="border-blue-100">
+          <CardContent className="space-y-5 pt-6">
+            <div className="flex items-center gap-2">
+              <Gift className="h-5 w-5 text-primary" />
+              <h4 className="font-bold text-foreground">{copy.freeTitle}</h4>
+            </div>
+            <p className="text-sm leading-7 text-muted-foreground">{copy.freeHint}</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-2xl bg-muted/50 p-4 text-center">
+                <p className="text-xs text-muted-foreground">{copy.used}</p>
+                <p className="mt-2 text-2xl font-bold text-foreground">{freeUsed}</p>
+              </div>
+              <div className="rounded-2xl bg-muted/50 p-4 text-center">
+                <p className="text-xs text-muted-foreground">{copy.remaining}</p>
+                <p className="mt-2 text-2xl font-bold text-primary">{freeRemaining}</p>
+              </div>
+              <div className="rounded-2xl bg-muted/50 p-4 text-center">
+                <p className="text-xs text-muted-foreground">{copy.total}</p>
+                <p className="mt-2 text-2xl font-bold text-foreground">{freeQuota}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-blue-100">
+          <CardContent className="space-y-5 pt-6">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <h4 className="font-bold text-foreground">{copy.activePackage}</h4>
+            </div>
+
+            {activeSub ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-lg font-bold text-foreground">
+                      {OWNER_PACKAGES.find((pkg) => pkg.code === activePackageCode)?.requests === null
+                        ? `${copy.unlimited} - $${activeSub.amount}`
+                        : `${requestLimit} ${copy.requests} - $${activeSub.amount}`}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {copy.expiresAt}: {endDate?.toLocaleDateString(locale)}
+                    </p>
+                  </div>
+                  <Badge>{statusLabels[activeSub.status] || activeSub.status}</Badge>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-muted/50 p-4 text-center">
+                    <p className="text-xs text-muted-foreground">{copy.validity}</p>
+                    <p className="mt-2 text-lg font-bold text-foreground">{copy.validityValue}</p>
+                  </div>
+                  <div className="rounded-2xl bg-muted/50 p-4 text-center">
+                    <p className="text-xs text-muted-foreground">{copy.used}</p>
+                    <p className="mt-2 text-lg font-bold text-foreground">{requestsUsed}</p>
+                  </div>
+                  <div className="rounded-2xl bg-muted/50 p-4 text-center">
+                    <p className="text-xs text-muted-foreground">{copy.remaining}</p>
+                    <p className="mt-2 text-lg font-bold text-primary">
+                      {requestRemaining === null ? copy.unlimited : requestRemaining}
+                    </p>
+                  </div>
+                </div>
+
+                {requestLimit !== null && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">{copy.requestProgress}</span>
+                      <span className="font-medium text-foreground">{requestsUsed}/{requestLimit}</span>
+                    </div>
+                    <Progress value={requestProgress} className="h-2" />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{t.remainingDuration}</span>
+                    <span className={`font-medium ${isExpiringSoon ? "text-destructive" : "text-foreground"}`}>
+                      {daysRemaining > 0 ? `${daysRemaining} ${t.day}` : t.expired}
+                    </span>
+                  </div>
+                  <Progress value={progressPercent} className="h-2" />
+                </div>
+              </>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50 p-5 text-blue-950">
+                <p className="font-semibold">{copy.noPackage}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <h4 className="text-xl font-bold text-foreground">{copy.choosePackage}</h4>
+          <p className="mt-2 text-sm text-muted-foreground">{copy.packageHint}</p>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-4 md:grid-cols-2">
+          {OWNER_PACKAGES.map((pkg) => {
+            const isCurrent = activePackageCode === pkg.code && !!activeSub;
+            return (
+              <Card key={pkg.code} className={`overflow-hidden border-blue-100 ${isCurrent ? "ring-2 ring-primary" : ""}`}>
+                <CardContent className="p-0">
+                  <div className={`bg-gradient-to-br ${pkg.gradient} p-5 text-white`}>
+                    <div className="flex items-center justify-between">
+                      <Badge className="bg-white/15 text-white hover:bg-white/15">
+                        {pkg.requests === null ? copy.unlimited : `${pkg.requests} ${copy.requests}`}
+                      </Badge>
+                      {isCurrent && <Badge className="bg-white text-slate-900 hover:bg-white">{copy.activeNow}</Badge>}
+                    </div>
+                    <p className="mt-6 text-4xl font-black">${pkg.priceUsd}</p>
+                    <p className="mt-2 text-sm text-white/90">{copy.validityValue}</p>
+                  </div>
+                  <div className="space-y-3 p-5">
+                    <div className="flex items-start gap-2">
+                      <CheckCircle className="mt-0.5 h-4 w-4 text-primary" />
+                      <p className="text-sm text-foreground">
+                        {pkg.requests === null ? copy.unlimited : `${pkg.requests} ${copy.requests}`}
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <CheckCircle className="mt-0.5 h-4 w-4 text-primary" />
+                      <p className="text-sm text-foreground">{copy.validity}: {copy.validityValue}</p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <CheckCircle className="mt-0.5 h-4 w-4 text-primary" />
+                      <p className="text-sm text-foreground">{copy.renewNow}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {!manualSuspended && (
+        <Card className="border-blue-100">
+          <CardContent className="space-y-5 pt-6">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-primary" />
+              <h4 className="font-bold text-foreground">{copy.paymentMethods}</h4>
+            </div>
+            <p className="text-sm leading-7 text-muted-foreground">{copy.paymentHint}</p>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {settings.PAYMENT_ZAIN_CASH && (
+                <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                  <p className="text-sm font-semibold text-foreground">{copy.zainCash}</p>
+                  <p className="mt-2 text-lg font-bold text-primary">{settings.PAYMENT_ZAIN_CASH}</p>
+                </div>
+              )}
+              {settings.PAYMENT_SUPER_KEY && (
+                <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                  <p className="text-sm font-semibold text-foreground">{copy.superKey}</p>
+                  <p className="mt-2 text-lg font-bold text-primary">{settings.PAYMENT_SUPER_KEY}</p>
+                </div>
+              )}
+              {settings.PAYMENT_NAS_WALLET && (
+                <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                  <p className="text-sm font-semibold text-foreground">{copy.nasWallet}</p>
+                  <p className="mt-2 text-lg font-bold text-primary">{settings.PAYMENT_NAS_WALLET}</p>
+                </div>
+              )}
+              {cardUrl && (
+                <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                  <p className="text-sm font-semibold text-foreground">{copy.cardLink}</p>
+                  <Button asChild className="mt-3 w-full">
+                    <a href={cardUrl} target="_blank" rel="noreferrer">{copy.openLink}</a>
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {companyWhatsappLink && (
+              <div className="flex flex-wrap gap-3">
+                <Button asChild size="lg">
+                  <a href={companyWhatsappLink} target="_blank" rel="noreferrer">{copy.contactCompany}</a>
+                </Button>
+                <Button asChild variant="outline" size="lg">
+                  <a href={companyWhatsappLink} target="_blank" rel="noreferrer">{copy.renewNow}</a>
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="space-y-4">
+        <h4 className="text-lg font-semibold text-foreground">{copy.history}</h4>
+        {payments.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t.date}</TableHead>
+                <TableHead>{t.amount}</TableHead>
+                <TableHead>{t.method}</TableHead>
+                <TableHead>{t.status}</TableHead>
+                <TableHead>{t.notes}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {payments.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell>{new Date(p.payment_date).toLocaleDateString(locale)}</TableCell>
+                  <TableCell>{Number(p.amount).toLocaleString()} د.ع</TableCell>
+                  <TableCell>{p.method}</TableCell>
+                  <TableCell><Badge variant={p.status === "paid" ? "default" : "secondary"}>{paymentStatusLabels[p.status] || p.status}</Badge></TableCell>
+                  <TableCell className="text-sm">{p.notes || "-"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <Card className="border-blue-100">
+            <CardContent className="pt-6 text-sm text-muted-foreground">{copy.noPayments}</CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };
@@ -862,8 +1395,10 @@ const StationPortal = () => {
   const navigate = useNavigate();
   const [stationId, setStationId] = useState<string | null>(null);
   const [ownerName, setOwnerName] = useState("");
+  const [ownerMeta, setOwnerMeta] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [activeTab, setActiveTab] = useState("dashboard");
   const { language, locale, isRtl } = useAppLanguage();
   const t = texts[language];
 
@@ -871,10 +1406,27 @@ const StationPortal = () => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: ownerData } = await supabase.from("station_owners").select("station_id, owner_name").eq("user_id", user.id).maybeSingle();
+      const { data: ownerData } = await (supabase as any)
+        .from("station_owners")
+        .select("station_id, owner_name, owner_phone, is_active, outstanding_debt, free_requests_quota, free_requests_used, stations(id, name, is_active, suspension_reason, suspended_at)")
+        .eq("user_id", user.id)
+        .maybeSingle();
       if (ownerData) {
         setStationId(ownerData.station_id);
         setOwnerName(ownerData.owner_name);
+        const suspensionReason = ownerData?.stations?.suspension_reason || null;
+        setOwnerMeta({
+          ...ownerData,
+          station_name: ownerData?.stations?.name || "",
+          station_active: ownerData?.stations?.is_active ?? true,
+          suspension_reason: suspensionReason,
+          suspended_at: ownerData?.stations?.suspended_at || null,
+        });
+        if (["free_quota_exhausted", "package_exhausted", "subscription_expired"].includes(suspensionReason)) {
+          setActiveTab("subscription");
+        } else {
+          setActiveTab("dashboard");
+        }
       }
       const { count } = await supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("is_read", false);
       setUnreadCount(count || 0);
@@ -900,7 +1452,14 @@ const StationPortal = () => {
         </div>
       </div>
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <Tabs defaultValue="dashboard" dir={isRtl ? "rtl" : "ltr"}>
+        {ownerMeta?.suspension_reason === "manual" && (
+          <Card className="mb-6 border-amber-300 bg-amber-50">
+            <CardContent className="pt-5 text-sm leading-7 text-amber-950">
+              تم إيقاف هذه المحطة يدوياً من قبل الإدارة. يرجى التواصل مع الشركة لمعرفة السبب وإعادة التفعيل، ولا يلزمك التوجه إلى صفحة الدفع لهذا النوع من الإيقاف.
+            </CardContent>
+          </Card>
+        )}
+        <Tabs value={activeTab} onValueChange={setActiveTab} dir={isRtl ? "rtl" : "ltr"}>
           <TabsList className="mb-6">
             <TabsTrigger value="dashboard" className="gap-1"><LayoutDashboard className="h-4 w-4" />{t.dashboard}</TabsTrigger>
             <TabsTrigger value="info" className="gap-1"><Store className="h-4 w-4" />{t.station}</TabsTrigger>
@@ -917,7 +1476,7 @@ const StationPortal = () => {
           <TabsContent value="bookings"><StationBookingsTab stationId={stationId} t={t} /></TabsContent>
           <TabsContent value="notifications"><NotificationsTab t={t} locale={locale} isRtl={isRtl} /></TabsContent>
           <TabsContent value="edit-requests"><MyEditRequestsTab stationId={stationId} t={t} locale={locale} /></TabsContent>
-          <TabsContent value="subscription"><SubscriptionTab stationId={stationId} t={t} locale={locale} /></TabsContent>
+          <TabsContent value="subscription"><SubscriptionTab stationId={stationId} t={t} locale={locale} language={language as keyof typeof OWNER_PACKAGE_TEXTS} ownerMeta={ownerMeta} /></TabsContent>
           <TabsContent value="account"><AccountTab t={t} /></TabsContent>
         </Tabs>
       </div>

@@ -51,15 +51,15 @@ Deno.serve(async (req) => {
 
     const { data: settingsData } = await supabase.from("app_settings").select("key, value");
     const settings: Record<string, string> = {};
-    if (settingsData) {
-      settingsData.forEach((row: { key: string; value: string }) => {
-        settings[row.key] = row.value;
-      });
+    for (const row of settingsData || []) {
+      settings[row.key] = row.value;
     }
 
     const accessToken = settings.WHATSAPP_ACCESS_TOKEN;
     const phoneNumberId = settings.WHATSAPP_PHONE_NUMBER_ID;
-    const adminAlertPhone = normalizePhone(settings.PUBLIC_CONTACT_WHATSAPP || settings.ADMIN_WHATSAPP_PHONE);
+    const adminAlertPhone = normalizePhone(
+      settings.PUBLIC_CONTACT_WHATSAPP || settings.ADMIN_WHATSAPP_PHONE,
+    );
 
     let warned = 0;
     let processed = 0;
@@ -74,25 +74,16 @@ Deno.serve(async (req) => {
     for (const sub of expiringSoon || []) {
       const { data: owner } = await supabase
         .from("station_owners")
-        .select("user_id, owner_phone, stations(name)")
+        .select("owner_phone, stations(name)")
         .eq("station_id", sub.station_id)
         .maybeSingle();
 
-      if (!owner) continue;
-
-      await supabase.from("notifications").insert({
-        user_id: owner.user_id,
-        title: "اشتراكك ينتهي قريباً",
-        body: `اشتراك محطة "${(owner.stations as { name?: string } | null)?.name || "محطتك"}" سينتهي خلال 3 أيام. يرجى التجديد قبل توقف الظهور على الخريطة.`,
-        type: "subscription",
-      });
-
-      const ownerPhone = normalizePhone(owner.owner_phone);
+      const ownerPhone = normalizePhone(owner?.owner_phone);
       if (ownerPhone && accessToken && phoneNumberId) {
+        const stationName = (owner?.stations as { name?: string } | null)?.name || "محطتك";
         const msg =
-          `⚠️ تنبيه اشتراك\n\n` +
-          `اشتراك محطة "${(owner.stations as { name?: string } | null)?.name || "محطتك"}" سينتهي خلال 3 أيام (${threeDaysLater}).\n` +
-          `يرجى تجديد الاشتراك الآن حتى لا تخسر ظهورك على الخريطة ولا تفقد زبائنك.`;
+          `مرحباً، باقة محطة "${stationName}" ستنتهي خلال 3 أيام (${threeDaysLater}).\n` +
+          `يسعدنا تجديدها لك في الوقت المناسب حتى يستمر ظهور محطتك في الخريطة واستقبال الحجوزات الجديدة بسهولة.`;
         await sendWhatsAppText(ownerPhone, msg, accessToken, phoneNumberId);
       }
 
@@ -127,26 +118,17 @@ Deno.serve(async (req) => {
 
       const { data: owner } = await supabase
         .from("station_owners")
-        .select("user_id, owner_phone, stations(name)")
+        .select("owner_phone, stations(name)")
         .eq("station_id", sub.station_id)
         .maybeSingle();
 
-      if (owner) {
-        await supabase.from("notifications").insert({
-          user_id: owner.user_id,
-          title: "انتهى اشتراكك",
-          body: "تم إيقاف ظهور محطتك على الخريطة بسبب انتهاء الاشتراك. جدد باقتك الآن كي لا تخسر زبائنك.",
-          type: "subscription",
-        });
-
-        const ownerPhone = normalizePhone(owner.owner_phone);
-        if (ownerPhone && accessToken && phoneNumberId) {
-          const msg =
-            `🚫 انتهى اشتراك محطة "${(owner.stations as { name?: string } | null)?.name || "محطتك"}".\n` +
-            `تم إيقاف ظهورها على الخريطة حتى يتم التجديد.\n` +
-            `جدد اشتراكك الآن حتى لا تخسر الزبائن والحجوزات الجديدة.`;
-          await sendWhatsAppText(ownerPhone, msg, accessToken, phoneNumberId);
-        }
+      const ownerPhone = normalizePhone(owner?.owner_phone);
+      if (ownerPhone && accessToken && phoneNumberId) {
+        const stationName = (owner?.stations as { name?: string } | null)?.name || "محطتك";
+        const msg =
+          `مرحباً، انتهت مدة باقة محطة "${stationName}" وتم إيقاف ظهورها مؤقتاً في الخريطة إلى حين التجديد.\n` +
+          `يمكنك تحديث الباقة الآن للوصول إلى عدد أكبر من الزبائن والعودة سريعاً إلى استقبال الحجوزات الجديدة.`;
+        await sendWhatsAppText(ownerPhone, msg, accessToken, phoneNumberId);
       }
 
       processed++;
@@ -155,40 +137,23 @@ Deno.serve(async (req) => {
     if (adminAlertPhone && accessToken && phoneNumberId) {
       const { data: ownersWithoutQuota } = await supabase
         .from("station_owners")
-        .select("id, owner_name, owner_phone, free_requests_quota, stations(name)")
+        .select("owner_name, owner_phone, free_requests_quota, stations(name)")
         .or("free_requests_quota.is.null,free_requests_quota.lte.0");
 
       for (const owner of ownersWithoutQuota || []) {
         const stationName = (owner.stations as { name?: string } | null)?.name || "محطة بدون اسم";
         const ownerPhone = normalizePhone(owner.owner_phone) || "لا يوجد رقم";
         const adminMessage =
-          `🔔 تنبيه إعدادات المحطات\n\n` +
+          `تنبيه إعدادات المحطات\n\n` +
           `المحطة: ${stationName}\n` +
           `المالك: ${owner.owner_name || "غير محدد"}\n` +
           `رقم المالك: ${ownerPhone}\n\n` +
-          `هذه المحطة لا تحتوي على عدد طلبات مجانية ممنوحة من قبل الإدارة.\n` +
+          `هذه المحطة لا تحتوي على رقم يمثل الطلبات المجانية الممنوحة من قبل الإدارة.\n` +
           `يرجى فتح حساب المالك وإدخال الرقم المناسب حتى يعمل منطق الباقات بشكل صحيح.`;
 
         await sendWhatsAppText(adminAlertPhone, adminMessage, accessToken, phoneNumberId);
         missingQuotaAlerts++;
       }
-    }
-
-    const { data: admins } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "admin");
-
-    for (const admin of admins || []) {
-      await supabase.from("notifications").insert({
-        user_id: admin.user_id,
-        title: `${processed} اشتراك منتهي${warned > 0 ? ` / ${warned} تنبيه مبكر` : ""}${missingQuotaAlerts > 0 ? ` / ${missingQuotaAlerts} محطة تحتاج ضبط المجاني` : ""}`,
-        body:
-          `تم تعطيل ${processed} محطة بسبب انتهاء الاشتراك.` +
-          `${warned > 0 ? ` وتم إرسال ${warned} تنبيه اقتراب انتهاء.` : ""}` +
-          `${missingQuotaAlerts > 0 ? ` كما تم تنبيه رقم الفوتر بخصوص ${missingQuotaAlerts} محطة بلا عدد مجاني.` : ""}`,
-        type: "subscription",
-      });
     }
 
     return new Response(

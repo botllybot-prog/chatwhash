@@ -33,6 +33,7 @@ const ALL_KEYS = [
   "PAYMENT_ZAIN_CASH",
   "PAYMENT_SUPER_KEY",
   "PAYMENT_NAS_WALLET",
+  "PAYMENT_CARD_URL",
   "PUBLIC_CONTACT_WHATSAPP",
   "PUBLIC_CONTACT_EMAIL",
 ];
@@ -55,6 +56,7 @@ const DEFAULTS: Record<string, string> = {
   BOT_THANK_YOU_MESSAGE: "شكراً لاستخدامك خدمتنا! نتمنى لك تجربة رائعة.",
   PUBLIC_CONTACT_WHATSAPP: "+9647736939153",
   PUBLIC_CONTACT_EMAIL: "info@washlly.com",
+  PAYMENT_CARD_URL: "",
 };
 
 const t = {
@@ -108,7 +110,9 @@ const t = {
   zainCash: "زين كاش - رقم الحساب",
   superKey: "سوبر كي - رقم الحساب",
   nasWallet: "ناس والِت - رقم الحساب",
+  cardUrl: "رابط الدفع بالبطاقة",
   paymentHint: "تظهر هذه الحسابات لصاحب المحطة عندما يكون حسابه موقوفاً مؤقتاً.",
+  cardUrlHint: "يمكنك إضافة رابط دفع مباشر بالبطاقة ليظهر ضمن خيارات الاشتراك لصاحب المحطة.",
   publicContactTitle: "بيانات التواصل في الواجهة الرئيسية",
   publicContactDesc: "يمكنك تعديل رقم واتساب والإيميل الظاهرين في أسفل الصفحة الرئيسية.",
   publicWhatsapp: "رقم واتساب الظاهر في الفوتر",
@@ -375,6 +379,11 @@ const AdminSettings = () => {
               {t.nasWallet}
             </Label>
             <Input value={values.PAYMENT_NAS_WALLET || ""} onChange={(e) => set("PAYMENT_NAS_WALLET", e.target.value)} placeholder="07XXXXXXXXX" dir="ltr" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t.cardUrl}</Label>
+            <Input value={values.PAYMENT_CARD_URL || ""} onChange={(e) => set("PAYMENT_CARD_URL", e.target.value)} placeholder="https://..." dir="ltr" />
+            <p className="text-xs text-muted-foreground">{t.cardUrlHint}</p>
           </div>
           <p className="pt-1 text-xs text-muted-foreground">{t.paymentHint}</p>
         </CardContent>
