@@ -1,8 +1,7 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +16,7 @@ import {
   ArrowRight,
   Loader2,
   LocateFixed,
+  LogIn,
   MapPin,
   Plus,
   Store,
@@ -30,6 +30,7 @@ const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 const DEFAULT_CENTER = { lat: 33.3152, lng: 44.3661 };
 
 type SchedulingType = "slots" | "instant" | "daily";
+type AccessView = "entry" | "signin" | "signup";
 
 type ServiceDraft = {
   name: string;
@@ -48,12 +49,32 @@ const emptyService = (): ServiceDraft => ({
 const texts = {
   ar: {
     badge: "بوابة أصحاب المحطات",
-    title: "سجل محطتك في صفحة واحدة",
-    subtitle: "أنشئ الحساب، أضف بيانات المحطة، وحدد خدماتك وأسعارك وخصومات العملاء ثم ادخل مباشرة.",
+    title: "أدر محطتك من مكان واحد",
+    subtitle: "ابدأ بالطريقة المناسبة لك: سجّل دخولك إذا كان لديك حساب، أو أنشئ حساباً جديداً ثم أضف المحطة والخدمات.",
     home: "الرئيسية",
-    signupTab: "إنشاء حساب محطة",
-    ownerLogin: "دخول المالك",
-    account: "الحساب",
+    choosePath: "اختر كيف تريد المتابعة",
+    choosePathDesc: "حتى لا تضيع بياناتك لاحقاً، يبدأ النظام أولاً من صفحة دخول أو إنشاء حساب ثم ينتقل إلى تفاصيل المحطة.",
+    createAccount: "إنشاء حساب جديد",
+    createAccountDesc: "لصاحب محطة جديد يريد إنشاء حسابه ثم إضافة المحطة والخدمات من نفس الصفحة.",
+    existingAccount: "لدي حساب، تسجيل الدخول",
+    existingAccountDesc: "لصاحب محطة يملك حساباً مسبقاً ويريد الدخول بسرعة إلى لوحة المحطة.",
+    backToOptions: "العودة إلى خيارات الدخول",
+    loginTitle: "تسجيل الدخول إلى لوحة المحطة",
+    loginDesc: "يمكنك تسجيل الدخول بالإيميل، أو برقم الواتساب، أو بالاسم الذي سجلت به حسابك إذا لم تضف إيميلاً.",
+    loginIdentifier: "الإيميل أو الواتساب أو الاسم",
+    loginIdentifierPh: "مثال: info@washlly.com أو 0770xxxxxxx أو اسمك",
+    loginPassword: "كلمة المرور",
+    loginButton: "تسجيل الدخول",
+    loggingIn: "جاري تسجيل الدخول...",
+    loginLookupFailed: "تعذر العثور على الحساب",
+    loginLookupFailedDesc: "تأكد من الاسم أو رقم الواتساب، أو استخدم الإيميل إذا كان مسجلاً.",
+    loginAmbiguous: "هناك أكثر من حساب بهذا الاسم",
+    loginAmbiguousDesc: "استخدم رقم الواتساب أو الإيميل لتسجيل الدخول بدقة.",
+    loginFailed: "فشل تسجيل الدخول",
+    loginFailedDesc: "بيانات الدخول غير صحيحة",
+    signupTitle: "إنشاء حساب جديد ثم تسجيل المحطة",
+    signupDesc: "أنشئ الحساب أولاً، وبعده يتم ربط المحطة والخدمات بك مباشرة.",
+    account: "بيانات الحساب",
     accountDesc: "رقم الواتساب سيكون هو معرف الدخول الأساسي. البريد الإلكتروني اختياري.",
     ownerName: "اسم المالك",
     ownerWhatsapp: "رقم الواتساب",
@@ -92,7 +113,7 @@ const texts = {
       "إضافة الخدمات والأسعار والخصومات",
       "تسجيل الدخول مباشرة إلى لوحة المحطة",
     ],
-    createAndLogin: "إنشاء الحساب والدخول مباشرة",
+    createAndLogin: "إنشاء الحساب وإكمال التسجيل",
     creating: "جاري إنشاء الحساب...",
     fillRequired: "أكمل الحقول المطلوبة",
     passwordShort: "كلمة المرور قصيرة",
@@ -101,7 +122,7 @@ const texts = {
     addOneService: "أضف خدمة واحدة على الأقل",
     accountFailed: "فشل إنشاء الحساب",
     accountCreated: "تم إنشاء الحساب",
-    accountCreatedLoginLater: "لكن تعذر تسجيل الدخول مباشرة. استخدم واتسابك أو بريدك الإلكتروني لتسجيل الدخول.",
+    accountCreatedLoginLater: "لكن تعذر تسجيل الدخول مباشرة. استخدم الإيميل أو الواتساب أو الاسم للدخول.",
     success: "تم إنشاء الحساب والدخول بنجاح",
     placeholders: {
       ownerName: "أحمد محمد",
@@ -122,12 +143,32 @@ const texts = {
   },
   en: {
     badge: "Station owners portal",
-    title: "Register your station in one page",
-    subtitle: "Create the account, add station details, set services, prices, and customer discounts, then sign in directly.",
+    title: "Manage your station from one place",
+    subtitle: "Start the right way: sign in if you already have an account, or create a new account first and then register your station and services.",
     home: "Home",
-    signupTab: "Create station account",
-    ownerLogin: "Owner login",
-    account: "Account",
+    choosePath: "Choose how you want to continue",
+    choosePathDesc: "To keep your access clear for future visits, the system starts with a sign-in or sign-up step before station registration.",
+    createAccount: "Create a new account",
+    createAccountDesc: "For a new station owner who wants to create the account and then add the station and services from the same page.",
+    existingAccount: "I already have an account, sign in",
+    existingAccountDesc: "For a station owner who already has an account and wants to go straight to the station portal.",
+    backToOptions: "Back to access options",
+    loginTitle: "Sign in to the station portal",
+    loginDesc: "You can sign in with email, WhatsApp number, or the name you used when creating the account if you did not add an email.",
+    loginIdentifier: "Email, WhatsApp, or name",
+    loginIdentifierPh: "Example: info@washlly.com or 0770xxxxxxx or your name",
+    loginPassword: "Password",
+    loginButton: "Sign in",
+    loggingIn: "Signing in...",
+    loginLookupFailed: "Account not found",
+    loginLookupFailedDesc: "Check the name or WhatsApp number, or use your email if it was added before.",
+    loginAmbiguous: "More than one account has this name",
+    loginAmbiguousDesc: "Use the WhatsApp number or email to sign in accurately.",
+    loginFailed: "Sign-in failed",
+    loginFailedDesc: "The login details are incorrect",
+    signupTitle: "Create a new account then register the station",
+    signupDesc: "Create the account first, then the station and services will be linked to you directly.",
+    account: "Account details",
     accountDesc: "WhatsApp number is the main login identifier. Email is optional.",
     ownerName: "Owner name",
     ownerWhatsapp: "WhatsApp number",
@@ -135,7 +176,7 @@ const texts = {
     password: "Password",
     confirmPassword: "Confirm password",
     stationDetails: "Station details",
-    stationDetailsDesc: "Enter the station name, address, working hours, and location on the map.",
+    stationDetailsDesc: "Enter the station name, address, working hours, and map location.",
     stationName: "Station name",
     shortAddress: "Short address",
     detailedAddress: "Detailed address",
@@ -164,9 +205,9 @@ const texts = {
       "Create the owner account",
       "Create the station and link it to the owner",
       "Add services, prices, and discounts",
-      "Sign in directly to the station dashboard",
+      "Sign in directly to the station portal",
     ],
-    createAndLogin: "Create account and sign in",
+    createAndLogin: "Create account and continue",
     creating: "Creating account...",
     fillRequired: "Please complete the required fields",
     passwordShort: "Password is too short",
@@ -175,7 +216,7 @@ const texts = {
     addOneService: "Add at least one service",
     accountFailed: "Account creation failed",
     accountCreated: "Account created",
-    accountCreatedLoginLater: "Direct sign-in failed. Use your WhatsApp or email to sign in.",
+    accountCreatedLoginLater: "Direct sign-in failed. Use email, WhatsApp, or your name to sign in.",
     success: "Account created and signed in successfully",
     placeholders: {
       ownerName: "Ahmad Mohammed",
@@ -196,12 +237,32 @@ const texts = {
   },
   ku: {
     badge: "دەروازەی خاوەن وێستگەکان",
-    title: "وێستگەکەت لە یەک پەڕەدا تۆمار بکە",
-    subtitle: "هەژمار دروست بکە، زانیاریی وێستگە زیاد بکە، خزمەتگوزاری و نرخ و داشکاندن دیاری بکە، پاشان ڕاستەوخۆ بچۆ ژوورەوە.",
+    title: "بە شێوەیەکی ڕێکخراو وێستگەکەت بەڕێوەببە",
+    subtitle: "ئەگەر هەژمارت هەیە بچۆ ژوورەوە، ئەگەر نوێیت سەرەتا هەژمار دروست بکە و دواتر زانیاریی وێستگە و خزمەتگوزارییەکانت زیاد بکە.",
     home: "سەرەکی",
-    signupTab: "دروستکردنی هەژماری وێستگە",
-    ownerLogin: "چوونەژوورەوەی خاوەن",
-    account: "هەژمار",
+    choosePath: "دیاری بکە چۆن بەردەوام دەبیت",
+    choosePathDesc: "بۆ ئەوەی دواتر هەرکات گەڕایتەوە شوێنی چوونەژوورەوەت ڕوون بێت، سیستەم لە هەنگاوی چوونەژوورەوە یان دروستکردنی هەژمار دەست پێ دەکات.",
+    createAccount: "دروستکردنی هەژماری نوێ",
+    createAccountDesc: "بۆ خاوەن وێستگەیەکی نوێ کە دەیەوێت هەژمار دروست بکات و لە هەمان پەڕەدا وێستگە و خزمەتگوزارییەکانی زیاد بکات.",
+    existingAccount: "هەژمارم هەیە، بچۆ ژوورەوە",
+    existingAccountDesc: "بۆ خاوەن وێستگەیەک کە هەژمارێکی هەیە و دەیەوێت خێرا بچێتە ناو پۆرتاڵی وێستگە.",
+    backToOptions: "گەڕانەوە بۆ هەڵبژاردەکانی چوونەژوورەوە",
+    loginTitle: "چوونەژوورەوە بۆ پۆرتاڵی وێستگە",
+    loginDesc: "دەتوانیت بە ئیمەیڵ، ژمارەی واتساپ، یان بەو ناوەی کە هەژمارت پێ دروست کردووە بچیتە ژوورەوە ئەگەر ئیمەیڵت زیاد نەکردووە.",
+    loginIdentifier: "ئیمەیڵ یان واتساپ یان ناو",
+    loginIdentifierPh: "نمونە: info@washlly.com یان 0770xxxxxxx یان ناوت",
+    loginPassword: "وشەی نهێنی",
+    loginButton: "چوونەژوورەوە",
+    loggingIn: "چوونەژوورەوە لە کاردایە...",
+    loginLookupFailed: "هەژمارەکە نەدۆزرایەوە",
+    loginLookupFailedDesc: "لە ناو یان ژمارەی واتساپ دڵنیابە، یان ئیمەیڵەکەت بەکاربهێنە ئەگەر پێشتر زیادت کردووە.",
+    loginAmbiguous: "بەو ناوە زیاتر لە یەک هەژمار هەیە",
+    loginAmbiguousDesc: "بۆ وردی، ژمارەی واتساپ یان ئیمەیڵ بەکاربهێنە.",
+    loginFailed: "چوونەژوورەوە سەرکەوتوو نەبوو",
+    loginFailedDesc: "زانیارییەکانی چوونەژوورەوە هەڵەن",
+    signupTitle: "هەژماری نوێ دروست بکە و پاشان وێستگەکە تۆمار بکە",
+    signupDesc: "سەرەتا هەژمار دروست دەکرێت، پاشان وێستگە و خزمەتگوزارییەکانت بە تۆوە دەبەسترێن.",
+    account: "زانیاریی هەژمار",
     accountDesc: "ژمارەی واتساپ ناسنامەی سەرەکی چوونەژوورەوە دەبێت. ئیمەیڵ هەڵبژاردەییە.",
     ownerName: "ناوی خاوەن",
     ownerWhatsapp: "ژمارەی واتساپ",
@@ -238,9 +299,9 @@ const texts = {
       "هەژماری خاوەن دروست دەکات",
       "وێستگەکە دروست دەکات و بە خاوەنەکەوە دەبەستێتەوە",
       "خزمەتگوزاری و نرخ و داشکاندن زیاد دەکات",
-      "ڕاستەوخۆ دەچیتە ناو داشبۆردی وێستگە",
+      "ڕاستەوخۆ دەچیتە ناو پۆرتاڵی وێستگە",
     ],
-    createAndLogin: "هەژمار دروست بکە و بچۆ ژوورەوە",
+    createAndLogin: "هەژمار دروست بکە و بەردەوام بە",
     creating: "هەژمار دروست دەکرێت...",
     fillRequired: "تکایە خانە پێویستەکان پڕ بکەوە",
     passwordShort: "وشەی نهێنی کورته",
@@ -249,7 +310,7 @@ const texts = {
     addOneService: "لانیکەم یەک خزمەتگوزاری زیاد بکە",
     accountFailed: "دروستکردنی هەژمار سەرکەوتوو نەبوو",
     accountCreated: "هەژمار دروست بوو",
-    accountCreatedLoginLater: "بەڵام چوونەژوورەوەی ڕاستەوخۆ سەرکەوتوو نەبوو. واتساپ یان ئیمەیڵەکەت بەکاربهێنە.",
+    accountCreatedLoginLater: "بەڵام چوونەژوورەوەی ڕاستەوخۆ سەرکەوتوو نەبوو. بە ئیمەیڵ یان واتساپ یان ناو بچۆ ژوورەوە.",
     success: "هەژمار دروست بوو و بە سەرکەوتوویی چوویتە ژوورەوە",
     placeholders: {
       ownerName: "ئەحمەد محەمەد",
@@ -269,38 +330,58 @@ const texts = {
     located: "شوێنی ئێستات دیاری کرا",
   },
   tr: {
-    badge: "İstasyon sahibi portalı",
-    title: "İstasyonunu tek sayfada kaydet",
-    subtitle: "Hesabı oluştur, istasyon bilgilerini ekle, hizmetleri, fiyatları ve müşteri indirimlerini belirle, sonra doğrudan giriş yap.",
+    badge: "İstasyon sahipleri portalı",
+    title: "İstasyonunu tek yerden yönet",
+    subtitle: "Doğru yerden başla: hesabın varsa giriş yap, yoksa önce hesap oluştur ve sonra istasyon ile hizmetlerini kaydet.",
     home: "Ana sayfa",
-    signupTab: "İstasyon hesabı oluştur",
-    ownerLogin: "İstasyon sahibi girişi",
-    account: "Hesap",
+    choosePath: "Nasıl devam etmek istediğini seç",
+    choosePathDesc: "Daha sonra geri döndüğünde giriş yolun net olsun diye sistem önce giriş veya hesap oluşturma adımıyla başlar.",
+    createAccount: "Yeni hesap oluştur",
+    createAccountDesc: "Yeni bir istasyon sahibiysen önce hesabını oluştur, sonra aynı sayfada istasyonunu ve hizmetlerini ekle.",
+    existingAccount: "Hesabım var, giriş yap",
+    existingAccountDesc: "Zaten hesabın varsa doğrudan istasyon paneline geçmek için giriş yap.",
+    backToOptions: "Giriş seçeneklerine dön",
+    loginTitle: "İstasyon paneline giriş yap",
+    loginDesc: "E-posta ile, WhatsApp numarası ile veya e-posta eklemediysen hesabı açarken kullandığın isimle giriş yapabilirsin.",
+    loginIdentifier: "E-posta, WhatsApp veya isim",
+    loginIdentifierPh: "Örnek: info@washlly.com veya 0770xxxxxxx veya adın",
+    loginPassword: "Şifre",
+    loginButton: "Giriş yap",
+    loggingIn: "Giriş yapılıyor...",
+    loginLookupFailed: "Hesap bulunamadı",
+    loginLookupFailedDesc: "İsim veya WhatsApp numarasını kontrol et, ya da eklediysen e-postanı kullan.",
+    loginAmbiguous: "Bu isimle birden fazla hesap var",
+    loginAmbiguousDesc: "Doğru hesabı bulmak için WhatsApp numarası veya e-posta kullan.",
+    loginFailed: "Giriş başarısız",
+    loginFailedDesc: "Giriş bilgileri yanlış",
+    signupTitle: "Yeni hesap oluştur, sonra istasyonu kaydet",
+    signupDesc: "Önce hesap oluşturulur, ardından istasyon ve hizmetler doğrudan sana bağlanır.",
+    account: "Hesap bilgileri",
     accountDesc: "WhatsApp numarası ana giriş kimliği olacaktır. E-posta isteğe bağlıdır.",
     ownerName: "Sahip adı",
     ownerWhatsapp: "WhatsApp numarası",
     email: "E-posta (isteğe bağlı)",
     password: "Şifre",
-    confirmPassword: "Şifreyi onayla",
+    confirmPassword: "Şifreyi doğrula",
     stationDetails: "İstasyon bilgileri",
-    stationDetailsDesc: "İstasyon adı, adresi, çalışma saatleri ve haritadaki konumunu girin.",
+    stationDetailsDesc: "İstasyon adı, adresi, çalışma saatleri ve haritadaki konumunu gir.",
     stationName: "İstasyon adı",
     shortAddress: "Kısa adres",
     detailedAddress: "Detaylı adres",
     openingTime: "Açılış saati",
     closingTime: "Kapanış saati",
-    schedulingType: "Planlama türü",
+    schedulingType: "Randevu türü",
     slotDuration: "Dakika cinsinden slot süresi",
     slots: "Sabit zaman aralıkları",
     instant: "Anlık rezervasyon",
     daily: "Sadece gün seçimi",
     stationLocation: "İstasyon konumu",
-    currentLocation: "Mevcut konumum",
+    currentLocation: "Şu anki konumum",
     latitude: "Enlem",
     longitude: "Boylam",
     loadingMap: "Harita yükleniyor...",
     services: "Hizmetler",
-    servicesDesc: "İstasyon hizmetlerini fiyat, süre ve müşteriye görünen indirimle ekleyin.",
+    servicesDesc: "İstasyon hizmetlerini fiyat, süre ve müşteriye görünen indirimle ekle.",
     serviceNumber: "Hizmet #",
     serviceName: "Hizmet adı",
     price: "Fiyat",
@@ -312,9 +393,9 @@ const texts = {
       "Sahip hesabını oluşturur",
       "İstasyonu oluşturur ve sahibiyle bağlar",
       "Hizmetleri, fiyatları ve indirimleri ekler",
-      "Doğrudan istasyon paneline giriş yapar",
+      "Doğrudan istasyon portalına giriş yapar",
     ],
-    createAndLogin: "Hesabı oluştur ve giriş yap",
+    createAndLogin: "Hesabı oluştur ve devam et",
     creating: "Hesap oluşturuluyor...",
     fillRequired: "Lütfen gerekli alanları tamamlayın",
     passwordShort: "Şifre çok kısa",
@@ -323,33 +404,26 @@ const texts = {
     addOneService: "En az bir hizmet ekleyin",
     accountFailed: "Hesap oluşturulamadı",
     accountCreated: "Hesap oluşturuldu",
-    accountCreatedLoginLater: "Doğrudan giriş başarısız oldu. Giriş yapmak için WhatsApp veya e-posta kullanın.",
-    success: "Hesap oluşturuldu ve giriş yapıldı",
+    accountCreatedLoginLater: "Doğrudan giriş başarısız oldu. Giriş için e-posta, WhatsApp veya ismini kullan.",
+    success: "Hesap oluşturuldu ve başarıyla giriş yapıldı",
     placeholders: {
       ownerName: "Ahmad Mohammed",
       whatsapp: "0770xxxxxxx",
       email: "owner@example.com",
       password: "En az 6 karakter",
-      confirmPassword: "Şifreyi tekrar yazın",
+      confirmPassword: "Şifreyi tekrar yaz",
       stationName: "Ainkawa İstasyonu",
       shortAddress: "Ainkawa, Erbil",
-      detailedAddress: "Cadde, yakın işaret, yol tarifi...",
+      detailedAddress: "Cadde, yakın nokta, yol tarifi...",
       serviceName: "Temel yıkama",
       price: "10000",
       discount: "Örnek: %20 indirim veya 5000 IQD",
     },
-    browserNoLocation: "Bu tarayıcı konum desteği vermiyor",
-    locateFailed: "Konum tespit edilemedi",
-    located: "Mevcut konumunuz belirlendi",
+    browserNoLocation: "Bu tarayıcı konum erişimini desteklemiyor",
+    locateFailed: "Konum alınamadı",
+    located: "Mevcut konumun belirlendi",
   },
 } as const;
-
-const buildOwnerEmail = (phone: string, email?: string | null) => {
-  const cleanedEmail = email?.trim();
-  if (cleanedEmail) return cleanedEmail;
-  const digits = normalizeOwnerPhone(phone).replace(/\D/g, "");
-  return `owner-${digits || "station"}@washlly.local`;
-};
 
 const OwnerAccess = () => {
   const navigate = useNavigate();
@@ -357,7 +431,11 @@ const OwnerAccess = () => {
   const t = texts[language];
   const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_KEY });
 
+  const [view, setView] = useState<AccessView>("entry");
   const [signupLoading, setSignupLoading] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [signinIdentifier, setSigninIdentifier] = useState("");
+  const [signinPassword, setSigninPassword] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [ownerWhatsapp, setOwnerWhatsapp] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
@@ -373,34 +451,33 @@ const OwnerAccess = () => {
   const [location, setLocation] = useState(DEFAULT_CENTER);
   const [services, setServices] = useState<ServiceDraft[]>([emptyService()]);
 
-  const loginEmail = useMemo(() => buildOwnerEmail(ownerWhatsapp, ownerEmail), [ownerWhatsapp, ownerEmail]);
-
   const getUserRole = async (userId: string) => {
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .limit(1)
-      .maybeSingle();
-
+    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).limit(1).maybeSingle();
     return data?.role || null;
+  };
+
+  const redirectByRole = async (userId: string) => {
+    const role = await getUserRole(userId);
+    if (role === "station_owner") {
+      navigate("/app/station-portal", { replace: true });
+      return;
+    }
+    if (role === "admin") {
+      navigate("/app/admin/dashboard", { replace: true });
+      return;
+    }
+    navigate("/app", { replace: true });
   };
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) return;
-      const role = await getUserRole(session.user.id);
-      if (role === "station_owner") {
-        navigate("/app/station-portal", { replace: true });
-      }
+      await redirectByRole(session.user.id);
     });
   }, [navigate]);
 
   const addService = () => setServices((current) => [...current, emptyService()]);
-
-  const removeService = (index: number) =>
-    setServices((current) => (current.length === 1 ? current : current.filter((_, i) => i !== index)));
-
+  const removeService = (index: number) => setServices((current) => (current.length === 1 ? current : current.filter((_, i) => i !== index)));
   const updateService = (index: number, field: keyof ServiceDraft, value: string) => {
     setServices((current) => current.map((service, i) => (i === index ? { ...service, [field]: value } : service)));
   };
@@ -413,16 +490,61 @@ const OwnerAccess = () => {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        });
+        setLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
         toast({ title: t.located });
       },
-      () => {
-        toast({ title: t.locateFailed, variant: "destructive" });
-      },
+      () => toast({ title: t.locateFailed, variant: "destructive" }),
     );
+  };
+
+  const handleSignIn = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const identifier = signinIdentifier.trim();
+
+    if (!identifier || !signinPassword) {
+      toast({ title: t.fillRequired, variant: "destructive" });
+      return;
+    }
+
+    setLoginLoading(true);
+
+    let resolvedEmail = identifier;
+
+    if (!identifier.includes("@")) {
+      const { data, error } = await supabase.functions.invoke("owner-login-lookup", {
+        body: { identifier },
+      });
+
+      if (error || data?.error || !data?.email) {
+        setLoginLoading(false);
+        toast({
+          title: data?.error === "AMBIGUOUS_OWNER_NAME" ? t.loginAmbiguous : t.loginLookupFailed,
+          description: data?.error === "AMBIGUOUS_OWNER_NAME" ? t.loginAmbiguousDesc : t.loginLookupFailedDesc,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      resolvedEmail = data.email;
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: resolvedEmail.trim().toLowerCase(),
+      password: signinPassword,
+    });
+
+    setLoginLoading(false);
+
+    if (error || !data.user) {
+      toast({
+        title: t.loginFailed,
+        description: t.loginFailedDesc,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await redirectByRole(data.user.id);
   };
 
   const handleSignup = async (event: React.FormEvent) => {
@@ -491,7 +613,7 @@ const OwnerAccess = () => {
     }
 
     const loginResult = await supabase.auth.signInWithPassword({
-      email: loginEmail,
+      email: data?.email || `owner-${normalizeOwnerPhone(ownerWhatsapp)}@washlly.local`,
       password,
     });
 
@@ -502,6 +624,9 @@ const OwnerAccess = () => {
         title: t.accountCreated,
         description: t.accountCreatedLoginLater,
       });
+      setView("signin");
+      setSigninIdentifier(ownerEmail.trim() || ownerWhatsapp.trim() || ownerName.trim());
+      setSigninPassword(password);
       return;
     }
 
@@ -512,11 +637,11 @@ const OwnerAccess = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-ocean-50 via-background to-background p-4 md:p-6" dir={isRtl ? "rtl" : "ltr"}>
       <div className="mx-auto max-w-6xl space-y-6">
-        <div className={`flex flex-col gap-4 md:flex-row md:items-center md:justify-between`}>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <Badge variant="secondary" className="mb-3">{t.badge}</Badge>
             <h1 className="text-3xl font-black text-foreground">{t.title}</h1>
-            <p className="mt-2 text-muted-foreground">{t.subtitle}</p>
+            <p className="mt-2 max-w-3xl text-muted-foreground">{t.subtitle}</p>
           </div>
           <Button variant="ghost" onClick={() => navigate("/")}>
             <ArrowRight className={`h-4 w-4 ${isRtl ? "ml-1" : "mr-1 rotate-180"}`} />
@@ -524,21 +649,99 @@ const OwnerAccess = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="signup" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="signup">{t.signupTab}</TabsTrigger>
-            <button
-              type="button"
-              onClick={() => navigate("/login")}
-              className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all"
-            >
-              {t.ownerLogin}
-            </button>
-          </TabsList>
+        {view === "entry" && (
+          <Card className="border-border/70 shadow-sm">
+            <CardHeader className="text-center">
+              <CardTitle>{t.choosePath}</CardTitle>
+              <CardDescription>{t.choosePathDesc}</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setView("signup")}
+                className="rounded-2xl border border-border bg-card p-5 text-start transition hover:border-primary/40 hover:shadow-md"
+              >
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <UserRoundPlus className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">{t.createAccount}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{t.createAccountDesc}</p>
+              </button>
 
-          <TabsContent value="signup">
-            <form onSubmit={handleSignup} autoComplete="off" className="grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
-              <div className="space-y-6">
+              <button
+                type="button"
+                onClick={() => setView("signin")}
+                className="rounded-2xl border border-border bg-card p-5 text-start transition hover:border-primary/40 hover:shadow-md"
+              >
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <LogIn className="h-6 w-6" />
+                </div>
+                <h3 className="text-lg font-bold text-foreground">{t.existingAccount}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{t.existingAccountDesc}</p>
+              </button>
+            </CardContent>
+          </Card>
+        )}
+
+        {view === "signin" && (
+          <div className="mx-auto max-w-xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Button variant="ghost" onClick={() => setView("entry")}>{t.backToOptions}</Button>
+              <Button variant="outline" onClick={() => setView("signup")}>{t.createAccount}</Button>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>{t.loginTitle}</CardTitle>
+                <CardDescription>{t.loginDesc}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSignIn} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>{t.loginIdentifier}</Label>
+                    <Input
+                      value={signinIdentifier}
+                      onChange={(e) => setSigninIdentifier(e.target.value)}
+                      placeholder={t.loginIdentifierPh}
+                      autoComplete="username"
+                      dir={language === "ar" || language === "ku" ? "rtl" : "ltr"}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t.loginPassword}</Label>
+                    <Input
+                      type="password"
+                      value={signinPassword}
+                      onChange={(e) => setSigninPassword(e.target.value)}
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <Button type="submit" className="w-full bg-ocean-500 text-white hover:bg-ocean-600" disabled={loginLoading}>
+                    {loginLoading ? <Loader2 className={`h-4 w-4 animate-spin ${isRtl ? "ml-2" : "mr-2"}`} /> : <LogIn className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />}
+                    {loginLoading ? t.loggingIn : t.loginButton}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {view === "signup" && (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Button variant="ghost" onClick={() => setView("entry")}>{t.backToOptions}</Button>
+              <Button variant="outline" onClick={() => setView("signin")}>{t.existingAccount}</Button>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
+              <form onSubmit={handleSignup} autoComplete="off" className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t.signupTitle}</CardTitle>
+                    <CardDescription>{t.signupDesc}</CardDescription>
+                  </CardHeader>
+                </Card>
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -579,108 +782,101 @@ const OwnerAccess = () => {
                     </CardTitle>
                     <CardDescription>{t.stationDetailsDesc}</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>{t.stationName}</Label>
-                        <Input value={stationName} onChange={(e) => setStationName(e.target.value)} placeholder={t.placeholders.stationName} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>{t.shortAddress}</Label>
-                        <Input value={stationAddress} onChange={(e) => setStationAddress(e.target.value)} placeholder={t.placeholders.shortAddress} />
-                      </div>
-                    </div>
-
+                  <CardContent className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
+                      <Label>{t.stationName}</Label>
+                      <Input value={stationName} onChange={(e) => setStationName(e.target.value)} placeholder={t.placeholders.stationName} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t.shortAddress}</Label>
+                      <Input value={stationAddress} onChange={(e) => setStationAddress(e.target.value)} placeholder={t.placeholders.shortAddress} />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
                       <Label>{t.detailedAddress}</Label>
                       <Textarea value={detailedAddress} onChange={(e) => setDetailedAddress(e.target.value)} placeholder={t.placeholders.detailedAddress} rows={3} />
                     </div>
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>{t.openingTime}</Label>
-                        <Input type="time" value={workingHoursStart} onChange={(e) => setWorkingHoursStart(e.target.value)} />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>{t.closingTime}</Label>
-                        <Input type="time" value={workingHoursEnd} onChange={(e) => setWorkingHoursEnd(e.target.value)} />
-                      </div>
+                    <div className="space-y-2">
+                      <Label>{t.openingTime}</Label>
+                      <Input type="time" value={workingHoursStart} onChange={(e) => setWorkingHoursStart(e.target.value)} />
                     </div>
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>{t.schedulingType}</Label>
-                        <Select value={schedulingType} onValueChange={(value: SchedulingType) => setSchedulingType(value)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="slots">{t.slots}</SelectItem>
-                            <SelectItem value="instant">{t.instant}</SelectItem>
-                            <SelectItem value="daily">{t.daily}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {schedulingType === "slots" && (
-                        <div className="space-y-2">
-                          <Label>{t.slotDuration}</Label>
-                          <Input type="number" value={slotDuration} onChange={(e) => setSlotDuration(e.target.value)} />
-                        </div>
-                      )}
+                    <div className="space-y-2">
+                      <Label>{t.closingTime}</Label>
+                      <Input type="time" value={workingHoursEnd} onChange={(e) => setWorkingHoursEnd(e.target.value)} />
                     </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-primary" />
-                          {t.stationLocation}
-                        </Label>
-                        <Button type="button" variant="outline" size="sm" onClick={handleLocateMe}>
-                          <LocateFixed className="h-4 w-4 ml-1" />
-                          {t.currentLocation}
-                        </Button>
-                      </div>
-                      <div className="h-72 overflow-hidden rounded-2xl border">
-                        {isLoaded ? (
-                          <GoogleMap
-                            mapContainerStyle={{ width: "100%", height: "100%" }}
-                            center={location}
-                            zoom={12}
-                            onClick={(event) => {
-                              if (!event.latLng) return;
-                              setLocation({ lat: event.latLng.lat(), lng: event.latLng.lng() });
-                            }}
-                            options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
-                          >
-                            <Marker
-                              position={location}
-                              draggable
-                              onDragEnd={(event) => {
-                                if (!event.latLng) return;
-                                setLocation({ lat: event.latLng.lat(), lng: event.latLng.lng() });
-                              }}
-                            />
-                          </GoogleMap>
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                            {t.loadingMap}
-                          </div>
-                        )}
-                      </div>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label>{t.latitude}</Label>
-                          <Input type="number" step="any" value={location.lat} onChange={(e) => setLocation((current) => ({ ...current, lat: Number(e.target.value) || current.lat }))} />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>{t.longitude}</Label>
-                          <Input type="number" step="any" value={location.lng} onChange={(e) => setLocation((current) => ({ ...current, lng: Number(e.target.value) || current.lng }))} />
-                        </div>
-                      </div>
+                    <div className="space-y-2">
+                      <Label>{t.schedulingType}</Label>
+                      <Select value={schedulingType} onValueChange={(value: SchedulingType) => setSchedulingType(value)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="slots">{t.slots}</SelectItem>
+                          <SelectItem value="instant">{t.instant}</SelectItem>
+                          <SelectItem value="daily">{t.daily}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t.slotDuration}</Label>
+                      <Input type="number" min={5} step={5} value={slotDuration} onChange={(e) => setSlotDuration(e.target.value)} />
                     </div>
                   </CardContent>
                 </Card>
-              </div>
 
-              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <MapPin className="h-5 w-5 text-primary" />
+                      {t.stationLocation}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex justify-end">
+                      <Button type="button" variant="outline" onClick={handleLocateMe}>
+                        <LocateFixed className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
+                        {t.currentLocation}
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>{t.latitude}</Label>
+                        <Input dir="ltr" value={location.lat} onChange={(e) => setLocation((current) => ({ ...current, lat: Number(e.target.value) || 0 }))} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>{t.longitude}</Label>
+                        <Input dir="ltr" value={location.lng} onChange={(e) => setLocation((current) => ({ ...current, lng: Number(e.target.value) || 0 }))} />
+                      </div>
+                    </div>
+
+                    <div className="overflow-hidden rounded-2xl border border-border">
+                      {!isLoaded ? (
+                        <div className="flex h-72 items-center justify-center text-sm text-muted-foreground">{t.loadingMap}</div>
+                      ) : (
+                        <GoogleMap
+                          mapContainerStyle={{ width: "100%", height: "320px" }}
+                          center={location}
+                          zoom={13}
+                          onClick={(event) => {
+                            if (!event.latLng) return;
+                            setLocation({
+                              lat: event.latLng.lat(),
+                              lng: event.latLng.lng(),
+                            });
+                          }}
+                          options={{
+                            fullscreenControl: false,
+                            streetViewControl: false,
+                            mapTypeControl: false,
+                          }}
+                        >
+                          <Marker position={location} />
+                        </GoogleMap>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -691,85 +887,85 @@ const OwnerAccess = () => {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {services.map((service, index) => (
-                      <div key={index} className="space-y-3 rounded-2xl border p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="font-medium">{t.serviceNumber}{index + 1}</div>
+                      <div key={index} className="rounded-2xl border border-border p-4">
+                        <div className="mb-4 flex items-center justify-between">
+                          <h3 className="font-semibold">{t.serviceNumber}{index + 1}</h3>
                           {services.length > 1 && (
                             <Button type="button" variant="ghost" size="icon" onClick={() => removeService(index)}>
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           )}
                         </div>
-                        <div className="space-y-2">
-                          <Label>{t.serviceName}</Label>
-                          <Input value={service.name} onChange={(e) => updateService(index, "name", e.target.value)} placeholder={t.placeholders.serviceName} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-2 md:col-span-2">
+                            <Label>{t.serviceName}</Label>
+                            <Input value={service.name} onChange={(e) => updateService(index, "name", e.target.value)} placeholder={t.placeholders.serviceName} />
+                          </div>
                           <div className="space-y-2">
                             <Label>{t.price}</Label>
-                            <Input type="number" value={service.price} onChange={(e) => updateService(index, "price", e.target.value)} placeholder={t.placeholders.price} />
+                            <Input type="number" min={0} value={service.price} onChange={(e) => updateService(index, "price", e.target.value)} placeholder={t.placeholders.price} />
                           </div>
                           <div className="space-y-2">
                             <Label>{t.duration}</Label>
-                            <Input type="number" value={service.duration_minutes} onChange={(e) => updateService(index, "duration_minutes", e.target.value)} placeholder="30" />
+                            <Input type="number" min={5} step={5} value={service.duration_minutes} onChange={(e) => updateService(index, "duration_minutes", e.target.value)} />
                           </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="flex items-center gap-2">
-                            <Wallet className="h-4 w-4 text-primary" />
-                            {t.customerDiscount}
-                          </Label>
-                          <Input value={service.customer_discount} onChange={(e) => updateService(index, "customer_discount", e.target.value)} placeholder={t.placeholders.discount} />
+                          <div className="space-y-2 md:col-span-2">
+                            <Label>{t.customerDiscount}</Label>
+                            <Input value={service.customer_discount} onChange={(e) => updateService(index, "customer_discount", e.target.value)} placeholder={t.placeholders.discount} />
+                          </div>
                         </div>
                       </div>
                     ))}
 
                     <Button type="button" variant="outline" className="w-full" onClick={addService}>
-                      <Plus className="h-4 w-4 ml-1" />
+                      <Plus className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
                       {t.addService}
                     </Button>
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardContent className="space-y-3 pt-6">
-                    <div className="rounded-2xl border border-ocean-100 bg-ocean-50 p-4 text-sm text-ocean-900">
+                <Button type="submit" size="lg" className="w-full bg-ocean-500 text-white hover:bg-ocean-600" disabled={signupLoading}>
+                  {signupLoading ? (
+                    <>
+                      <Loader2 className={`h-4 w-4 animate-spin ${isRtl ? "ml-2" : "mr-2"}`} />
+                      {t.creating}
+                    </>
+                  ) : (
+                    <>
+                      <UserRoundPlus className={`h-4 w-4 ${isRtl ? "ml-2" : "mr-2"}`} />
+                      {t.createAndLogin}
+                    </>
+                  )}
+                </Button>
+              </form>
+
+              <div className="space-y-6">
+                <Card className="sticky top-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Wallet className="h-5 w-5 text-primary" />
                       {t.creationSummary}
-                      <ul className="mt-2 list-disc space-y-1 pr-4">
-                        {t.summaryItems.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <div className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
-                      <div className="font-medium text-foreground">{t.email}</div>
-                      <div dir="ltr" className="mt-1 break-all">{loginEmail}</div>
-                    </div>
-
-                    <Button type="submit" className="h-12 w-full" disabled={signupLoading}>
-                      {signupLoading ? (
-                        <>
-                          <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                          {t.creating}
-                        </>
-                      ) : (
-                        <>
-                          <UserRoundPlus className="ml-2 h-4 w-4" />
-                          {t.createAndLogin}
-                        </>
-                      )}
-                    </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-3 text-sm text-muted-foreground">
+                      {t.summaryItems.map((item) => (
+                        <li key={item} className="flex items-start gap-2">
+                          <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </CardContent>
                 </Card>
               </div>
-            </form>
-          </TabsContent>
-        </Tabs>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 };
 
 export default OwnerAccess;
-

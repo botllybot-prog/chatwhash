@@ -21,6 +21,12 @@ verify_jwt = false
 [functions.owner-self-register]
 verify_jwt = false
 
+[functions.owner-login-lookup]
+verify_jwt = false
+
+[functions.check-subscriptions]
+verify_jwt = false
+
 [functions.spin-booking-discount]
 verify_jwt = false
 

@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
         const stationName = (owner?.stations as { name?: string } | null)?.name || "محطتك";
         const msg =
           `مرحباً، باقة محطة "${stationName}" ستنتهي خلال 3 أيام (${threeDaysLater}).\n` +
-          `يسعدنا تجديدها لك في الوقت المناسب حتى يستمر ظهور محطتك في الخريطة واستقبال الحجوزات الجديدة بسهولة.`;
+          `يسعدنا أن تقوم بالتجديد في الوقت المناسب حتى يستمر ظهور محطتك في الخريطة واستقبال الحجوزات الجديدة بسهولة.`;
         await sendWhatsAppText(ownerPhone, msg, accessToken, phoneNumberId);
       }
 
@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
 
     const { data: expired, error: fetchErr } = await supabase
       .from("subscriptions")
-      .select("id, station_id, status")
+      .select("id, station_id")
       .in("status", ["active", "trial"])
       .lt("end_date", today);
 
@@ -127,32 +127,85 @@ Deno.serve(async (req) => {
         const stationName = (owner?.stations as { name?: string } | null)?.name || "محطتك";
         const msg =
           `مرحباً، انتهت مدة باقة محطة "${stationName}" وتم إيقاف ظهورها مؤقتاً في الخريطة إلى حين التجديد.\n` +
-          `يمكنك تحديث الباقة الآن للوصول إلى عدد أكبر من الزبائن والعودة سريعاً إلى استقبال الحجوزات الجديدة.`;
+          `يمكنك تحديث باقتك الآن للوصول إلى عدد أكبر من الزبائن والعودة سريعاً إلى استقبال الحجوزات الجديدة.`;
         await sendWhatsAppText(ownerPhone, msg, accessToken, phoneNumberId);
       }
 
       processed++;
     }
 
-    if (adminAlertPhone && accessToken && phoneNumberId) {
-      const { data: ownersWithoutQuota } = await supabase
-        .from("station_owners")
-        .select("owner_name, owner_phone, free_requests_quota, stations(name)")
-        .or("free_requests_quota.is.null,free_requests_quota.lte.0");
+    const { data: allOwners } = await supabase
+      .from("station_owners")
+      .select("station_id, owner_name, owner_phone, free_requests_quota, stations(id, name, is_active, suspension_reason)");
 
-      for (const owner of ownersWithoutQuota || []) {
-        const stationName = (owner.stations as { name?: string } | null)?.name || "محطة بدون اسم";
-        const ownerPhone = normalizePhone(owner.owner_phone) || "لا يوجد رقم";
-        const adminMessage =
-          `تنبيه إعدادات المحطات\n\n` +
-          `المحطة: ${stationName}\n` +
-          `المالك: ${owner.owner_name || "غير محدد"}\n` +
-          `رقم المالك: ${ownerPhone}\n\n` +
-          `هذه المحطة لا تحتوي على رقم يمثل الطلبات المجانية الممنوحة من قبل الإدارة.\n` +
-          `يرجى فتح حساب المالك وإدخال الرقم المناسب حتى يعمل منطق الباقات بشكل صحيح.`;
+    const { data: activeSubsForVisibility } = await supabase
+      .from("subscriptions")
+      .select("station_id")
+      .in("status", ["active", "trial"])
+      .gte("end_date", today);
 
-        await sendWhatsAppText(adminAlertPhone, adminMessage, accessToken, phoneNumberId);
-        missingQuotaAlerts++;
+    const activeStationIds = new Set((activeSubsForVisibility || []).map((row) => row.station_id));
+
+    for (const owner of allOwners || []) {
+      const station = owner.stations as {
+        id?: string;
+        name?: string;
+        is_active?: boolean;
+        suspension_reason?: string | null;
+      } | null;
+
+      if (!station?.id) continue;
+
+      const hasFreeQuota = Number(owner.free_requests_quota || 0) > 0;
+      const hasActivePackage = activeStationIds.has(owner.station_id);
+      const hiddenByQuota = station.suspension_reason === "free_quota_exhausted";
+      const manuallyHidden = station.suspension_reason === "manual";
+      const hiddenByOtherSubscriptionReason =
+        station.suspension_reason === "package_exhausted" ||
+        station.suspension_reason === "subscription_expired";
+
+      if (!hasFreeQuota && !hasActivePackage) {
+        if (manuallyHidden || hiddenByOtherSubscriptionReason) {
+          continue;
+        }
+
+        if (station.is_active !== false || !hiddenByQuota) {
+          await supabase
+            .from("stations")
+            .update({
+              is_active: false,
+              suspension_reason: "free_quota_exhausted",
+              suspended_at: new Date().toISOString(),
+            })
+            .eq("id", station.id);
+
+          if (adminAlertPhone && accessToken && phoneNumberId) {
+            const ownerPhone = normalizePhone(owner.owner_phone) || "لا يوجد رقم";
+            const adminMessage =
+              `تنبيه إعدادات المحطات\n\n` +
+              `المحطة: ${station.name || "محطة بدون اسم"}\n` +
+              `المالك: ${owner.owner_name || "غير محدد"}\n` +
+              `رقم المالك: ${ownerPhone}\n\n` +
+              `هذه المحطة لا تحتوي على رقم يمثل الطلبات المجانية الممنوحة من قبل الإدارة، كما لا تملك باقة فعالة.\n` +
+              `تم إخفاؤها تلقائياً من الخريطة إلى حين إضافة رقم مناسب للطلبات المجانية أو تفعيل باقة فعالة.`;
+
+            await sendWhatsAppText(adminAlertPhone, adminMessage, accessToken, phoneNumberId);
+            missingQuotaAlerts++;
+          }
+        }
+
+        continue;
+      }
+
+      if (hiddenByQuota && (hasFreeQuota || hasActivePackage)) {
+        await supabase
+          .from("stations")
+          .update({
+            is_active: true,
+            suspension_reason: null,
+            suspended_at: null,
+          })
+          .eq("id", station.id);
       }
     }
 
