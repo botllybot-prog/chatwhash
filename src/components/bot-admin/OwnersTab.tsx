@@ -27,6 +27,8 @@ type Owner = {
   station_id: string;
   is_active: boolean;
   outstanding_debt: number;
+  free_requests_quota: number;
+  free_requests_used: number;
   created_at: string;
   stations: { name: string } | null;
 };
@@ -59,6 +61,7 @@ const OwnersTab = () => {
   const [ownerWhatsapp, setOwnerWhatsapp] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [freeRequestsQuota, setFreeRequestsQuota] = useState("0");
   const [stationName, setStationName] = useState("");
   const [stationAddress, setStationAddress] = useState("");
   const [detailedAddress, setDetailedAddress] = useState("");
@@ -71,7 +74,13 @@ const OwnersTab = () => {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Owner | null>(null);
-  const [editForm, setEditForm] = useState({ owner_name: "", owner_phone: "", station_id: "", outstanding_debt: "" });
+  const [editForm, setEditForm] = useState({
+    owner_name: "",
+    owner_phone: "",
+    station_id: "",
+    outstanding_debt: "",
+    free_requests_quota: "0",
+  });
   const [deleteTarget, setDeleteTarget] = useState<Owner | null>(null);
 
   const generatedEmail = useMemo(
@@ -84,6 +93,7 @@ const OwnersTab = () => {
     setOwnerWhatsapp("");
     setOwnerEmail("");
     setPassword("");
+    setFreeRequestsQuota("0");
     setStationName("");
     setStationAddress("");
     setDetailedAddress("");
@@ -143,6 +153,7 @@ const OwnersTab = () => {
         owner_phone: normalizeOwnerPhone(ownerWhatsapp),
         email: ownerEmail.trim() || null,
         password,
+        free_requests_quota: Number(freeRequestsQuota) || 0,
         station: {
           name: stationName.trim(),
           address: stationAddress.trim(),
@@ -188,6 +199,7 @@ const OwnersTab = () => {
       owner_phone: owner.owner_phone || "",
       station_id: owner.station_id,
       outstanding_debt: String(owner.outstanding_debt ?? 0),
+      free_requests_quota: String(owner.free_requests_quota ?? 0),
     });
     setEditOpen(true);
   };
@@ -207,6 +219,7 @@ const OwnersTab = () => {
         owner_phone: editForm.owner_phone || null,
         station_id: editForm.station_id,
         outstanding_debt: parseFloat(editForm.outstanding_debt) || 0,
+        free_requests_quota: parseInt(editForm.free_requests_quota, 10) || 0,
       })
       .eq("id", editTarget.id);
     setLoading(false);
@@ -313,6 +326,19 @@ const OwnersTab = () => {
                     <div className="space-y-2">
                       <Label>كلمة المرور</Label>
                       <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="6 أحرف على الأقل" />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>عدد الطلبات المجانية الممنوحة</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={freeRequestsQuota}
+                        onChange={(event) => setFreeRequestsQuota(event.target.value)}
+                        placeholder="0"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        اتركه صفراً إذا لم يتم منح طلبات مجانية بعد. سيرسل النظام تنبيهاً إلى الإدارة حتى يتم تحديد العدد المناسب لهذه المحطة.
+                      </p>
                     </div>
                     <div className="md:col-span-2 rounded-2xl border border-dashed p-3 text-sm text-muted-foreground">
                       بريد الدخول الناتج:
@@ -501,6 +527,7 @@ const OwnersTab = () => {
                 <TableHead className="font-semibold text-foreground py-3">المحطة</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">الهاتف</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">الحالة</TableHead>
+                <TableHead className="font-semibold text-foreground py-3">المجاني المستخدم</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">الذمة (د.ع)</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">تاريخ الإنشاء</TableHead>
                 <TableHead className="font-semibold text-foreground py-3 text-center">إجراءات</TableHead>
@@ -519,6 +546,12 @@ const OwnersTab = () => {
                     >
                       {owner.is_active ? "نشط" : "موقوف"}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="py-3 text-sm">
+                    <span className="font-semibold text-foreground">
+                      {owner.free_requests_used ?? 0}
+                    </span>
+                    <span className="text-muted-foreground"> / {owner.free_requests_quota ?? 0}</span>
                   </TableCell>
                   <TableCell className="py-3 text-sm font-mono">
                     {owner.outstanding_debt > 0 ? (
@@ -565,7 +598,7 @@ const OwnersTab = () => {
 
               {owners.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-16">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-16">
                     لا توجد حسابات مالكين بعد
                   </TableCell>
                 </TableRow>
@@ -592,6 +625,10 @@ const OwnersTab = () => {
             <div>
               <Label>الذمة المالية (د.ع)</Label>
               <Input type="number" min="0" value={editForm.outstanding_debt} onChange={(event) => setEditForm({ ...editForm, outstanding_debt: event.target.value })} />
+            </div>
+            <div>
+              <Label>عدد الطلبات المجانية الممنوحة</Label>
+              <Input type="number" min="0" value={editForm.free_requests_quota} onChange={(event) => setEditForm({ ...editForm, free_requests_quota: event.target.value })} />
             </div>
             <div>
               <Label>المحطة</Label>

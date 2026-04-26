@@ -12,6 +12,7 @@ type RegisterPayload = {
   owner_phone?: string;
   email?: string | null;
   password?: string;
+  free_requests_quota?: number;
   station?: {
     name?: string;
     address?: string;
@@ -177,6 +178,7 @@ Deno.serve(async (req) => {
       station_id: createdStationId,
       owner_name: ownerName,
       owner_phone: ownerPhone,
+      free_requests_quota: Math.max(0, Number(payload.free_requests_quota ?? 0) || 0),
     };
 
     if (createdBy) {

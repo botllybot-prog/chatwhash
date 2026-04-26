@@ -5,41 +5,36 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function sendWhatsAppInteractive(
+function normalizePhone(phone: string) {
+  const cleaned = phone.replace(/[^\d+]/g, "").replace(/^\+/, "");
+  if (/^07\d{9}$/.test(cleaned)) return `964${cleaned.substring(1)}`;
+  return cleaned;
+}
+
+async function sendWhatsAppText(
   phone: string,
   bodyText: string,
-  buttons: { id: string; title: string }[],
   accessToken: string,
-  phoneNumberId: string
-): Promise<string | null> {
-  const payload = {
-    messaging_product: "whatsapp",
-    to: phone,
-    type: "interactive",
-    interactive: {
-      type: "button",
-      body: { text: bodyText },
-      action: {
-        buttons: buttons.map((b) => ({
-          type: "reply",
-          reply: { id: b.id, title: b.title.substring(0, 20) },
-        })),
-      },
-    },
-  };
+  phoneNumberId: string,
+) {
   const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: phone,
+      type: "text",
+      text: { body: bodyText },
+    }),
   });
+
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(`WhatsApp API error: ${res.status} ${JSON.stringify(data)}`);
   }
-  return data?.messages?.[0]?.id || null;
 }
 
 Deno.serve(async (req) => {
@@ -50,10 +45,9 @@ Deno.serve(async (req) => {
   try {
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Auth: verify JWT and require admin role
     const authHeader = req.headers.get("authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -61,24 +55,31 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user: caller } } = await supabaseAdmin.auth.getUser(token);
+    const {
+      data: { user: caller },
+    } = await supabaseAdmin.auth.getUser(token);
+
     if (!caller) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
     const { data: roleData } = await supabaseAdmin
-      .from("user_roles").select("role").eq("user_id", caller.id).maybeSingle();
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", caller.id)
+      .maybeSingle();
+
     if (!roleData || !["admin", "employee"].includes(roleData.role)) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const supabase = supabaseAdmin;
 
     const { owner_id } = await req.json();
     if (!owner_id) {
@@ -88,10 +89,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch owner data
-    const { data: owner } = await supabase
+    const { data: owner } = await supabaseAdmin
       .from("station_owners")
-      .select("id, owner_name, owner_phone, outstanding_debt, stations(name)")
+      .select("id, owner_name, owner_phone, stations(name)")
       .eq("id", owner_id)
       .maybeSingle();
 
@@ -101,10 +101,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch WhatsApp settings
-    const { data: settingsRows } = await supabase
-      .from("app_settings")
-      .select("key, value");
+    const { data: settingsRows } = await supabaseAdmin.from("app_settings").select("key, value");
     const settings: Record<string, string> = {};
     if (settingsRows) {
       for (const row of settingsRows as { key: string; value: string }[]) {
@@ -122,59 +119,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    const debt = (owner.outstanding_debt as number) || 0;
-    const stationName = (owner.stations as any)?.name || "مغسلتك";
-    const suspendMsg =
-      `⚠️ إشعار إداري مهم ⚠️\n\n` +
-      `عذراً، تم إيقاف حساب ${stationName} في النظام.\n` +
-      `السبب: وجود ذمة مالية غير مسددة.\n` +
-      `المبلغ المستحق: ${debt.toLocaleString("ar-IQ")} دينار عراقي.\n\n` +
-      `يرجى تسديد المبلغ للإدارة لإعادة تفعيل حسابك واستقبال الحجوزات.\n\n` +
-      `اختر طريقة الدفع:`;
+    const stationName = (owner.stations as { name?: string } | null)?.name || "محطتك";
+    const message =
+      `⚠️ إشعار إداري مهم\n\n` +
+      `تم إيقاف حساب محطة ${stationName} مؤقتاً من قبل الإدارة.\n` +
+      `هذا الإيقاف إداري وليس متعلقاً بالدفع أو الاشتراك.\n` +
+      `يرجى التواصل مع الشركة مباشرة لمعرفة السبب وإعادة التفعيل.\n\n` +
+      `شكراً لتفهمك.`;
 
-    // Normalize phone (ensure international format 964XXXXXXXXX)
-    let phone = owner.owner_phone as string;
-    if (/^07\d{9}$/.test(phone)) phone = "964" + phone.substring(1);
-
-    const waId = await sendWhatsAppInteractive(
-      phone,
-      suspendMsg,
-      [
-        { id: "pay_method_zain", title: "💚 زين كاش" },
-        { id: "pay_method_super", title: "🔵 سوبر كي" },
-        { id: "pay_method_nas", title: "🟠 ناس وولت" },
-      ],
+    await sendWhatsAppText(
+      normalizePhone(owner.owner_phone),
+      message,
       accessToken,
-      phoneNumberId
+      phoneNumberId,
     );
-    if (!waId) {
-      return new Response(JSON.stringify({ error: "Failed to send suspension notice" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Update bot session so owner is ready for payment method selection
-    await supabase
-      .from("bot_sessions")
-      .upsert(
-        {
-          customer_phone: phone,
-          current_step: "owner_payment_method",
-          updated_at: new Date().toISOString(),
-          expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-        },
-        { onConflict: "customer_phone" }
-      );
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("send-suspension-notice error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ error: err instanceof Error ? err.message : "Unexpected error" }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
