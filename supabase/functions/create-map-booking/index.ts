@@ -307,7 +307,7 @@ Deno.serve(async (req) => {
     if (existingCustomerBooking) {
       return new Response(
         JSON.stringify({
-          error: `لديك حجز نشط بالفعل برقم #${existingCustomerBooking.booking_number} في هذه المحطة.`,
+          error: `لديك حجز سابق بالفعل برقم #${existingCustomerBooking.booking_number} في هذه المحطة. يجب عليك إلغاء الحجز الحالي ثم الحجز من جديد.`,
         }),
         {
           status: 409,
@@ -454,8 +454,7 @@ Deno.serve(async (req) => {
     });
 
     const pendingMsg = `📩 تم استلام طلب حجزك من الخريطة.\n\n🏪 المحطة: ${stationName}\n🧽 الخدمة: ${service.name}\n🎯 الخصم: (${spinDiscountPercent})%\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${formatTime(bookingTime)}\n🔢 رقم الحجز: #${booking.booking_number}\n\n⏳ الطلب الآن بانتظار موافقة صاحب المحطة، وسيصلك إشعار القبول أو الرفض على هذا الرقم.`;
-
-    await sendWhatsAppMessage(customerPhone, pendingMsg, settings);
+    const notificationTasks: Promise<unknown>[] = [sendWhatsAppMessage(customerPhone, pendingMsg, settings)];
 
     if (owner?.owner_phone) {
       const ownerPhone = normalizePhone(owner.owner_phone);
@@ -468,16 +467,20 @@ Deno.serve(async (req) => {
         selected_station_id: stationId,
       });
 
-      await sendWhatsAppInteractive(
-        ownerPhone,
-        ownerMsg,
-        [
-          { id: "approve_yes", title: "✅ تأكيد" },
-          { id: "approve_no", title: "❌ رفض" },
-        ],
-        settings,
+      notificationTasks.push(
+        sendWhatsAppInteractive(
+          ownerPhone,
+          ownerMsg,
+          [
+            { id: "approve_yes", title: "✅ تأكيد" },
+            { id: "approve_no", title: "❌ رفض" },
+          ],
+          settings,
+        ),
       );
     }
+
+    await Promise.allSettled(notificationTasks);
 
     return new Response(
       JSON.stringify({

@@ -831,6 +831,17 @@ const OWNER_PACKAGE_TEXTS = {
     openLink: "فتح الرابط",
     contactCompany: "التواصل مع الشركة",
     renewNow: "جدد باقتك الآن",
+    selectPackage: "اختيار هذه الباقة",
+    selectedPackage: "الباقة المختارة",
+    choosePaymentMethod: "اختر طريقة الدفع",
+    selectedPaymentMethod: "طريقة الدفع المختارة",
+    paymentReference: "مرجع الدفع (اختياري)",
+    paymentReferencePlaceholder: "مثال: آخر 4 أرقام أو اسم التحويل",
+    cardPayNow: "ادفع الآن بالبطاقة",
+    sendActivationRequest: "إرسال طلب التفعيل",
+    requestHint: "اختر الباقة أولاً ثم اختر وسيلة الدفع. بعد التحويل اضغط إرسال طلب التفعيل ليصل طلبك إلى الشركة مباشرة.",
+    requestReadyTitle: "جاهز لإرسال الطلب",
+    requestReadyBody: "سيتم تضمين اسم الباقة وطريقة الدفع واسم المحطة في الرسالة المرسلة إلى الشركة.",
     history: "سجل الدفعات",
     noPayments: "لا توجد دفعات مسجلة حتى الآن.",
     packageEndedTitle: "انتهت الباقة الحالية",
@@ -874,6 +885,17 @@ const OWNER_PACKAGE_TEXTS = {
     openLink: "Open link",
     contactCompany: "Contact company",
     renewNow: "Renew your package now",
+    selectPackage: "Choose this package",
+    selectedPackage: "Selected package",
+    choosePaymentMethod: "Choose a payment method",
+    selectedPaymentMethod: "Selected payment method",
+    paymentReference: "Payment reference (optional)",
+    paymentReferencePlaceholder: "Example: last 4 digits or transfer name",
+    cardPayNow: "Pay by card now",
+    sendActivationRequest: "Send activation request",
+    requestHint: "Choose a package first, then choose a payment method. After paying, send the activation request so the company receives your request directly.",
+    requestReadyTitle: "Ready to send",
+    requestReadyBody: "The message will include the package name, payment method, and station name.",
     history: "Payment history",
     noPayments: "No payments recorded yet.",
     packageEndedTitle: "Current package ended",
@@ -917,6 +939,17 @@ const OWNER_PACKAGE_TEXTS = {
     openLink: "کردنەوەی لینک",
     contactCompany: "پەیوەندی بە کۆمپانیا",
     renewNow: "ئێستا پاکێجەکەت نوێ بکەرەوە",
+    selectPackage: "ئەم پاکێجە هەڵبژێرە",
+    selectedPackage: "پاکێجی هەڵبژێردراو",
+    choosePaymentMethod: "ڕێگای پارەدان هەڵبژێرە",
+    selectedPaymentMethod: "ڕێگای پارەدانی هەڵبژێردراو",
+    paymentReference: "ئاماژەی پارەدان (ئیختیاری)",
+    paymentReferencePlaceholder: "نمونە: 4 ژمارەی کۆتایی یان ناوی حوالە",
+    cardPayNow: "ئێستا بە کارت پارە بدە",
+    sendActivationRequest: "داوای چالاککردن بنێرە",
+    requestHint: "سەرەتا پاکێجێک هەڵبژێرە، پاشان ڕێگای پارەدان. دوای پارەدان، داوای چالاککردن بنێرە بۆ ئەوەی کۆمپانیا ڕاستەوخۆ داواکە وەربگرێت.",
+    requestReadyTitle: "ئامادەی ناردنی داوا",
+    requestReadyBody: "ناوی پاکێج، ڕێگای پارەدان و ناوی وێستگە لە پەیامەکەدا دەخرێتە ناو.",
     history: "مێژووی پارەدان",
     noPayments: "هێشتا هیچ پارەدانێک تۆمار نەکراوە.",
     packageEndedTitle: "پاکێجی ئێستا تەواو بوو",
@@ -960,6 +993,17 @@ const OWNER_PACKAGE_TEXTS = {
     openLink: "Bağlantıyı aç",
     contactCompany: "Şirketle iletişime geç",
     renewNow: "Paketinizi şimdi yenileyin",
+    selectPackage: "Bu paketi seç",
+    selectedPackage: "Seçilen paket",
+    choosePaymentMethod: "Ödeme yöntemini seç",
+    selectedPaymentMethod: "Seçilen ödeme yöntemi",
+    paymentReference: "Ödeme referansı (isteğe bağlı)",
+    paymentReferencePlaceholder: "Örnek: son 4 hane veya transfer adı",
+    cardPayNow: "Şimdi kartla öde",
+    sendActivationRequest: "Aktivasyon talebi gönder",
+    requestHint: "Önce bir paket seçin, ardından ödeme yöntemini seçin. Ödeme sonrası aktivasyon talebini gönderin ki şirket talebinizi doğrudan alsın.",
+    requestReadyTitle: "Gönderime hazır",
+    requestReadyBody: "Mesajda paket adı, ödeme yöntemi ve istasyon adı yer alacaktır.",
     history: "Ödeme geçmişi",
     noPayments: "Henüz kayıtlı bir ödeme yok.",
     packageEndedTitle: "Mevcut paket sona erdi",
@@ -1028,6 +1072,9 @@ const SubscriptionTab = ({
   const [payments, setPayments] = useState<any[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [selectedPackageCode, setSelectedPackageCode] = useState<string>("starter_20");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("");
+  const [paymentReference, setPaymentReference] = useState("");
 
   useEffect(() => {
     const load = async () => {
@@ -1048,7 +1095,6 @@ const SubscriptionTab = ({
     load();
   }, [stationId]);
 
-  if (loading) return <p className="text-muted-foreground">{t.loading}</p>;
   const activeSub = sub && ["active", "trial"].includes(sub.status) ? sub : null;
   const statusLabels: Record<string, string> = { active: t.active, trial: t.trial, expired: t.expired, cancelled: t.cancelled };
   const paymentStatusLabels: Record<string, string> = { paid: t.paid, pending: t.paymentPending, failed: t.failed, refunded: t.refunded };
@@ -1074,10 +1120,47 @@ const SubscriptionTab = ({
     ? `https://wa.me/${companyWhatsapp}?text=${encodeURIComponent(`${copy.renewNow} - ${ownerMeta?.station_name || ""}`)}`
     : "";
   const activePackageCode = (activeSub?.package_code || "") as string;
+  const selectedPackage = OWNER_PACKAGES.find((pkg) => pkg.code === selectedPackageCode) || OWNER_PACKAGES[0];
+  const paymentMethodCards = [
+    settings.PAYMENT_ZAIN_CASH ? { code: "zain_cash", label: copy.zainCash, value: settings.PAYMENT_ZAIN_CASH } : null,
+    settings.PAYMENT_SUPER_KEY ? { code: "super_key", label: copy.superKey, value: settings.PAYMENT_SUPER_KEY } : null,
+    settings.PAYMENT_NAS_WALLET ? { code: "nas_wallet", label: copy.nasWallet, value: settings.PAYMENT_NAS_WALLET } : null,
+    cardUrl ? { code: "card", label: copy.cardLink, value: cardUrl } : null,
+  ].filter(Boolean) as { code: string; label: string; value: string }[];
+  const selectedPayment = paymentMethodCards.find((method) => method.code === selectedPaymentMethod) || null;
+  const packageRequestWhatsappLink =
+    companyWhatsapp && selectedPackage && selectedPayment
+      ? `https://wa.me/${companyWhatsapp}?text=${encodeURIComponent(
+          [
+            copy.sendActivationRequest,
+            `المحطة: ${ownerMeta?.station_name || "-"}`,
+            `الباقة: ${selectedPackage.requests === null ? copy.unlimited : `${selectedPackage.requests} ${copy.requests}`}`,
+            `السعر: $${selectedPackage.priceUsd}`,
+            `طريقة الدفع: ${selectedPayment.label}`,
+            paymentReference.trim() ? `مرجع الدفع: ${paymentReference.trim()}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        )}`
+      : "";
   const packageEnded = suspensionReason === "package_exhausted";
   const freeEnded = suspensionReason === "free_quota_exhausted";
   const expiredByDate = suspensionReason === "subscription_expired";
   const manualSuspended = suspensionReason === "manual";
+
+  useEffect(() => {
+    if (!selectedPackageCode) {
+      setSelectedPackageCode(activePackageCode || OWNER_PACKAGES[0].code);
+    }
+  }, [activePackageCode, selectedPackageCode]);
+
+  useEffect(() => {
+    if (!selectedPaymentMethod && paymentMethodCards.length > 0) {
+      setSelectedPaymentMethod(paymentMethodCards[0].code);
+    }
+  }, [paymentMethodCards, selectedPaymentMethod]);
+
+  if (loading) return <p className="text-muted-foreground">{t.loading}</p>;
 
   const renderBanner = () => {
     if (manualSuspended) {
@@ -1269,8 +1352,12 @@ const SubscriptionTab = ({
         <div className="grid gap-4 xl:grid-cols-4 md:grid-cols-2">
           {OWNER_PACKAGES.map((pkg) => {
             const isCurrent = activePackageCode === pkg.code && !!activeSub;
+            const isSelected = selectedPackageCode === pkg.code;
             return (
-              <Card key={pkg.code} className={`overflow-hidden border-blue-100 ${isCurrent ? "ring-2 ring-primary" : ""}`}>
+              <Card
+                key={pkg.code}
+                className={`overflow-hidden border-blue-100 transition-all ${isCurrent ? "ring-2 ring-primary" : ""} ${isSelected ? "border-primary shadow-lg shadow-primary/15" : ""}`}
+              >
                 <CardContent className="p-0">
                   <div className={`bg-gradient-to-br ${pkg.gradient} p-5 text-white`}>
                     <div className="flex items-center justify-between">
@@ -1297,12 +1384,48 @@ const SubscriptionTab = ({
                       <CheckCircle className="mt-0.5 h-4 w-4 text-primary" />
                       <p className="text-sm text-foreground">{copy.renewNow}</p>
                     </div>
+                    <Button
+                      type="button"
+                      className="mt-2 w-full"
+                      variant={isSelected ? "default" : "outline"}
+                      onClick={() => setSelectedPackageCode(pkg.code)}
+                    >
+                      {copy.selectPackage}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
             );
           })}
         </div>
+
+        <Card className="border-blue-100 bg-blue-50/60">
+          <CardContent className="space-y-4 pt-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h5 className="font-bold text-foreground">{copy.selectedPackage}</h5>
+                <p className="mt-1 text-sm text-muted-foreground">{copy.requestReadyBody}</p>
+              </div>
+              <Badge className="bg-primary text-primary-foreground hover:bg-primary">
+                {selectedPackage.requests === null ? copy.unlimited : `${selectedPackage.requests} ${copy.requests}`}
+              </Badge>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-background p-4 text-center">
+                <p className="text-xs text-muted-foreground">{copy.selectedPackage}</p>
+                <p className="mt-2 text-lg font-bold text-foreground">${selectedPackage.priceUsd}</p>
+              </div>
+              <div className="rounded-2xl bg-background p-4 text-center">
+                <p className="text-xs text-muted-foreground">{copy.validity}</p>
+                <p className="mt-2 text-lg font-bold text-foreground">{copy.validityValue}</p>
+              </div>
+              <div className="rounded-2xl bg-background p-4 text-center">
+                <p className="text-xs text-muted-foreground">{copy.selectedPaymentMethod}</p>
+                <p className="mt-2 text-sm font-bold text-primary">{selectedPayment?.label || copy.choosePaymentMethod}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {!manualSuspended && (
@@ -1313,33 +1436,52 @@ const SubscriptionTab = ({
               <h4 className="font-bold text-foreground">{copy.paymentMethods}</h4>
             </div>
             <p className="text-sm leading-7 text-muted-foreground">{copy.paymentHint}</p>
+            <p className="rounded-2xl border border-dashed border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-7 text-blue-950">
+              {copy.requestHint}
+            </p>
             <div className="grid gap-4 lg:grid-cols-2">
-              {settings.PAYMENT_ZAIN_CASH && (
-                <div className="rounded-2xl border border-border bg-muted/30 p-4">
-                  <p className="text-sm font-semibold text-foreground">{copy.zainCash}</p>
-                  <p className="mt-2 text-lg font-bold text-primary">{settings.PAYMENT_ZAIN_CASH}</p>
-                </div>
+              {paymentMethodCards.map((method) => (
+                <button
+                  key={method.code}
+                  type="button"
+                  onClick={() => setSelectedPaymentMethod(method.code)}
+                  className={`rounded-2xl border p-4 text-right transition-all ${selectedPaymentMethod === method.code ? "border-primary bg-primary/5 shadow-sm shadow-primary/10" : "border-border bg-muted/30"}`}
+                >
+                  <p className="text-sm font-semibold text-foreground">{method.label}</p>
+                  <p className="mt-2 text-lg font-bold text-primary break-all">
+                    {method.code === "card" ? cardUrl : method.value}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <div className="space-y-2">
+                <Label>{copy.paymentReference}</Label>
+                <Input
+                  value={paymentReference}
+                  onChange={(event) => setPaymentReference(event.target.value)}
+                  placeholder={copy.paymentReferencePlaceholder}
+                />
+              </div>
+              {selectedPaymentMethod === "card" && cardUrl && (
+                <Button asChild size="lg" className="self-end">
+                  <a href={cardUrl} target="_blank" rel="noreferrer">{copy.cardPayNow}</a>
+                </Button>
               )}
-              {settings.PAYMENT_SUPER_KEY && (
-                <div className="rounded-2xl border border-border bg-muted/30 p-4">
-                  <p className="text-sm font-semibold text-foreground">{copy.superKey}</p>
-                  <p className="mt-2 text-lg font-bold text-primary">{settings.PAYMENT_SUPER_KEY}</p>
-                </div>
-              )}
-              {settings.PAYMENT_NAS_WALLET && (
-                <div className="rounded-2xl border border-border bg-muted/30 p-4">
-                  <p className="text-sm font-semibold text-foreground">{copy.nasWallet}</p>
-                  <p className="mt-2 text-lg font-bold text-primary">{settings.PAYMENT_NAS_WALLET}</p>
-                </div>
-              )}
-              {cardUrl && (
-                <div className="rounded-2xl border border-border bg-muted/30 p-4">
-                  <p className="text-sm font-semibold text-foreground">{copy.cardLink}</p>
-                  <Button asChild className="mt-3 w-full">
-                    <a href={cardUrl} target="_blank" rel="noreferrer">{copy.openLink}</a>
-                  </Button>
-                </div>
-              )}
+              <Button
+                asChild={!!packageRequestWhatsappLink}
+                size="lg"
+                variant="outline"
+                className="self-end"
+                disabled={!packageRequestWhatsappLink}
+              >
+                {packageRequestWhatsappLink ? (
+                  <a href={packageRequestWhatsappLink} target="_blank" rel="noreferrer">{copy.sendActivationRequest}</a>
+                ) : (
+                  <span>{copy.sendActivationRequest}</span>
+                )}
+              </Button>
             </div>
 
             {companyWhatsappLink && (

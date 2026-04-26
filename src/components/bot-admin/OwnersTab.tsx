@@ -248,6 +248,9 @@ const OwnersTab = () => {
       return;
     }
 
+    const nextFreeQuota = Math.max(0, parseInt(editForm.free_requests_quota, 10) || 0);
+    const quotaChanged = nextFreeQuota !== Number(editTarget.free_requests_quota ?? 0);
+
     setLoading(true);
     const { error } = await supabase
       .from("station_owners")
@@ -256,9 +259,25 @@ const OwnersTab = () => {
         owner_phone: editForm.owner_phone || null,
         station_id: editForm.station_id,
         outstanding_debt: parseFloat(editForm.outstanding_debt) || 0,
-        free_requests_quota: parseInt(editForm.free_requests_quota, 10) || 0,
+        free_requests_quota: nextFreeQuota,
+        ...(quotaChanged ? { free_requests_used: 0 } : {}),
       })
       .eq("id", editTarget.id);
+
+    if (!error && nextFreeQuota > 0) {
+      await Promise.all([
+        supabase.from("station_owners").update({ is_active: true }).eq("id", editTarget.id),
+        supabase
+          .from("stations")
+          .update({
+            is_active: true,
+            suspension_reason: null,
+            suspended_at: null,
+          })
+          .eq("id", editForm.station_id),
+      ]);
+    }
+
     setLoading(false);
 
     if (error) {
@@ -266,7 +285,10 @@ const OwnersTab = () => {
       return;
     }
 
-    toast({ title: "تم تعديل بيانات المالك" });
+    toast({
+      title: quotaChanged && nextFreeQuota > 0 ? "تم حفظ التعديلات وإعادة تفعيل المحطة فوراً" : "تم تعديل بيانات المالك",
+      description: quotaChanged ? "تم تصفير المستخدم من الطلبات المجانية وبدء العد من الرصيد الجديد." : undefined,
+    });
     setEditOpen(false);
     setEditTarget(null);
     await load();
