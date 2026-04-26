@@ -126,6 +126,57 @@ const SubscriptionsTab = () => {
 
   const selectedPackage = PACKAGE_DEFINITIONS[form.package_code];
 
+  const sendOwnerPackageNotification = useCallback(
+    async (stationId: string, packageLabel: string, mode: "activated" | "renewed") => {
+      const { data: owner, error: ownerErr } = await db
+        .from("station_owners")
+        .select("owner_phone, owner_name")
+        .eq("station_id", stationId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (ownerErr) {
+        console.error("Failed to load station owner for package notification:", ownerErr);
+        return false;
+      }
+
+      const ownerPhone = owner?.owner_phone?.trim();
+      if (!ownerPhone) {
+        console.warn("Missing owner phone for package notification:", stationId);
+        return false;
+      }
+
+      const greeting = owner?.owner_name?.trim() ? `مرحباً ${owner.owner_name}` : "مرحباً";
+      const actionText =
+        mode === "renewed"
+          ? `تم تجديد باقتك (${packageLabel}) بنجاح لمدة 30 يوماً.`
+          : `تم تفعيل باقتك (${packageLabel}) بنجاح لمدة 30 يوماً.`;
+
+      const message = `${greeting}\n\n${actionText}\nيمكنك الآن الاستمرار بالظهور على الخريطة واستقبال الحجوزات الجديدة.\nنتمنى لك المزيد من الزبائن والحجوزات الموفقة.`;
+
+      const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+        body: {
+          phone: ownerPhone,
+          message,
+        },
+      });
+
+      if (error) {
+        console.error("Failed to invoke whatsapp-send:", error);
+        return false;
+      }
+
+      if (!data?.success) {
+        console.error("whatsapp-send returned unsuccessful response:", data);
+        return false;
+      }
+
+      return true;
+    },
+    [db]
+  );
+
   const handleCreate = async () => {
     if (!form.station_id) {
       toast({ title: "اختر المحطة أولاً", variant: "destructive" });
@@ -173,7 +224,18 @@ const SubscriptionsTab = () => {
       return;
     }
 
-    toast({ title: "تم إنشاء الباقة وتفعيلها لمدة 30 يوماً" });
+    const ownerNotified = await sendOwnerPackageNotification(form.station_id, pkg.label, "activated");
+
+    if (ownerNotified) {
+      toast({ title: "تم إنشاء الباقة وتفعيلها وإشعار صاحب المحطة" });
+    } else {
+      toast({
+        title: "تم إنشاء الباقة وتفعيلها لمدة 30 يوماً",
+        description: "تعذر إرسال إشعار واتساب لصاحب المحطة.",
+        variant: "destructive",
+      });
+    }
+
     setDialogOpen(false);
     setForm({ station_id: "", package_code: "starter_20" });
     await load();
@@ -234,7 +296,19 @@ const SubscriptionsTab = () => {
     ]);
 
     setLoading(false);
-    toast({ title: "تم تسجيل الدفعة وتجديد الباقة لمدة 30 يوماً" });
+
+    const ownerNotified = await sendOwnerPackageNotification(sub.station_id, pkg.label, "renewed");
+
+    if (ownerNotified) {
+      toast({ title: "تم تسجيل الدفعة وتجديد الباقة وإشعار صاحب المحطة" });
+    } else {
+      toast({
+        title: "تم تسجيل الدفعة وتجديد الباقة لمدة 30 يوماً",
+        description: "تعذر إرسال إشعار واتساب لصاحب المحطة.",
+        variant: "destructive",
+      });
+    }
+
     setPayDialogOpen(false);
     setPayForm({ amount: "", method: "cash", notes: "" });
     await load();
