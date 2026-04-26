@@ -134,9 +134,13 @@ Deno.serve(async (req) => {
       processed++;
     }
 
+    const { data: allStations } = await supabase
+      .from("stations")
+      .select("id, name, is_active, suspension_reason");
+
     const { data: allOwners } = await supabase
       .from("station_owners")
-      .select("station_id, owner_name, owner_phone, free_requests_quota, stations(id, name, is_active, suspension_reason)");
+      .select("station_id, owner_name, owner_phone, free_requests_quota");
 
     const { data: activeSubsForVisibility } = await supabase
       .from("subscriptions")
@@ -145,19 +149,12 @@ Deno.serve(async (req) => {
       .gte("end_date", today);
 
     const activeStationIds = new Set((activeSubsForVisibility || []).map((row) => row.station_id));
+    const ownerByStation = new Map((allOwners || []).map((owner) => [owner.station_id, owner]));
 
-    for (const owner of allOwners || []) {
-      const station = owner.stations as {
-        id?: string;
-        name?: string;
-        is_active?: boolean;
-        suspension_reason?: string | null;
-      } | null;
-
-      if (!station?.id) continue;
-
-      const hasFreeQuota = Number(owner.free_requests_quota || 0) > 0;
-      const hasActivePackage = activeStationIds.has(owner.station_id);
+    for (const station of allStations || []) {
+      const owner = ownerByStation.get(station.id);
+      const hasFreeQuota = Number(owner?.free_requests_quota || 0) > 0;
+      const hasActivePackage = activeStationIds.has(station.id);
       const hiddenByQuota = station.suspension_reason === "free_quota_exhausted";
       const manuallyHidden = station.suspension_reason === "manual";
       const hiddenByOtherSubscriptionReason =
@@ -180,11 +177,11 @@ Deno.serve(async (req) => {
             .eq("id", station.id);
 
           if (adminAlertPhone && accessToken && phoneNumberId) {
-            const ownerPhone = normalizePhone(owner.owner_phone) || "لا يوجد رقم";
+            const ownerPhone = normalizePhone(owner?.owner_phone) || "لا يوجد رقم";
             const adminMessage =
               `تنبيه إعدادات المحطات\n\n` +
               `المحطة: ${station.name || "محطة بدون اسم"}\n` +
-              `المالك: ${owner.owner_name || "غير محدد"}\n` +
+              `المالك: ${owner?.owner_name || "غير محدد"}\n` +
               `رقم المالك: ${ownerPhone}\n\n` +
               `هذه المحطة لا تحتوي على رقم يمثل الطلبات المجانية الممنوحة من قبل الإدارة، كما لا تملك باقة فعالة.\n` +
               `تم إخفاؤها تلقائياً من الخريطة إلى حين إضافة رقم مناسب للطلبات المجانية أو تفعيل باقة فعالة.`;

@@ -22,6 +22,7 @@ const DEFAULT_CENTER = { lat: 33.3152, lng: 44.3661 };
 type Owner = {
   id: string;
   user_id: string;
+  created_by?: string | null;
   owner_name: string;
   owner_phone: string | null;
   station_id: string;
@@ -31,6 +32,8 @@ type Owner = {
   free_requests_used: number;
   created_at: string;
   stations: { name: string } | null;
+  assignment_source_label?: string;
+  assignment_source_meta?: string;
 };
 
 type SchedulingType = "slots" | "instant" | "daily";
@@ -106,11 +109,45 @@ const OwnersTab = () => {
   };
 
   const load = useCallback(async () => {
-    const [{ data: ow }, { data: st }] = await Promise.all([
+    const [{ data: ow }, { data: st }, { data: employees }] = await Promise.all([
       supabase.from("station_owners").select("*, stations(name)").order("created_at", { ascending: false }),
       supabase.from("stations").select("id, name").order("name"),
+      supabase.from("employees").select("user_id, name, email"),
     ]);
-    if (ow) setOwners(ow as Owner[]);
+    if (ow) {
+      const employeeMap = new Map(
+        ((employees as any[]) || []).map((employee) => [employee.user_id, employee]),
+      );
+
+      const mappedOwners = (ow as Owner[]).map((owner) => {
+        const creatorId = owner.created_by || null;
+
+        if (!creatorId) {
+          return {
+            ...owner,
+            assignment_source_label: "تسجيل ذاتي",
+            assignment_source_meta: "تم إنشاء الحساب من قبل صاحب المحطة نفسه",
+          };
+        }
+
+        const employee = employeeMap.get(creatorId);
+        if (employee) {
+          return {
+            ...owner,
+            assignment_source_label: `الموظف: ${employee.name}`,
+            assignment_source_meta: employee.email || creatorId,
+          };
+        }
+
+        return {
+          ...owner,
+          assignment_source_label: "الإدارة",
+          assignment_source_meta: "تم منحه من قبل الأدمن",
+        };
+      });
+
+      setOwners(mappedOwners);
+    }
     if (st) setStations(st);
   }, []);
 
@@ -527,7 +564,7 @@ const OwnersTab = () => {
                 <TableHead className="font-semibold text-foreground py-3">المحطة</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">الهاتف</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">الحالة</TableHead>
-                <TableHead className="font-semibold text-foreground py-3">المجاني المستخدم</TableHead>
+                <TableHead className="font-semibold text-foreground py-3">الطلبات المجانية</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">الذمة (د.ع)</TableHead>
                 <TableHead className="font-semibold text-foreground py-3">تاريخ الإنشاء</TableHead>
                 <TableHead className="font-semibold text-foreground py-3 text-center">إجراءات</TableHead>
@@ -536,7 +573,16 @@ const OwnersTab = () => {
             <TableBody>
               {owners.map((owner) => (
                 <TableRow key={owner.id} className={!owner.is_active ? "opacity-50" : ""}>
-                  <TableCell className="font-semibold px-4 py-3">{owner.owner_name}</TableCell>
+                                    <TableCell className="px-4 py-3">
+                    <div className="font-semibold">{owner.owner_name}</div>
+                    {owner.assignment_source_label && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        <span className="font-medium">أُضيف بواسطة:</span>{" "}
+                        {owner.assignment_source_label}
+                        {owner.assignment_source_meta ? ` - ${owner.assignment_source_meta}` : ""}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell className="py-3 text-muted-foreground">{owner.stations?.name || "-"}</TableCell>
                   <TableCell className="py-3 font-mono text-sm" dir="ltr">{owner.owner_phone || "-"}</TableCell>
                   <TableCell className="py-3">
@@ -548,10 +594,15 @@ const OwnersTab = () => {
                     </Badge>
                   </TableCell>
                   <TableCell className="py-3 text-sm">
-                    <span className="font-semibold text-foreground">
-                      {owner.free_requests_used ?? 0}
-                    </span>
-                    <span className="text-muted-foreground"> / {owner.free_requests_quota ?? 0}</span>
+                    <div>
+                      <span className="font-semibold text-foreground">
+                        {owner.free_requests_used ?? 0}
+                      </span>
+                      <span className="text-muted-foreground"> / {owner.free_requests_quota ?? 0}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      الممنوح للمحطة: {owner.free_requests_quota ?? 0}
+                    </div>
                   </TableCell>
                   <TableCell className="py-3 text-sm font-mono">
                     {owner.outstanding_debt > 0 ? (
