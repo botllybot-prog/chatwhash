@@ -1,4 +1,4 @@
-﻿{
+{
   "expo": {
     "name": "Washlly",
     "slug": "washlly-mobile-app",
@@ -18,6 +18,11 @@
     },
     "android": {
       "package": "com.washlly.app"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c09283f2-5ab6-467b-a79e-ad2675003412"
+      }
     }
   }
 }
