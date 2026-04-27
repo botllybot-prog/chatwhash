@@ -1,4 +1,4 @@
-project_id = "yhklvtzonvgzkodysawu"
+﻿project_id = "yhklvtzonvgzkodysawu"
 
 [functions.whatsapp-webhook]
 verify_jwt = false
@@ -32,3 +32,7 @@ verify_jwt = false
 
 [functions.cancel-map-booking]
 verify_jwt = false
+
+[functions.payment-callback]
+verify_jwt = false
+
