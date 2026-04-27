@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Noto+Sans+Arabic:wght@400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -108,6 +108,49 @@
   body {
     @apply bg-background text-foreground;
     font-family: 'Tajawal', 'Cairo', sans-serif;
+  }
+
+  html[lang="ku"] body,
+  html[lang="ku"] button,
+  html[lang="ku"] input,
+  html[lang="ku"] textarea,
+  html[lang="ku"] select,
+  html[lang="ku"] h1,
+  html[lang="ku"] h2,
+  html[lang="ku"] h3,
+  html[lang="ku"] h4,
+  html[lang="ku"] h5,
+  html[lang="ku"] h6,
+  html[lang="ku"] p,
+  html[lang="ku"] span,
+  html[lang="ku"] label,
+  html[lang="ku"] a {
+    font-family: 'Noto Sans Arabic', 'Cairo', 'Tajawal', sans-serif;
+  }
+
+  html[lang="ku"] body {
+    line-height: 1.8;
+    word-spacing: 0.08em;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html[lang="ku"] h1,
+  html[lang="ku"] h2,
+  html[lang="ku"] h3 {
+    font-family: 'Cairo', 'Noto Sans Arabic', 'Tajawal', sans-serif;
+    line-height: 1.28;
+    word-spacing: 0.05em;
+    letter-spacing: 0;
+  }
+
+  html[lang="tr"] h1,
+  html[lang="tr"] h2,
+  html[lang="tr"] h3 {
+    font-weight: 700 !important;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
   }
 }
 

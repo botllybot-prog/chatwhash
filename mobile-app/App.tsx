@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { BottomTabs } from "./src/components/BottomTabs";
 import { CustomerHomeScreen } from "./src/screens/CustomerHomeScreen";
@@ -17,17 +17,6 @@ type OwnerSession = {
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [ownerSession, setOwnerSession] = useState<OwnerSession | null>(null);
-
-  const subtitle = useMemo(() => {
-    if (activeTab === "owner") {
-      return ownerSession
-        ? "بوابة المحطة: اشتراكات، دفعات، وتفعيل باقات مباشرة."
-        : "تسجيل/دخول صاحب المحطة وربط مباشر بـ Supabase.";
-    }
-    if (activeTab === "map") return "الخريطة + الحجز الكامل + عجلة الخصم + تأكيد/إلغاء.";
-    if (activeTab === "stations") return "المحطات والخدمات المتاحة مع تجربة حجز حقيقية.";
-    return "واجهة العميل الكاملة لبدء الحجز من التطبيق.";
-  }, [activeTab, ownerSession]);
 
   const renderScreen = () => {
     if (activeTab === "owner") {
@@ -52,22 +41,37 @@ export default function App() {
     }
 
     if (activeTab === "map") {
-      return <CustomerHomeScreen mode="map" onOpenOwner={() => setActiveTab("owner")} />;
+      return (
+        <CustomerHomeScreen
+          mode="map"
+          onOpenOwner={() => setActiveTab("owner")}
+          onOpenMap={() => setActiveTab("map")}
+        />
+      );
     }
     if (activeTab === "stations") {
-      return <CustomerHomeScreen mode="stations" onOpenOwner={() => setActiveTab("owner")} />;
+      return (
+        <CustomerHomeScreen
+          mode="stations"
+          onOpenOwner={() => setActiveTab("owner")}
+          onOpenMap={() => setActiveTab("map")}
+        />
+      );
     }
-    return <CustomerHomeScreen mode="home" onOpenOwner={() => setActiveTab("owner")} />;
+    return (
+      <CustomerHomeScreen
+        mode="home"
+        onOpenOwner={() => setActiveTab("owner")}
+        onOpenMap={() => setActiveTab("map")}
+      />
+    );
   };
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={palette.sand} />
       <View style={styles.header}>
-        <View>
-          <Text style={styles.brand}>Washlly Mobile</Text>
-          <Text style={styles.sub}>{subtitle}</Text>
-        </View>
+        <Text style={styles.brand}>Washlly Mobile</Text>
       </View>
       <View style={styles.body}>{renderScreen()}</View>
       <BottomTabs active={activeTab} onChange={setActiveTab} />
@@ -86,6 +90,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fbfe",
   },
   brand: { textAlign: "right", fontSize: 24, color: palette.deepBlue, fontWeight: "900" },
-  sub: { textAlign: "right", color: palette.muted, marginTop: 4, lineHeight: 20 },
   body: { flex: 1 },
 });

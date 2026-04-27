@@ -1,11 +1,125 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Store, CalendarCheck, TrendingUp, AlertTriangle, Users, CreditCard, Clock, CheckCircle, Hourglass, XCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { useAppLanguage } from "@/lib/language";
+
+const texts = {
+  ar: {
+    dashboard: "لوحة المعلومات",
+    lastUpdate: "آخر تحديث",
+    activeStations: "المحطات النشطة",
+    todayBookings: "حجوزات اليوم",
+    pendingBookings: "حجوزات معلقة",
+    todayRevenue: "إيرادات اليوم",
+    weekRevenue: "إيرادات الأسبوع",
+    monthRevenue: "إيرادات الشهر",
+    activeSubscriptions: "اشتراكات نشطة",
+    expiringSoon: "تنتهي قريباً",
+    stationOwners: "أصحاب المحطات",
+    last7Days: "الحجوزات والإيرادات - آخر 7 أيام",
+    bookingStatuses: "حالات الحجوزات",
+    noData: "لا توجد بيانات",
+    completed: "مكتملة",
+    confirmed: "مؤكدة",
+    pending: "معلقة",
+    cancelled: "ملغية",
+    disabledStations: "محطات معطلة",
+    bookingsLegend: "الحجوزات",
+    revenueLegend: "الإيرادات",
+    currency: "د.ع",
+    loading: "جاري تحميل لوحة المعلومات...",
+    dayShortLocale: "ar-IQ",
+    timeLocale: "ar-IQ",
+  },
+  en: {
+    dashboard: "Dashboard",
+    lastUpdate: "Last update",
+    activeStations: "Active stations",
+    todayBookings: "Today's bookings",
+    pendingBookings: "Pending bookings",
+    todayRevenue: "Today's revenue",
+    weekRevenue: "Weekly revenue",
+    monthRevenue: "Monthly revenue",
+    activeSubscriptions: "Active subscriptions",
+    expiringSoon: "Expiring soon",
+    stationOwners: "Station owners",
+    last7Days: "Bookings and revenue - last 7 days",
+    bookingStatuses: "Booking statuses",
+    noData: "No data available",
+    completed: "Completed",
+    confirmed: "Confirmed",
+    pending: "Pending",
+    cancelled: "Cancelled",
+    disabledStations: "Disabled stations",
+    bookingsLegend: "Bookings",
+    revenueLegend: "Revenue",
+    currency: "IQD",
+    loading: "Loading dashboard...",
+    dayShortLocale: "en-US",
+    timeLocale: "en-US",
+  },
+  ku: {
+    dashboard: "داشبۆرد",
+    lastUpdate: "دوایین نوێکردنەوە",
+    activeStations: "وێستگە چالاکەکان",
+    todayBookings: "حجزەکانی ئەمڕۆ",
+    pendingBookings: "حجزە هەڵپەسێردراوەکان",
+    todayRevenue: "داهاتی ئەمڕۆ",
+    weekRevenue: "داهاتی هەفتە",
+    monthRevenue: "داهاتی مانگ",
+    activeSubscriptions: "بەشداریکردنی چالاک",
+    expiringSoon: "بەزوویی کۆتایی دێت",
+    stationOwners: "خاوەن وێستگەکان",
+    last7Days: "حجز و داهات - ٧ ڕۆژی دوایین",
+    bookingStatuses: "دۆخی حجزەکان",
+    noData: "هیچ زانیارییەک نییە",
+    completed: "تەواوبوو",
+    confirmed: "پشتڕاستکراوە",
+    pending: "چاوەڕوان",
+    cancelled: "هەڵوەشایەوە",
+    disabledStations: "وێستگە ناچالاکەکان",
+    bookingsLegend: "حجزەکان",
+    revenueLegend: "داهات",
+    currency: "د.ع",
+    loading: "داشبۆرد بار دەکرێت...",
+    dayShortLocale: "ku",
+    timeLocale: "ku",
+  },
+  tr: {
+    dashboard: "Kontrol paneli",
+    lastUpdate: "Son güncelleme",
+    activeStations: "Aktif istasyonlar",
+    todayBookings: "Bugünkü rezervasyonlar",
+    pendingBookings: "Bekleyen rezervasyonlar",
+    todayRevenue: "Bugünkü gelir",
+    weekRevenue: "Haftalık gelir",
+    monthRevenue: "Aylık gelir",
+    activeSubscriptions: "Aktif abonelikler",
+    expiringSoon: "Yakında bitecek",
+    stationOwners: "İstasyon sahipleri",
+    last7Days: "Rezervasyonlar ve gelir - son 7 gün",
+    bookingStatuses: "Rezervasyon durumları",
+    noData: "Veri yok",
+    completed: "Tamamlandı",
+    confirmed: "Onaylandı",
+    pending: "Beklemede",
+    cancelled: "İptal edildi",
+    disabledStations: "Pasif istasyonlar",
+    bookingsLegend: "Rezervasyonlar",
+    revenueLegend: "Gelir",
+    currency: "IQD",
+    loading: "Panel yükleniyor...",
+    dayShortLocale: "tr-TR",
+    timeLocale: "tr-TR",
+  },
+} as const;
 
 const AdminDashboard = () => {
+  const { language } = useAppLanguage();
+  const t = texts[language];
   const [stats, setStats] = useState({
     activeStations: 0, totalStations: 0,
     todayBookings: 0, pendingBookings: 0, completedBookings: 0, cancelledBookings: 0,
@@ -83,7 +197,7 @@ const AdminDashboard = () => {
 
         setWeeklyData(
           Object.entries(dayMap).map(([date, value]) => ({
-            day: new Date(date).toLocaleDateString("ar-IQ", { weekday: "short" }),
+            day: new Date(date).toLocaleDateString(t.dayShortLocale, { weekday: "short" }),
             bookings: value.bookings,
             revenue: value.revenue,
           })),
@@ -95,10 +209,10 @@ const AdminDashboard = () => {
         const cancelled = cancelledRes.count || 0;
 
         setStatusData([
-          { name: "مكتمل", value: completed, color: "hsl(var(--primary))" },
-          { name: "مؤكد", value: confirmed, color: "hsl(142 71% 45%)" },
-          { name: "معلق", value: pending, color: "hsl(38 92% 50%)" },
-          { name: "ملغي", value: cancelled, color: "hsl(var(--destructive))" },
+          { name: t.completed, value: completed, color: "hsl(var(--primary))" },
+          { name: t.confirmed, value: confirmed, color: "hsl(142 71% 45%)" },
+          { name: t.pending, value: pending, color: "hsl(38 92% 50%)" },
+          { name: t.cancelled, value: cancelled, color: "hsl(var(--destructive))" },
         ].filter((item) => item.value > 0));
       } catch (error) {
         console.error("Admin dashboard load failed", error);
@@ -108,35 +222,43 @@ const AdminDashboard = () => {
     };
 
     load();
-  }, []);
+  }, [t.cancelled, t.completed, t.confirmed, t.dayShortLocale, t.pending]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+        <span className="mr-3 text-sm text-muted-foreground">{t.loading}</span>
       </div>
     );
   }
 
   const summaryCards = [
-    { title: "المحطات النشطة", value: `${stats.activeStations} / ${stats.totalStations}`, icon: Store, color: "text-primary", bg: "bg-primary/10" },
-    { title: "حجوزات اليوم", value: stats.todayBookings, icon: CalendarCheck, color: "text-primary", bg: "bg-primary/10" },
-    { title: "حجوزات معلقة", value: stats.pendingBookings, icon: Hourglass, color: "text-amber-600", bg: "bg-amber-500/10" },
-    { title: "إيرادات اليوم", value: `${stats.todayRevenue.toLocaleString()} د.ع`, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-    { title: "إيرادات الأسبوع", value: `${stats.weekRevenue.toLocaleString()} د.ع`, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-    { title: "إيرادات الشهر", value: `${stats.monthRevenue.toLocaleString()} د.ع`, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-    { title: "اشتراكات نشطة", value: stats.activeSubscriptions, icon: CreditCard, color: "text-primary", bg: "bg-primary/10" },
-    { title: "تنتهي قريباً", value: stats.expiringSoon, icon: AlertTriangle, color: stats.expiringSoon > 0 ? "text-destructive" : "text-muted-foreground", bg: stats.expiringSoon > 0 ? "bg-destructive/10" : "bg-muted/50" },
-    { title: "أصحاب المحطات", value: stats.totalOwners, icon: Users, color: "text-primary", bg: "bg-primary/10" },
+    { title: t.activeStations, value: `${stats.activeStations} / ${stats.totalStations}`, icon: Store, color: "text-primary", bg: "bg-primary/10" },
+    { title: t.todayBookings, value: stats.todayBookings, icon: CalendarCheck, color: "text-primary", bg: "bg-primary/10" },
+    { title: t.pendingBookings, value: stats.pendingBookings, icon: Hourglass, color: "text-amber-600", bg: "bg-amber-500/10" },
+    { title: t.todayRevenue, value: `${stats.todayRevenue.toLocaleString()} ${t.currency}`, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+    { title: t.weekRevenue, value: `${stats.weekRevenue.toLocaleString()} ${t.currency}`, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+    { title: t.monthRevenue, value: `${stats.monthRevenue.toLocaleString()} ${t.currency}`, icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+    { title: t.activeSubscriptions, value: stats.activeSubscriptions, icon: CreditCard, color: "text-primary", bg: "bg-primary/10" },
+    { title: t.expiringSoon, value: stats.expiringSoon, icon: AlertTriangle, color: stats.expiringSoon > 0 ? "text-destructive" : "text-muted-foreground", bg: stats.expiringSoon > 0 ? "bg-destructive/10" : "bg-muted/50" },
+    { title: t.stationOwners, value: stats.totalOwners, icon: Users, color: "text-primary", bg: "bg-primary/10" },
+  ];
+
+  const quickStats = [
+    { label: t.completed, value: stats.completedBookings, icon: CheckCircle, color: "text-emerald-600" },
+    { label: t.pending, value: stats.pendingBookings, icon: Hourglass, color: "text-amber-600" },
+    { label: t.cancelled, value: stats.cancelledBookings, icon: XCircle, color: "text-destructive" },
+    { label: t.disabledStations, value: stats.totalStations - stats.activeStations, icon: Store, color: "text-muted-foreground" },
   ];
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-foreground">لوحة المعلومات</h2>
+        <h2 className="text-xl font-bold text-foreground">{t.dashboard}</h2>
         <Badge variant="outline" className="text-xs">
           <Clock className="h-3 w-3 ml-1" />
-          آخر تحديث: {new Date().toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })}
+          {t.lastUpdate}: {new Date().toLocaleTimeString(t.timeLocale, { hour: "2-digit", minute: "2-digit" })}
         </Badge>
       </div>
 
@@ -159,7 +281,7 @@ const AdminDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">الحجوزات والإيرادات — آخر 7 أيام</CardTitle>
+            <CardTitle className="text-base">{t.last7Days}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[280px] w-full">
@@ -170,10 +292,10 @@ const AdminDashboard = () => {
                   <YAxis yAxisId="left" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
                   <YAxis yAxisId="right" orientation="left" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
                   <Tooltip
-                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", direction: "rtl" }}
+                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
                     formatter={(value: number, name: string) => [
-                      name === "revenue" ? `${value.toLocaleString()} د.ع` : value,
-                      name === "revenue" ? "الإيرادات" : "الحجوزات",
+                      name === "revenue" ? `${value.toLocaleString()} ${t.currency}` : value,
+                      name === "revenue" ? t.revenueLegend : t.bookingsLegend,
                     ]}
                   />
                   <Bar yAxisId="left" dataKey="bookings" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="bookings" />
@@ -186,7 +308,7 @@ const AdminDashboard = () => {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">حالات الحجوزات</CardTitle>
+            <CardTitle className="text-base">{t.bookingStatuses}</CardTitle>
           </CardHeader>
           <CardContent>
             {statusData.length > 0 ? (
@@ -199,7 +321,7 @@ const AdminDashboard = () => {
                       ))}
                     </Pie>
                     <Tooltip
-                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", direction: "rtl" }}
+                      contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px" }}
                       formatter={(value: number, name: string) => [value, name]}
                     />
                   </PieChart>
@@ -214,19 +336,14 @@ const AdminDashboard = () => {
                 </div>
               </div>
             ) : (
-              <div className="h-[280px] flex items-center justify-center text-muted-foreground text-sm">لا توجد بيانات</div>
+              <div className="h-[280px] flex items-center justify-center text-muted-foreground text-sm">{t.noData}</div>
             )}
           </CardContent>
         </Card>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "مكتملة", value: stats.completedBookings, icon: CheckCircle, color: "text-emerald-600" },
-          { label: "معلقة", value: stats.pendingBookings, icon: Hourglass, color: "text-amber-600" },
-          { label: "ملغية", value: stats.cancelledBookings, icon: XCircle, color: "text-destructive" },
-          { label: "محطات معطلة", value: stats.totalStations - stats.activeStations, icon: Store, color: "text-muted-foreground" },
-        ].map((item, index) => (
+        {quickStats.map((item, index) => (
           <Card key={index}>
             <CardContent className="py-3 px-4 flex items-center gap-3">
               <item.icon className={`h-5 w-5 ${item.color}`} />

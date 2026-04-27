@@ -6,10 +6,154 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { Check, X } from "lucide-react";
+import { useAppLanguage } from "@/lib/language";
+
+const texts = {
+  ar: {
+    title: "طلبات التعديل",
+    station: "المحطة",
+    field: "الحقل",
+    oldValue: "القيمة القديمة",
+    newValue: "القيمة الجديدة",
+    status: "الحالة",
+    note: "ملاحظة",
+    actions: "إجراءات",
+    placeholder: "ملاحظة...",
+    noRequests: "لا توجد طلبات",
+    genericError: "حدث خطأ",
+    approvedTitle: "تم القبول والتطبيق",
+    rejectedTitle: "تم الرفض",
+    sentApproved: "تم قبول طلب التعديل ✅",
+    sentRejected: "تم رفض طلب التعديل ❌",
+    bodyApproved: "تم قبوله وتطبيقه",
+    bodyRejected: "تم رفضه",
+    pending: "قيد المراجعة",
+    approved: "مقبول",
+    rejected: "مرفوض",
+    name: "اسم المحطة",
+    address: "العنوان",
+    detailedAddress: "العنوان التفصيلي",
+    workingStart: "بداية العمل",
+    workingEnd: "نهاية العمل",
+    scheduling: "نوع المواعيد",
+    image: "الصورة",
+  },
+  en: {
+    title: "Edit requests",
+    station: "Station",
+    field: "Field",
+    oldValue: "Old value",
+    newValue: "New value",
+    status: "Status",
+    note: "Note",
+    actions: "Actions",
+    placeholder: "Add a note...",
+    noRequests: "No requests found",
+    genericError: "Something went wrong",
+    approvedTitle: "Approved and applied",
+    rejectedTitle: "Rejected",
+    sentApproved: "Edit request approved ✅",
+    sentRejected: "Edit request rejected ❌",
+    bodyApproved: "was approved and applied",
+    bodyRejected: "was rejected",
+    pending: "Pending review",
+    approved: "Approved",
+    rejected: "Rejected",
+    name: "Station name",
+    address: "Address",
+    detailedAddress: "Detailed address",
+    workingStart: "Working hours start",
+    workingEnd: "Working hours end",
+    scheduling: "Scheduling type",
+    image: "Image",
+  },
+  ku: {
+    title: "داواکارییەکانی دەستکاری",
+    station: "وێستگە",
+    field: "خانە",
+    oldValue: "بەهای کۆن",
+    newValue: "بەهای نوێ",
+    status: "دۆخ",
+    note: "تێبینی",
+    actions: "کردارەکان",
+    placeholder: "تێبینی...",
+    noRequests: "هیچ داواکارییەک نییە",
+    genericError: "هەڵەیەک ڕوویدا",
+    approvedTitle: "پەسەند کرا و جێبەجێ کرا",
+    rejectedTitle: "ڕەت کرایەوە",
+    sentApproved: "داواکاریی دەستکاری پەسەند کرا ✅",
+    sentRejected: "داواکاریی دەستکاری ڕەت کرایەوە ❌",
+    bodyApproved: "پەسەند کرا و جێبەجێ کرا",
+    bodyRejected: "ڕەت کرایەوە",
+    pending: "لە چاوپێکەوتندایە",
+    approved: "پەسەندکراو",
+    rejected: "ڕەتکراو",
+    name: "ناوی وێستگە",
+    address: "ناونیشان",
+    detailedAddress: "ناونیشانی ورد",
+    workingStart: "دەستی کار",
+    workingEnd: "کۆتایی کار",
+    scheduling: "جۆری کاتبەندی",
+    image: "وێنە",
+  },
+  tr: {
+    title: "Düzenleme talepleri",
+    station: "İstasyon",
+    field: "Alan",
+    oldValue: "Eski değer",
+    newValue: "Yeni değer",
+    status: "Durum",
+    note: "Not",
+    actions: "İşlemler",
+    placeholder: "Not...",
+    noRequests: "Talep yok",
+    genericError: "Bir hata oluştu",
+    approvedTitle: "Onaylandı ve uygulandı",
+    rejectedTitle: "Reddedildi",
+    sentApproved: "Düzenleme talebi onaylandı ✅",
+    sentRejected: "Düzenleme talebi reddedildi ❌",
+    bodyApproved: "onaylandı ve uygulandı",
+    bodyRejected: "reddedildi",
+    pending: "İncelemede",
+    approved: "Onaylandı",
+    rejected: "Reddedildi",
+    name: "İstasyon adı",
+    address: "Adres",
+    detailedAddress: "Detaylı adres",
+    workingStart: "Çalışma başlangıcı",
+    workingEnd: "Çalışma bitişi",
+    scheduling: "Randevu tipi",
+    image: "Görsel",
+  },
+} as const;
 
 const EditRequestsTab = () => {
   const [requests, setRequests] = useState<any[]>([]);
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
+  const { language, isRtl } = useAppLanguage();
+  const t = texts[language];
+
+  const fieldLabels: Record<string, string> = {
+    name: t.name,
+    address: t.address,
+    detailed_address: t.detailedAddress,
+    working_hours_start: t.workingStart,
+    working_hours_end: t.workingEnd,
+    scheduling_type: t.scheduling,
+    image_url: t.image,
+  };
+
+  const statusLabels: Record<string, string> = {
+    pending: t.pending,
+    approved: t.approved,
+    rejected: t.rejected,
+  };
+
+  const statusColors: Record<string, "default" | "secondary" | "destructive"> = {
+    pending: "secondary",
+    approved: "default",
+    rejected: "destructive",
+  };
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -20,10 +164,11 @@ const EditRequestsTab = () => {
     if (data) setRequests(data);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleAction = async (req: any, action: "approved" | "rejected") => {
-    // Update edit_request status
     const { error } = await supabase
       .from("edit_requests")
       .update({
@@ -34,48 +179,39 @@ const EditRequestsTab = () => {
       .eq("id", req.id);
 
     if (error) {
-      toast({ title: "حدث خطأ", description: error.message, variant: "destructive" });
+      toast({ title: t.genericError, description: error.message, variant: "destructive" });
       return;
     }
 
-    // If approved, apply the change to the stations table
     if (action === "approved") {
-      await supabase
-        .from("stations")
-        .update({ [req.field_name]: req.new_value })
-        .eq("id", req.station_id);
+      await supabase.from("stations").update({ [req.field_name]: req.new_value }).eq("id", req.station_id);
     }
 
-    // Notify the owner
     await supabase.from("notifications").insert({
       user_id: req.requested_by,
-      title: action === "approved" ? "تم قبول طلب التعديل ✅" : "تم رفض طلب التعديل ❌",
-      body: `طلب تعديل "${fieldLabels[req.field_name] || req.field_name}" ${action === "approved" ? "تم قبوله وتطبيقه" : "تم رفضه"}${adminNotes[req.id] ? " - " + adminNotes[req.id] : ""}`,
+      title: action === "approved" ? t.sentApproved : t.sentRejected,
+      body: `"${fieldLabels[req.field_name] || req.field_name}" ${action === "approved" ? t.bodyApproved : t.bodyRejected}${adminNotes[req.id] ? " - " + adminNotes[req.id] : ""}`,
       type: "edit_request",
       reference_id: req.id,
     });
 
-    toast({ title: action === "approved" ? "تم القبول والتطبيق" : "تم الرفض" });
+    toast({ title: action === "approved" ? t.approvedTitle : t.rejectedTitle });
     await load();
   };
 
-  const fieldLabels: Record<string, string> = {
-    name: "اسم المحطة", address: "العنوان", detailed_address: "العنوان التفصيلي",
-    working_hours_start: "بداية العمل", working_hours_end: "نهاية العمل",
-    scheduling_type: "نوع المواعيد", image_url: "الصورة",
-  };
-
-  const statusLabels: Record<string, string> = { pending: "قيد المراجعة", approved: "مقبول", rejected: "مرفوض" };
-  const statusColors: Record<string, "default" | "secondary" | "destructive"> = { pending: "secondary", approved: "default", rejected: "destructive" };
-
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-foreground">طلبات التعديل</h3>
+    <div className="space-y-4" dir={isRtl ? "rtl" : "ltr"}>
+      <h3 className="text-lg font-semibold text-foreground">{t.title}</h3>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>المحطة</TableHead><TableHead>الحقل</TableHead><TableHead>القيمة القديمة</TableHead>
-            <TableHead>القيمة الجديدة</TableHead><TableHead>الحالة</TableHead><TableHead>ملاحظة</TableHead><TableHead>إجراءات</TableHead>
+            <TableHead>{t.station}</TableHead>
+            <TableHead>{t.field}</TableHead>
+            <TableHead>{t.oldValue}</TableHead>
+            <TableHead>{t.newValue}</TableHead>
+            <TableHead>{t.status}</TableHead>
+            <TableHead>{t.note}</TableHead>
+            <TableHead>{t.actions}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -90,7 +226,7 @@ const EditRequestsTab = () => {
                 {r.status === "pending" ? (
                   <Input
                     className="w-28 h-8 text-xs"
-                    placeholder="ملاحظة..."
+                    placeholder={t.placeholder}
                     value={adminNotes[r.id] || ""}
                     onChange={(e) => setAdminNotes({ ...adminNotes, [r.id]: e.target.value })}
                   />
@@ -112,7 +248,11 @@ const EditRequestsTab = () => {
               </TableCell>
             </TableRow>
           ))}
-          {requests.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">لا توجد طلبات</TableCell></TableRow>}
+          {requests.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={7} className="text-center text-muted-foreground py-8">{t.noRequests}</TableCell>
+            </TableRow>
+          )}
         </TableBody>
       </Table>
     </div>

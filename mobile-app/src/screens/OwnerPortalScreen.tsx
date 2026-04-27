@@ -1,25 +1,46 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SectionTitle } from "../components/SectionTitle";
 import { gradients, palette } from "../theme";
-import type { OwnerContext, PackageDefinition, PaymentRow, SubscriptionSummary } from "../types";
+import type { OwnerContext, PaymentRow, SubscriptionSummary } from "../types";
 import {
-  activatePackageForTesting,
   getPackageByCode,
-  getPaymentIntegrationInfo,
   loadLatestSubscription,
   loadOwnerContext,
+  loadOwnerPaymentMethods,
   loadPayments,
   OWNER_PACKAGES,
+  type OwnerPaymentMethods,
 } from "../lib/subscriptionApi";
+import { supabase } from "../lib/supabase";
+
+type OwnerBooking = {
+  id: string;
+  bookingNumber: number;
+  customerName: string;
+  bookingDate: string;
+  bookingTime: string | null;
+  status: string;
+};
+
+type PaymentMethodCard = {
+  code: "zain_cash" | "rafidain" | "nas_wallet" | "card";
+  icon: string;
+  label: string;
+  value: string;
+  isLink?: boolean;
+};
 
 export function OwnerPortalScreen({
   ownerUserId,
@@ -29,23 +50,24 @@ export function OwnerPortalScreen({
   onLogout: () => void;
 }) {
   const [loading, setLoading] = useState(true);
-  const [activating, setActivating] = useState(false);
+  const [savingBookingId, setSavingBookingId] = useState<string | null>(null);
   const [ownerContext, setOwnerContext] = useState<OwnerContext | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<OwnerPaymentMethods>({
+    zainCash: "",
+    rafidain: "",
+    nasWallet: "",
+    cardUrl: "",
+  });
+  const [bookings, setBookings] = useState<OwnerBooking[]>([]);
+  const [bookingEdits, setBookingEdits] = useState<Record<string, { date: string; time: string }>>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [selectedPackageCode, setSelectedPackageCode] = useState<PackageDefinition["code"]>("starter_20");
-  const [lastRedirectUrl, setLastRedirectUrl] = useState<string | null>(null);
-  const [lastTransactionId, setLastTransactionId] = useState<string | null>(null);
+  const [selectedPackageCode, setSelectedPackageCode] = useState(OWNER_PACKAGES[0].code);
+  const [selectedPaymentCode, setSelectedPaymentCode] = useState<PaymentMethodCard["code"]>("zain_cash");
 
-  const selectedPackage = useMemo(
-    () => OWNER_PACKAGES.find((item) => item.code === selectedPackageCode) || OWNER_PACKAGES[0],
-    [selectedPackageCode],
-  );
   const activePackage = getPackageByCode(subscription?.packageCode || null);
-  const integrationInfo = getPaymentIntegrationInfo();
-
   const freeRemaining = Math.max(
     0,
     Number(ownerContext?.freeRequestsQuota || 0) - Number(ownerContext?.freeRequestsUsed || 0),
@@ -55,20 +77,73 @@ export function OwnerPortalScreen({
       ? null
       : Math.max(0, Number(subscription?.requestLimit || 0) - Number(subscription?.requestsUsed || 0));
 
+  const methodsList = useMemo<PaymentMethodCard[]>(() => {
+    const list: PaymentMethodCard[] = [];
+    if (paymentMethods.zainCash) {
+      list.push({ code: "zain_cash", icon: "🟢", label: "زين كاش", value: paymentMethods.zainCash });
+    }
+    if (paymentMethods.rafidain) {
+      list.push({ code: "rafidain", icon: "🏦", label: "الرافدين", value: paymentMethods.rafidain });
+    }
+    if (paymentMethods.nasWallet) {
+      list.push({ code: "nas_wallet", icon: "🟠", label: "ناس والت", value: paymentMethods.nasWallet });
+    }
+    list.push({
+      code: "card",
+      icon: "💳",
+      label: "بطاقة Visa / MasterCard",
+      value: paymentMethods.cardUrl || "سيتفعل رابط الدفع بالبطاقة قريباً",
+      isLink: !!paymentMethods.cardUrl,
+    });
+    return list;
+  }, [paymentMethods]);
+
+  const selectedMethod = methodsList.find((item) => item.code === selectedPaymentCode) || methodsList[0] || null;
+
   const refresh = async () => {
     setLoading(true);
     setError(null);
     try {
       const owner = await loadOwnerContext(ownerUserId);
       setOwnerContext(owner);
-      const sub = await loadLatestSubscription(owner.stationId);
+      const [sub, methods] = await Promise.all([
+        loadLatestSubscription(owner.stationId),
+        loadOwnerPaymentMethods(),
+      ]);
       setSubscription(sub);
+      setPaymentMethods(methods);
       if (sub?.id) {
         const pay = await loadPayments(sub.id);
         setPayments(pay);
       } else {
         setPayments([]);
       }
+
+      const { data: bookingRows, error: bookingError } = await (supabase as any)
+        .from("bookings")
+        .select("id, booking_number, customer_name, booking_date, booking_time, status")
+        .eq("station_id", owner.stationId)
+        .order("created_at", { ascending: false })
+        .limit(12);
+
+      if (bookingError) throw bookingError;
+      const normalizedBookings: OwnerBooking[] = (bookingRows || []).map((row: any) => ({
+        id: row.id,
+        bookingNumber: Number(row.booking_number || 0),
+        customerName: row.customer_name || "عميل",
+        bookingDate: row.booking_date || "",
+        bookingTime: row.booking_time || null,
+        status: row.status || "pending",
+      }));
+      setBookings(normalizedBookings);
+      const edits: Record<string, { date: string; time: string }> = {};
+      for (const booking of normalizedBookings) {
+        edits[booking.id] = {
+          date: booking.bookingDate,
+          time: booking.bookingTime || "12:00 PM",
+        };
+      }
+      setBookingEdits(edits);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "تعذر تحميل بوابة المحطة.");
     } finally {
@@ -80,45 +155,51 @@ export function OwnerPortalScreen({
     refresh();
   }, [ownerUserId]);
 
-  const activateSelectedPackage = async () => {
-    if (!ownerContext) return;
-    setActivating(true);
+  useEffect(() => {
+    if (!selectedMethod && methodsList.length > 0) {
+      setSelectedPaymentCode(methodsList[0].code);
+    }
+  }, [methodsList, selectedMethod]);
+
+  const updateBookingTime = async (bookingId: string) => {
+    const edit = bookingEdits[bookingId];
+    if (!edit?.date || !edit?.time) {
+      Alert.alert("تنبيه", "أدخل التاريخ والوقت قبل الحفظ.");
+      return;
+    }
+    setSavingBookingId(bookingId);
+    setError(null);
     setNotice(null);
     try {
-      const activation = await activatePackageForTesting({
-        stationId: ownerContext.stationId,
-        packageCode: selectedPackage.code,
-      });
-      setLastRedirectUrl(activation.redirectUrl);
-      setLastTransactionId(activation.transactionId);
-      setNotice(
-        `تم تفعيل ${selectedPackage.title} بنجاح. رقم العملية: ${activation.transactionId}`,
-      );
+      const { error: updateError } = await (supabase as any)
+        .from("bookings")
+        .update({
+          booking_date: edit.date,
+          booking_time: edit.time,
+          status: "confirmed",
+        })
+        .eq("id", bookingId);
+      if (updateError) throw updateError;
+      setNotice("تم تعديل موعد الحجز بنجاح، وسيظهر التحديث مباشرة.");
       await refresh();
-    } catch (activationError) {
-      setError(
-        activationError instanceof Error ? activationError.message : "تعذر تفعيل الباقة.",
-      );
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "تعذر تعديل الموعد.");
     } finally {
-      setActivating(false);
+      setSavingBookingId(null);
     }
   };
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <LinearGradient colors={gradients.owner} style={styles.hero}>
         <Text style={styles.heroBadge}>Station Portal</Text>
-        <Text style={styles.heroTitle}>بوابة المحطة الكاملة</Text>
+        <Text style={styles.heroTitle}>بوابة المحطة</Text>
         <Text style={styles.heroText}>
-          إدارة الرصيد المجاني والباقات، تفعيل اشتراك جديد، ومراجعة الدفعات من داخل تطبيق الموبايل.
+          صاحب المحطة يراجع الرصيد والطلبات، ويختار باقة ثم يرسل طلب التفعيل للإدارة.
         </Text>
         <View style={styles.heroButtons}>
           <Pressable style={styles.lightBtn} onPress={refresh}>
-            <Text style={styles.lightBtnText}>{loading ? "جاري التحميل..." : "تحديث البوابة"}</Text>
+            <Text style={styles.lightBtnText}>{loading ? "جاري التحميل..." : "تحديث"}</Text>
           </Pressable>
           <Pressable style={styles.darkBtn} onPress={onLogout}>
             <Text style={styles.darkBtnText}>تسجيل الخروج</Text>
@@ -129,7 +210,7 @@ export function OwnerPortalScreen({
       {loading ? (
         <View style={styles.loadingCard}>
           <ActivityIndicator color={palette.deepBlue} />
-          <Text style={styles.loadingText}>جاري تحميل بيانات الحساب والاشتراكات...</Text>
+          <Text style={styles.loadingText}>جاري تحميل بيانات المحطة...</Text>
         </View>
       ) : null}
 
@@ -138,7 +219,7 @@ export function OwnerPortalScreen({
 
       {ownerContext ? (
         <>
-          <SectionTitle title="ملخص المحطة" subtitle="الحالة الحالية للظهور والرصيد المجاني." />
+          <SectionTitle title="ملخص المحطة" subtitle="الحالة الحالية للظهور والرصيد." />
           <View style={styles.grid}>
             <StatCard
               title="المحطة"
@@ -147,93 +228,127 @@ export function OwnerPortalScreen({
             />
             <StatCard title="المجاني المتبقي" value={`${freeRemaining}`} small="طلبات متبقية" />
             <StatCard
-              title="الاشتراك الحالي"
-              value={activePackage?.title || "لا يوجد"}
-              small={subscription?.status || "غير مفعل"}
+              title="الباقة الحالية"
+              value={activePackage?.title || "لا توجد"}
+              small={subscription?.status || "غير مفعلة"}
             />
             <StatCard
-              title="رصيد الاشتراك"
+              title="رصيد الباقة"
               value={subscriptionRemaining === null ? "غير محدود" : `${subscriptionRemaining}`}
               small="طلبات متبقية"
             />
           </View>
 
-          <SectionTitle
-            title="اختر باقتك"
-            subtitle="هذه البطاقات قابلة للاختيار ثم التفعيل الفعلي التجريبي عبر callback."
-          />
-          <View style={styles.packageList}>
+          <SectionTitle title="اختيار الباقة" subtitle="اضغط على الباقة ثم اختر طريقة الدفع وأرسل الطلب للإدارة." />
+          <View style={styles.packageIconGrid}>
             {OWNER_PACKAGES.map((pkg) => {
               const selected = pkg.code === selectedPackageCode;
               return (
                 <Pressable
                   key={pkg.code}
-                  style={[styles.packageCard, selected && styles.packageCardSelected]}
+                  style={[styles.packageIcon, selected && styles.packageIconActive]}
                   onPress={() => setSelectedPackageCode(pkg.code)}
                 >
-                  <Text style={[styles.packageTitle, selected && styles.packageTitleSelected]}>
-                    {pkg.title}
+                  <Text style={styles.packageIconEmoji}>
+                    {pkg.requestLimit === null ? "♾️" : pkg.requestLimit <= 20 ? "🚀" : pkg.requestLimit <= 50 ? "⭐" : "🏆"}
                   </Text>
-                  <Text style={[styles.packagePrice, selected && styles.packagePriceSelected]}>
-                    ${pkg.priceUsd}
-                  </Text>
-                  <Text style={[styles.packageMeta, selected && styles.packageMetaSelected]}>
-                    {pkg.requestLimit === null ? "طلبات غير محدودة" : `${pkg.requestLimit} طلب`}
-                  </Text>
-                  <Text style={[styles.packageMeta, selected && styles.packageMetaSelected]}>
-                    {pkg.description}
-                  </Text>
+                  <Text style={[styles.packageIconTitle, selected && styles.packageIconTitleActive]}>{pkg.title}</Text>
+                  <Text style={[styles.packageIconPrice, selected && styles.packageIconTitleActive]}>${pkg.priceUsd}</Text>
                 </Pressable>
               );
             })}
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>الباقة المختارة: {selectedPackage.title}</Text>
-            <Text style={styles.cardSub}>
-              السعر ${selectedPackage.priceUsd} • مدة التفعيل 30 يوم •
-              {" "}
-              {selectedPackage.requestLimit === null
-                ? "بدون حد للطلبات"
-                : `${selectedPackage.requestLimit} طلب`}
-            </Text>
-            <Pressable
-              style={[styles.activateBtn, activating && styles.disabledBtn]}
-              onPress={activateSelectedPackage}
-              disabled={activating}
-            >
-              {activating ? (
-                <ActivityIndicator color={palette.white} />
-              ) : (
-                <Text style={styles.activateBtnText}>دفع وتفعيل الباقة الآن (تجريبي)</Text>
-              )}
-            </Pressable>
+            <Text style={styles.cardTitle}>طريقة الدفع</Text>
+            <Text style={styles.cardSub}>صاحب المحطة لا يفعّل الباقة بنفسه. يتم التفعيل من الإدارة بعد استلام الدفع.</Text>
+            <View style={styles.paymentMethodGrid}>
+              {methodsList.map((method) => {
+                const active = method.code === selectedPaymentCode;
+                return (
+                  <Pressable
+                    key={method.code}
+                    style={[styles.methodChip, active && styles.methodChipActive]}
+                    onPress={() => setSelectedPaymentCode(method.code)}
+                  >
+                    <Text style={styles.methodChipIcon}>{method.icon}</Text>
+                    <Text style={[styles.methodChipText, active && styles.methodChipTextActive]}>{method.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {selectedMethod ? (
+              <View style={styles.methodDetails}>
+                <Text style={styles.methodTitle}>{selectedMethod.label}</Text>
+                <Text style={styles.methodValue}>{selectedMethod.value}</Text>
+                {selectedMethod.isLink ? (
+                  <Pressable
+                    style={styles.openLinkBtn}
+                    onPress={async () => {
+                      const canOpen = await Linking.canOpenURL(selectedMethod.value);
+                      if (!canOpen) {
+                        Alert.alert("تنبيه", "لا يمكن فتح رابط الدفع حالياً.");
+                        return;
+                      }
+                      await Linking.openURL(selectedMethod.value);
+                    }}
+                  >
+                    <Text style={styles.openLinkBtnText}>فتح رابط الدفع بالبطاقة</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
           </View>
 
-          <SectionTitle
-            title="معلومات ربط بوابة الدفع"
-            subtitle="جاهزة للاستخدام مع أي مزود دفع يطلب callback و redirection."
-          />
+          <SectionTitle title="إشعارات داخل التطبيق" subtitle="آخر الحجوزات القادمة للمحطة مع إمكانية تعديل الوقت." />
           <View style={styles.card}>
-            <Text style={styles.linkLabel}>API Callback URL</Text>
-            <Text style={styles.linkValue}>{integrationInfo.callbackUrl}</Text>
-            <Text style={styles.linkLabel}>Redirection URL (Dynamic)</Text>
-            <Text style={styles.linkValue}>{integrationInfo.redirectionTemplate}</Text>
-            {lastRedirectUrl ? (
-              <>
-                <Text style={styles.linkLabel}>آخر رابط إعادة توجيه تم توليده</Text>
-                <Text style={styles.linkValue}>{lastRedirectUrl}</Text>
-              </>
-            ) : null}
-            {lastTransactionId ? (
-              <>
-                <Text style={styles.linkLabel}>آخر Transaction ID</Text>
-                <Text style={styles.linkValue}>{lastTransactionId}</Text>
-              </>
-            ) : null}
+            {bookings.length === 0 ? (
+              <Text style={styles.cardSub}>لا توجد حجوزات حالياً.</Text>
+            ) : (
+              bookings.map((booking) => (
+                <View key={booking.id} style={styles.bookingRow}>
+                  <Text style={styles.bookingTitle}>
+                    #{booking.bookingNumber} - {booking.customerName}
+                  </Text>
+                  <Text style={styles.bookingSub}>الحالة: {booking.status}</Text>
+                  <View style={styles.bookingEditRow}>
+                    <TextInput
+                      value={bookingEdits[booking.id]?.date || ""}
+                      onChangeText={(value) =>
+                        setBookingEdits((prev) => ({ ...prev, [booking.id]: { ...prev[booking.id], date: value } }))
+                      }
+                      placeholder="YYYY-MM-DD"
+                      style={styles.bookingInput}
+                      textAlign="center"
+                    />
+                    <TextInput
+                      value={bookingEdits[booking.id]?.time || ""}
+                      onChangeText={(value) =>
+                        setBookingEdits((prev) => ({ ...prev, [booking.id]: { ...prev[booking.id], time: value } }))
+                      }
+                      placeholder="hh:mm AM"
+                      style={styles.bookingInput}
+                      textAlign="center"
+                    />
+                    <Pressable
+                      style={[styles.bookingSaveBtn, savingBookingId === booking.id && styles.disabledBtn]}
+                      onPress={() => updateBookingTime(booking.id)}
+                      disabled={savingBookingId === booking.id}
+                    >
+                      {savingBookingId === booking.id ? (
+                        <ActivityIndicator size="small" color={palette.white} />
+                      ) : (
+                        <Text style={styles.bookingSaveBtnText}>تعديل الوقت</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              ))
+            )}
           </View>
 
-          <SectionTitle title="آخر الدفعات" subtitle="يعرض تاريخ التفعيل والدفعات المسجلة على الاشتراك." />
+          <SectionTitle title="آخر الدفعات" subtitle="سجل الدفعات المرتبط بالاشتراك الحالي." />
           <View style={styles.card}>
             {payments.length === 0 ? (
               <Text style={styles.cardSub}>لا توجد دفعات مسجلة بعد.</Text>
@@ -266,12 +381,7 @@ function StatCard({ title, value, small }: { title: string; value: string; small
 
 function Notice({ text, kind }: { text: string; kind: "success" | "error" }) {
   return (
-    <View
-      style={[
-        styles.notice,
-        kind === "success" ? styles.noticeSuccess : styles.noticeError,
-      ]}
-    >
+    <View style={[styles.notice, kind === "success" ? styles.noticeSuccess : styles.noticeError]}>
       <Text style={styles.noticeText}>{text}</Text>
     </View>
   );
@@ -327,12 +437,7 @@ const styles = StyleSheet.create({
   noticeSuccess: { backgroundColor: "#e8f6ee", borderColor: "#c8e9d3", borderWidth: 1 },
   noticeError: { backgroundColor: "#fff2f2", borderColor: "#f3c4c4", borderWidth: 1 },
   noticeText: { textAlign: "right", lineHeight: 20, color: palette.text, fontWeight: "700" },
-  grid: {
-    flexDirection: "row-reverse",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
+  grid: { flexDirection: "row-reverse", flexWrap: "wrap", justifyContent: "space-between", marginBottom: 12 },
   statCard: {
     width: "48.5%",
     borderRadius: 14,
@@ -345,22 +450,22 @@ const styles = StyleSheet.create({
   statTitle: { textAlign: "right", color: palette.muted, fontSize: 12 },
   statValue: { textAlign: "right", color: palette.deepBlue, fontSize: 23, fontWeight: "900", marginTop: 4 },
   statSmall: { textAlign: "right", color: palette.text, marginTop: 2, fontSize: 12 },
-  packageList: { marginBottom: 12 },
-  packageCard: {
-    borderRadius: 16,
-    borderColor: palette.line,
+  packageIconGrid: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 8, marginBottom: 14 },
+  packageIcon: {
+    width: "48%",
+    borderRadius: 14,
     borderWidth: 1,
+    borderColor: palette.line,
     backgroundColor: palette.white,
-    padding: 14,
-    marginBottom: 8,
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  packageCardSelected: { borderColor: palette.brightBlue, backgroundColor: "#eaf3fb" },
-  packageTitle: { textAlign: "right", color: palette.text, fontWeight: "800", fontSize: 17 },
-  packageTitleSelected: { color: palette.deepBlue },
-  packagePrice: { textAlign: "right", color: palette.deepBlue, fontWeight: "900", fontSize: 28, marginTop: 4 },
-  packagePriceSelected: { color: palette.deepBlue },
-  packageMeta: { textAlign: "right", color: palette.muted, marginTop: 3 },
-  packageMetaSelected: { color: palette.deepBlue },
+  packageIconActive: { borderColor: palette.brightBlue, backgroundColor: "#eaf3fb" },
+  packageIconEmoji: { fontSize: 22, marginBottom: 6 },
+  packageIconTitle: { color: palette.text, fontWeight: "800", textAlign: "center" },
+  packageIconTitleActive: { color: palette.deepBlue },
+  packageIconPrice: { color: palette.deepBlue, fontWeight: "900", marginTop: 4, fontSize: 18 },
   card: {
     borderRadius: 16,
     borderColor: palette.line,
@@ -371,24 +476,64 @@ const styles = StyleSheet.create({
   },
   cardTitle: { textAlign: "right", color: palette.text, fontWeight: "800" },
   cardSub: { textAlign: "right", color: palette.muted, lineHeight: 22, marginTop: 6 },
-  activateBtn: {
+  paymentMethodGrid: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 8, marginTop: 10 },
+  methodChip: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: "#f8fbfe",
+  },
+  methodChipActive: { borderColor: palette.brightBlue, backgroundColor: "#eaf3fb" },
+  methodChipIcon: { fontSize: 14 },
+  methodChipText: { color: palette.text, fontWeight: "700", fontSize: 12 },
+  methodChipTextActive: { color: palette.deepBlue },
+  methodDetails: { marginTop: 12, borderTopWidth: 1, borderColor: palette.line, paddingTop: 10 },
+  methodTitle: { textAlign: "right", color: palette.deepBlue, fontWeight: "900" },
+  methodValue: { textAlign: "right", color: palette.text, marginTop: 4, lineHeight: 20 },
+  openLinkBtn: {
     marginTop: 10,
+    alignSelf: "flex-end",
     backgroundColor: palette.deepBlue,
-    borderRadius: 12,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  openLinkBtnText: { color: palette.white, fontWeight: "800" },
+  bookingRow: {
+    borderBottomWidth: 1,
+    borderColor: palette.line,
+    paddingBottom: 10,
+    marginBottom: 10,
+  },
+  bookingTitle: { textAlign: "right", color: palette.text, fontWeight: "900" },
+  bookingSub: { textAlign: "right", color: palette.muted, marginTop: 2 },
+  bookingEditRow: { flexDirection: "row-reverse", gap: 8, marginTop: 10, alignItems: "center" },
+  bookingInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 10,
+    backgroundColor: "#f8fbfe",
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    color: palette.text,
+  },
+  bookingSaveBtn: {
+    backgroundColor: palette.deepBlue,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
   },
-  activateBtnText: { color: palette.white, fontWeight: "800" },
-  disabledBtn: { opacity: 0.5 },
-  linkLabel: { textAlign: "right", color: palette.muted, marginTop: 6, fontSize: 12 },
-  linkValue: { textAlign: "right", color: palette.text, fontWeight: "700", marginTop: 3 },
-  paymentRow: {
-    borderColor: palette.line,
-    borderBottomWidth: 1,
-    paddingBottom: 8,
-    marginBottom: 8,
-  },
+  bookingSaveBtnText: { color: palette.white, fontWeight: "800", fontSize: 12 },
+  disabledBtn: { opacity: 0.6 },
+  paymentRow: { borderColor: palette.line, borderBottomWidth: 1, paddingBottom: 8, marginBottom: 8 },
   paymentMain: { textAlign: "right", color: palette.deepBlue, fontWeight: "900", fontSize: 18 },
   paymentSub: { textAlign: "right", color: palette.muted, marginTop: 3 },
 });

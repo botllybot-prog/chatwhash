@@ -45,7 +45,6 @@ export type OwnerSignupPayload = {
   firstServiceName: string;
   firstServicePrice: string;
   firstServiceDuration: string;
-  firstServiceDiscount: string;
 };
 
 export type SpinResult = {

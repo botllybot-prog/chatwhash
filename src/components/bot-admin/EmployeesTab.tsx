@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Download, Eye, EyeOff, Users } from "lucide-react";
 import * as XLSX from "xlsx";
+import { useAppLanguage } from "@/lib/language";
 
 interface Employee {
   id: string;
@@ -26,7 +27,298 @@ interface Employee {
   owners_count?: number;
 }
 
-const EMPTY_FORM = { name: "", email: "", password: "", can_create_owners: false, can_create_stations: false, can_add_service: false, can_edit_prices: false };
+const EMPTY_FORM = {
+  name: "",
+  email: "",
+  password: "",
+  can_create_owners: false,
+  can_create_stations: false,
+  can_add_service: false,
+  can_edit_prices: false,
+};
+
+const texts = {
+  ar: {
+    title: "الموظفون",
+    add: "إضافة موظف",
+    loading: "جاري التحميل...",
+    empty: "لا يوجد موظفون. أضف موظفاً جديداً.",
+    name: "الاسم",
+    email: "البريد الإلكتروني",
+    permissions: "الصلاحيات",
+    stations: "محطات",
+    accounts: "حسابات",
+    status: "الحالة",
+    actions: "إجراءات",
+    createAccounts: "إنشاء حسابات",
+    createStations: "إنشاء محطات",
+    addService: "إضافة خدمة",
+    editPrices: "تعديل الأسعار",
+    noPermissions: "لا صلاحيات",
+    active: "● نشط",
+    inactive: "○ موقوف",
+    exportExcel: "تصدير Excel",
+    edit: "تعديل",
+    pause: "إيقاف مؤقت",
+    activate: "تفعيل",
+    delete: "حذف",
+    createTitle: "إضافة موظف جديد",
+    editTitle: "تعديل بيانات الموظف",
+    fullFields: "يرجى ملء جميع الحقول المطلوبة",
+    genericError: "خطأ",
+    created: "تم إنشاء حساب الموظف بنجاح",
+    updated: "تم تحديث بيانات الموظف",
+    deleted: "تم حذف الموظف",
+    createAccount: "إنشاء الحساب",
+    creating: "جاري الإنشاء...",
+    save: "حفظ التغييرات",
+    saving: "جاري الحفظ...",
+    cancel: "إلغاء",
+    password: "كلمة المرور *",
+    employeeName: "اسم الموظف",
+    deleteTitle: "تأكيد الحذف",
+    deleteDescription: "هل تريد حذف حساب الموظف",
+    deletePermanent: "سيتم حذف حساب الدخول نهائياً.",
+    ownerAccounts: "إنشاء حسابات أصحاب المغاسل",
+    stationCreate: "إنشاء محطات",
+    addStationServices: "إضافة خدمات للمحطات",
+    modifyPrices: "تعديل أسعار الخدمات",
+    stationSheet: "المحطات",
+    ownersSheet: "أصحاب المغاسل",
+    summarySheet: "الملخص",
+    noStations: "لا توجد محطات",
+    noAccounts: "لا توجد حسابات",
+    stationName: "اسم المحطة",
+    addressLabel: "العنوان",
+    stateLabel: "الحالة",
+    ownerLabel: "صاحب المحطة",
+    ownerPhone: "هاتف الصاحب",
+    createdAt: "تاريخ الإنشاء",
+    ownerName: "اسم صاحب المغسلة",
+    phoneNumber: "رقم الهاتف",
+    registeredAt: "تاريخ التسجيل",
+    item: "البيان",
+    value: "القيمة",
+    reportDate: "تاريخ التقرير",
+    employeeNameLabel: "اسم الموظف",
+    emailLabel: "البريد الإلكتروني",
+    stationCount: "عدد المحطات المسجلة",
+    ownersCount: "عدد أصحاب المغاسل المسجلين",
+    activeState: "نشطة",
+    suspendedState: "موقوفة",
+    exported: "تم تصدير ملف Excel بنجاح",
+  },
+  en: {
+    title: "Employees",
+    add: "Add employee",
+    loading: "Loading...",
+    empty: "No employees yet. Add a new employee.",
+    name: "Name",
+    email: "Email",
+    permissions: "Permissions",
+    stations: "Stations",
+    accounts: "Accounts",
+    status: "Status",
+    actions: "Actions",
+    createAccounts: "Create accounts",
+    createStations: "Create stations",
+    addService: "Add service",
+    editPrices: "Edit prices",
+    noPermissions: "No permissions",
+    active: "● Active",
+    inactive: "○ Suspended",
+    exportExcel: "Export Excel",
+    edit: "Edit",
+    pause: "Pause",
+    activate: "Activate",
+    delete: "Delete",
+    createTitle: "Add new employee",
+    editTitle: "Edit employee",
+    fullFields: "Please fill in all required fields",
+    genericError: "Error",
+    created: "Employee account created successfully",
+    updated: "Employee information updated",
+    deleted: "Employee deleted",
+    createAccount: "Create account",
+    creating: "Creating...",
+    save: "Save changes",
+    saving: "Saving...",
+    cancel: "Cancel",
+    password: "Password *",
+    employeeName: "Employee name",
+    deleteTitle: "Confirm deletion",
+    deleteDescription: "Do you want to delete the employee account",
+    deletePermanent: "The login account will be permanently deleted.",
+    ownerAccounts: "Create station-owner accounts",
+    stationCreate: "Create stations",
+    addStationServices: "Add station services",
+    modifyPrices: "Edit service prices",
+    stationSheet: "Stations",
+    ownersSheet: "Owners",
+    summarySheet: "Summary",
+    noStations: "No stations",
+    noAccounts: "No accounts",
+    stationName: "Station name",
+    addressLabel: "Address",
+    stateLabel: "Status",
+    ownerLabel: "Station owner",
+    ownerPhone: "Owner phone",
+    createdAt: "Created at",
+    ownerName: "Owner name",
+    phoneNumber: "Phone number",
+    registeredAt: "Registration date",
+    item: "Item",
+    value: "Value",
+    reportDate: "Report date",
+    employeeNameLabel: "Employee name",
+    emailLabel: "Email",
+    stationCount: "Created stations",
+    ownersCount: "Created owners",
+    activeState: "Active",
+    suspendedState: "Suspended",
+    exported: "Excel file exported successfully",
+  },
+  ku: {
+    title: "کارمەندان",
+    add: "زیادکردنی کارمەند",
+    loading: "بارکردن...",
+    empty: "هیچ کارمەندێک نییە. کارمەندێکی نوێ زیاد بکە.",
+    name: "ناو",
+    email: "ئیمەیڵ",
+    permissions: "دەسەڵاتەکان",
+    stations: "وێستگەکان",
+    accounts: "هەژمارەکان",
+    status: "دۆخ",
+    actions: "کردارەکان",
+    createAccounts: "دروستکردنی هەژمار",
+    createStations: "دروستکردنی وێستگە",
+    addService: "زیادکردنی خزمەتگوزاری",
+    editPrices: "گۆڕینی نرخەکان",
+    noPermissions: "بێ دەسەڵات",
+    active: "● چالاک",
+    inactive: "○ وەستێنراو",
+    exportExcel: "هەناردەی Excel",
+    edit: "دەستکاری",
+    pause: "ڕاگرتن",
+    activate: "چالاککردن",
+    delete: "سڕینەوە",
+    createTitle: "زیادکردنی کارمەندی نوێ",
+    editTitle: "دەستکاری زانیاری کارمەند",
+    fullFields: "تکایە هەموو خانە پێویستەکان پڕ بکەرەوە",
+    genericError: "هەڵە",
+    created: "هەژماری کارمەند بە سەرکەوتوویی دروست کرا",
+    updated: "زانیاریی کارمەند نوێ کرایەوە",
+    deleted: "کارمەند سڕایەوە",
+    createAccount: "دروستکردنی هەژمار",
+    creating: "دروست دەکرێت...",
+    save: "پاشەکەوتکردنی گۆڕانکارییەکان",
+    saving: "پاشەکەوت دەکرێت...",
+    cancel: "هەڵوەشاندنەوە",
+    password: "وشەی نهێنی *",
+    employeeName: "ناوی کارمەند",
+    deleteTitle: "دڵنیابوونەوەی سڕینەوە",
+    deleteDescription: "دەتەوێت هەژماری کارمەندەکە بسڕیتەوە",
+    deletePermanent: "هەژماری چوونەژوورەوە بە تەواوی دەسڕدرێتەوە.",
+    ownerAccounts: "دروستکردنی هەژماری خاوەن وێستگە",
+    stationCreate: "دروستکردنی وێستگە",
+    addStationServices: "زیادکردنی خزمەتگوزاریی وێستگە",
+    modifyPrices: "دەستکاریکردنی نرخەکان",
+    stationSheet: "وێستگەکان",
+    ownersSheet: "خاوەنەکان",
+    summarySheet: "پوختە",
+    noStations: "هیچ وێستگەیەک نییە",
+    noAccounts: "هیچ هەژمارێک نییە",
+    stationName: "ناوی وێستگە",
+    addressLabel: "ناونیشان",
+    stateLabel: "دۆخ",
+    ownerLabel: "خاوەنی وێستگە",
+    ownerPhone: "ژمارەی خاوەن",
+    createdAt: "بەرواری دروستبوون",
+    ownerName: "ناوی خاوەن",
+    phoneNumber: "ژمارەی مۆبایل",
+    registeredAt: "بەرواری تۆماربوون",
+    item: "بڕگە",
+    value: "بەها",
+    reportDate: "بەرواری ڕاپۆرت",
+    employeeNameLabel: "ناوی کارمەند",
+    emailLabel: "ئیمەیڵ",
+    stationCount: "ژمارەی وێستگە تۆمارکراوەکان",
+    ownersCount: "ژمارەی خاوەنە تۆمارکراوەکان",
+    activeState: "چالاک",
+    suspendedState: "وەستێنراو",
+    exported: "فایلی Excel بە سەرکەوتوویی هەنێردرا",
+  },
+  tr: {
+    title: "Çalışanlar",
+    add: "Çalışan ekle",
+    loading: "Yükleniyor...",
+    empty: "Henüz çalışan yok. Yeni bir çalışan ekleyin.",
+    name: "Ad",
+    email: "E-posta",
+    permissions: "Yetkiler",
+    stations: "İstasyonlar",
+    accounts: "Hesaplar",
+    status: "Durum",
+    actions: "İşlemler",
+    createAccounts: "Hesap oluştur",
+    createStations: "İstasyon oluştur",
+    addService: "Hizmet ekle",
+    editPrices: "Fiyat düzenle",
+    noPermissions: "Yetki yok",
+    active: "● Aktif",
+    inactive: "○ Durduruldu",
+    exportExcel: "Excel dışa aktar",
+    edit: "Düzenle",
+    pause: "Durdur",
+    activate: "Etkinleştir",
+    delete: "Sil",
+    createTitle: "Yeni çalışan ekle",
+    editTitle: "Çalışan bilgilerini düzenle",
+    fullFields: "Lütfen tüm zorunlu alanları doldurun",
+    genericError: "Hata",
+    created: "Çalışan hesabı başarıyla oluşturuldu",
+    updated: "Çalışan bilgileri güncellendi",
+    deleted: "Çalışan silindi",
+    createAccount: "Hesap oluştur",
+    creating: "Oluşturuluyor...",
+    save: "Değişiklikleri kaydet",
+    saving: "Kaydediliyor...",
+    cancel: "İptal",
+    password: "Şifre *",
+    employeeName: "Çalışan adı",
+    deleteTitle: "Silme onayı",
+    deleteDescription: "Çalışan hesabını silmek istiyor musunuz",
+    deletePermanent: "Giriş hesabı kalıcı olarak silinecek.",
+    ownerAccounts: "İstasyon sahibi hesabı oluştur",
+    stationCreate: "İstasyon oluştur",
+    addStationServices: "İstasyon hizmeti ekle",
+    modifyPrices: "Hizmet fiyatlarını düzenle",
+    stationSheet: "İstasyonlar",
+    ownersSheet: "Sahipler",
+    summarySheet: "Özet",
+    noStations: "İstasyon yok",
+    noAccounts: "Hesap yok",
+    stationName: "İstasyon adı",
+    addressLabel: "Adres",
+    stateLabel: "Durum",
+    ownerLabel: "İstasyon sahibi",
+    ownerPhone: "Sahip telefonu",
+    createdAt: "Oluşturulma tarihi",
+    ownerName: "Sahip adı",
+    phoneNumber: "Telefon numarası",
+    registeredAt: "Kayıt tarihi",
+    item: "Kalem",
+    value: "Değer",
+    reportDate: "Rapor tarihi",
+    employeeNameLabel: "Çalışan adı",
+    emailLabel: "E-posta",
+    stationCount: "Oluşturulan istasyonlar",
+    ownersCount: "Oluşturulan sahipler",
+    activeState: "Aktif",
+    suspendedState: "Durduruldu",
+    exported: "Excel dosyası başarıyla dışa aktarıldı",
+  },
+} as const;
 
 export default function EmployeesTab() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -37,16 +329,14 @@ export default function EmployeesTab() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editTarget, setEditTarget] = useState<Employee | null>(null);
   const [saving, setSaving] = useState(false);
+  const { language, isRtl, locale } = useAppLanguage();
+  const t = texts[language];
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("employees")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data } = await supabase.from("employees").select("*").order("created_at", { ascending: false });
 
     if (data) {
-      // Get station and owner counts per employee
       const enriched = await Promise.all(
         data.map(async (emp) => {
           const [stRes, owRes] = await Promise.all([
@@ -54,18 +344,20 @@ export default function EmployeesTab() {
             supabase.from("station_owners").select("id", { count: "exact", head: true }).eq("created_by", emp.user_id),
           ]);
           return { ...emp, stations_count: stRes.count || 0, owners_count: owRes.count || 0 };
-        })
+        }),
       );
       setEmployees(enriched);
     }
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const handleCreate = async () => {
     if (!form.name || !form.email || !form.password) {
-      toast({ title: "خطأ", description: "يرجى ملء جميع الحقول المطلوبة", variant: "destructive" });
+      toast({ title: t.genericError, description: t.fullFields, variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -82,9 +374,9 @@ export default function EmployeesTab() {
     });
     setSaving(false);
     if (res.error || res.data?.error) {
-      toast({ title: "خطأ", description: res.data?.error || res.error?.message, variant: "destructive" });
+      toast({ title: t.genericError, description: res.data?.error || res.error?.message, variant: "destructive" });
     } else {
-      toast({ title: "تم إنشاء حساب الموظف بنجاح" });
+      toast({ title: t.created });
       setShowCreate(false);
       setForm(EMPTY_FORM);
       load();
@@ -106,9 +398,9 @@ export default function EmployeesTab() {
       .eq("id", editTarget.id);
     setSaving(false);
     if (error) {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+      toast({ title: t.genericError, description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "تم تحديث بيانات الموظف" });
+      toast({ title: t.updated });
       setShowEdit(false);
       load();
     }
@@ -116,39 +408,32 @@ export default function EmployeesTab() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    const res = await supabase.functions.invoke("delete-employee", {
-      body: { employee_id: deleteTarget.id },
-    });
+    const res = await supabase.functions.invoke("delete-employee", { body: { employee_id: deleteTarget.id } });
     if (res.error || res.data?.error) {
-      toast({ title: "خطأ", description: res.data?.error || res.error?.message, variant: "destructive" });
+      toast({ title: t.genericError, description: res.data?.error || res.error?.message, variant: "destructive" });
     } else {
-      toast({ title: "تم حذف الموظف" });
+      toast({ title: t.deleted });
       setDeleteTarget(null);
       load();
     }
   };
 
   const handleToggleActive = async (emp: Employee) => {
-    const { error } = await supabase
-      .from("employees")
-      .update({ is_active: !emp.is_active })
-      .eq("id", emp.id);
+    const { error } = await supabase.from("employees").update({ is_active: !emp.is_active }).eq("id", emp.id);
     if (error) {
-      toast({ title: "خطأ", description: error.message, variant: "destructive" });
+      toast({ title: t.genericError, description: error.message, variant: "destructive" });
     } else {
       load();
     }
   };
 
   const handleExportExcel = async (emp: Employee) => {
-    // Fetch stations created by this employee
     const { data: stations } = await supabase
       .from("stations")
       .select("name, address, is_active, created_at, station_owners(owner_name, owner_phone)")
       .eq("created_by", emp.user_id)
       .order("created_at", { ascending: false });
 
-    // Fetch owners created by this employee
     const { data: owners } = await supabase
       .from("station_owners")
       .select("owner_name, owner_phone, created_at, stations(name)")
@@ -157,66 +442,74 @@ export default function EmployeesTab() {
 
     const wb = XLSX.utils.book_new();
 
-    // Sheet 1: Stations
     const stationsData = (stations || []).map((s: any) => ({
-      "اسم المحطة": s.name || "",
-      "العنوان": s.address || "",
-      "الحالة": s.is_active ? "نشطة" : "موقوفة",
-      "صاحب المحطة": s.station_owners?.[0]?.owner_name || "",
-      "هاتف الصاحب": s.station_owners?.[0]?.owner_phone || "",
-      "تاريخ الإنشاء": new Date(s.created_at).toLocaleDateString("ar-IQ"),
+      [t.stationName]: s.name || "",
+      [t.addressLabel]: s.address || "",
+      [t.stateLabel]: s.is_active ? t.activeState : t.suspendedState,
+      [t.ownerLabel]: s.station_owners?.[0]?.owner_name || "",
+      [t.ownerPhone]: s.station_owners?.[0]?.owner_phone || "",
+      [t.createdAt]: new Date(s.created_at).toLocaleDateString(locale),
     }));
-    const ws1 = XLSX.utils.json_to_sheet(stationsData.length ? stationsData : [{ "لا توجد محطات": "" }]);
-    XLSX.utils.book_append_sheet(wb, ws1, "المحطات");
+    const ws1 = XLSX.utils.json_to_sheet(stationsData.length ? stationsData : [{ [t.noStations]: "" }]);
+    XLSX.utils.book_append_sheet(wb, ws1, t.stationSheet);
 
-    // Sheet 2: Owners
     const ownersData = (owners || []).map((o: any) => ({
-      "اسم صاحب المغسلة": o.owner_name || "",
-      "رقم الهاتف": o.owner_phone || "",
-      "اسم المحطة": (o.stations as any)?.name || "",
-      "تاريخ التسجيل": new Date(o.created_at).toLocaleDateString("ar-IQ"),
+      [t.ownerName]: o.owner_name || "",
+      [t.phoneNumber]: o.owner_phone || "",
+      [t.stationName]: (o.stations as any)?.name || "",
+      [t.registeredAt]: new Date(o.created_at).toLocaleDateString(locale),
     }));
-    const ws2 = XLSX.utils.json_to_sheet(ownersData.length ? ownersData : [{ "لا توجد حسابات": "" }]);
-    XLSX.utils.book_append_sheet(wb, ws2, "أصحاب المغاسل");
+    const ws2 = XLSX.utils.json_to_sheet(ownersData.length ? ownersData : [{ [t.noAccounts]: "" }]);
+    XLSX.utils.book_append_sheet(wb, ws2, t.ownersSheet);
 
-    // Sheet 3: Summary
     const summaryData = [
-      { "البيان": "اسم الموظف", "القيمة": emp.name },
-      { "البيان": "البريد الإلكتروني", "القيمة": emp.email },
-      { "البيان": "عدد المحطات المسجلة", "القيمة": emp.stations_count || 0 },
-      { "البيان": "عدد أصحاب المغاسل المسجلين", "القيمة": emp.owners_count || 0 },
-      { "البيان": "تاريخ التقرير", "القيمة": new Date().toLocaleDateString("ar-IQ") },
+      { [t.item]: t.employeeNameLabel, [t.value]: emp.name },
+      { [t.item]: t.emailLabel, [t.value]: emp.email },
+      { [t.item]: t.stationCount, [t.value]: emp.stations_count || 0 },
+      { [t.item]: t.ownersCount, [t.value]: emp.owners_count || 0 },
+      { [t.item]: t.reportDate, [t.value]: new Date().toLocaleDateString(locale) },
     ];
     const ws3 = XLSX.utils.json_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(wb, ws3, "الملخص");
+    XLSX.utils.book_append_sheet(wb, ws3, t.summarySheet);
 
-    XLSX.writeFile(wb, `موظف_${emp.name}_${new Date().toISOString().split("T")[0]}.xlsx`);
-    toast({ title: "تم تصدير ملف Excel بنجاح" });
+    XLSX.writeFile(wb, `employee_${emp.name}_${new Date().toISOString().split("T")[0]}.xlsx`);
+    toast({ title: t.exported });
   };
 
   const openEdit = (emp: Employee) => {
     setEditTarget(emp);
-    setForm({ name: emp.name, email: emp.email, password: "", can_create_owners: emp.can_create_owners, can_create_stations: emp.can_create_stations, can_add_service: emp.can_add_service ?? false, can_edit_prices: emp.can_edit_prices ?? false });
+    setForm({
+      name: emp.name,
+      email: emp.email,
+      password: "",
+      can_create_owners: emp.can_create_owners,
+      can_create_stations: emp.can_create_stations,
+      can_add_service: emp.can_add_service ?? false,
+      can_edit_prices: emp.can_edit_prices ?? false,
+    });
     setShowEdit(true);
   };
 
+  const permissionBadges = (emp: Employee) =>
+    [emp.can_create_owners ? t.createAccounts : null, emp.can_create_stations ? t.createStations : null, emp.can_add_service ? t.addService : null, emp.can_edit_prices ? t.editPrices : null].filter(Boolean) as string[];
+
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir={isRtl ? "rtl" : "ltr"}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">الموظفون</h2>
+          <h2 className="text-lg font-semibold">{t.title}</h2>
           <Badge variant="secondary">{employees.length}</Badge>
         </div>
         <Button size="sm" onClick={() => { setForm(EMPTY_FORM); setShowCreate(true); }}>
-          <Plus className="h-4 w-4 ml-1" /> إضافة موظف
+          <Plus className="h-4 w-4 ml-1" /> {t.add}
         </Button>
       </div>
 
       {loading ? (
-        <div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>
+        <div className="text-center py-8 text-muted-foreground">{t.loading}</div>
       ) : employees.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">لا يوجد موظفون. أضف موظفاً جديداً.</div>
+        <div className="text-center py-12 text-muted-foreground">{t.empty}</div>
       ) : (
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full text-sm">
@@ -231,165 +524,139 @@ export default function EmployeesTab() {
             </colgroup>
             <thead className="bg-muted/50">
               <tr>
-                <th className="text-right px-3 py-2 font-medium">الاسم</th>
-                <th className="text-right px-3 py-2 font-medium">البريد الإلكتروني</th>
-                <th className="text-right px-3 py-2 font-medium">الصلاحيات</th>
-                <th className="text-center px-3 py-2 font-medium">محطات</th>
-                <th className="text-center px-3 py-2 font-medium">حسابات</th>
-                <th className="text-center px-3 py-2 font-medium">الحالة</th>
-                <th className="text-center px-3 py-2 font-medium">إجراءات</th>
+                <th className="text-right px-3 py-2 font-medium">{t.name}</th>
+                <th className="text-right px-3 py-2 font-medium">{t.email}</th>
+                <th className="text-right px-3 py-2 font-medium">{t.permissions}</th>
+                <th className="text-center px-3 py-2 font-medium">{t.stations}</th>
+                <th className="text-center px-3 py-2 font-medium">{t.accounts}</th>
+                <th className="text-center px-3 py-2 font-medium">{t.status}</th>
+                <th className="text-center px-3 py-2 font-medium">{t.actions}</th>
               </tr>
             </thead>
             <tbody>
-              {employees.map((emp) => (
-                <tr key={emp.id} className={`border-t hover:bg-muted/30 transition-opacity ${!emp.is_active ? "opacity-50" : ""}`}>
-                  <td className="px-3 py-2 font-medium">{emp.name}</td>
-                  <td className="px-3 py-2 text-muted-foreground" dir="ltr">{emp.email}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {emp.can_create_owners && <Badge variant="outline" className="text-[11px]">إنشاء حسابات</Badge>}
-                      {emp.can_create_stations && <Badge variant="outline" className="text-[11px]">إنشاء محطات</Badge>}
-                      {emp.can_add_service && <Badge variant="outline" className="text-[11px]">إضافة خدمة</Badge>}
-                      {emp.can_edit_prices && <Badge variant="outline" className="text-[11px]">تعديل الأسعار</Badge>}
-                      {!emp.can_create_owners && !emp.can_create_stations && !emp.can_add_service && !emp.can_edit_prices && <span className="text-muted-foreground text-xs">لا صلاحيات</span>}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <Badge variant="secondary">{emp.stations_count}</Badge>
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <Badge variant="secondary">{emp.owners_count}</Badge>
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {emp.is_active
-                      ? <span className="text-green-600 text-xs font-medium">● نشط</span>
-                      : <span className="text-gray-400 text-xs font-medium">○ موقوف</span>}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center justify-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" title="تصدير Excel" onClick={() => handleExportExcel(emp)}>
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" title="تعديل" onClick={() => openEdit(emp)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" title={emp.is_active ? "إيقاف مؤقت" : "تفعيل"} onClick={() => handleToggleActive(emp)}>
-                        {emp.is_active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="حذف" onClick={() => setDeleteTarget(emp)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {employees.map((emp) => {
+                const badges = permissionBadges(emp);
+                return (
+                  <tr key={emp.id} className={`border-t hover:bg-muted/30 transition-opacity ${!emp.is_active ? "opacity-50" : ""}`}>
+                    <td className="px-3 py-2 font-medium">{emp.name}</td>
+                    <td className="px-3 py-2 text-muted-foreground" dir="ltr">{emp.email}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {badges.length > 0 ? badges.map((badge) => (
+                          <Badge key={badge} variant="outline" className="text-[11px]">{badge}</Badge>
+                        )) : <span className="text-muted-foreground text-xs">{t.noPermissions}</span>}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-center"><Badge variant="secondary">{emp.stations_count}</Badge></td>
+                    <td className="px-3 py-2 text-center"><Badge variant="secondary">{emp.owners_count}</Badge></td>
+                    <td className="px-3 py-2 text-center">{emp.is_active ? <span className="text-green-600 text-xs font-medium">{t.active}</span> : <span className="text-gray-400 text-xs font-medium">{t.inactive}</span>}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center justify-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title={t.exportExcel} onClick={() => handleExportExcel(emp)}><Download className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title={t.edit} onClick={() => openEdit(emp)}><Pencil className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title={emp.is_active ? t.pause : t.activate} onClick={() => handleToggleActive(emp)}>{emp.is_active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title={t.delete} onClick={() => setDeleteTarget(emp)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent dir="rtl" className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>إضافة موظف جديد</DialogTitle>
-          </DialogHeader>
+        <DialogContent dir={isRtl ? "rtl" : "ltr"} className="max-w-md">
+          <DialogHeader><DialogTitle>{t.createTitle}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>الاسم *</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="اسم الموظف" />
+              <Label>{t.name} *</Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t.employeeName} />
             </div>
             <div className="space-y-1.5">
-              <Label>البريد الإلكتروني *</Label>
+              <Label>{t.email}</Label>
               <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" dir="ltr" type="email" />
             </div>
             <div className="space-y-1.5">
-              <Label>كلمة المرور *</Label>
+              <Label>{t.password}</Label>
               <Input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} type="password" placeholder="••••••••" />
             </div>
             <div className="space-y-2">
-              <Label>الصلاحيات</Label>
+              <Label>{t.permissions}</Label>
               <div className="flex items-center gap-2">
                 <Checkbox id="oc" checked={form.can_create_owners} onCheckedChange={(v) => setForm({ ...form, can_create_owners: !!v })} />
-                <label htmlFor="oc" className="text-sm cursor-pointer">إنشاء حسابات أصحاب المغاسل</label>
+                <label htmlFor="oc" className="text-sm cursor-pointer">{t.ownerAccounts}</label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="sc" checked={form.can_create_stations} onCheckedChange={(v) => setForm({ ...form, can_create_stations: !!v })} />
-                <label htmlFor="sc" className="text-sm cursor-pointer">إنشاء محطات</label>
+                <label htmlFor="sc" className="text-sm cursor-pointer">{t.stationCreate}</label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="as" checked={form.can_add_service} onCheckedChange={(v) => setForm({ ...form, can_add_service: !!v })} />
-                <label htmlFor="as" className="text-sm cursor-pointer">إضافة خدمات للمحطات</label>
+                <label htmlFor="as" className="text-sm cursor-pointer">{t.addStationServices}</label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="ep" checked={form.can_edit_prices} onCheckedChange={(v) => setForm({ ...form, can_edit_prices: !!v })} />
-                <label htmlFor="ep" className="text-sm cursor-pointer">تعديل أسعار الخدمات</label>
+                <label htmlFor="ep" className="text-sm cursor-pointer">{t.modifyPrices}</label>
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>إلغاء</Button>
-            <Button onClick={handleCreate} disabled={saving}>{saving ? "جاري الإنشاء..." : "إنشاء الحساب"}</Button>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>{t.cancel}</Button>
+            <Button onClick={handleCreate} disabled={saving}>{saving ? t.creating : t.createAccount}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Dialog */}
       <Dialog open={showEdit} onOpenChange={setShowEdit}>
-        <DialogContent dir="rtl" className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>تعديل بيانات الموظف</DialogTitle>
-          </DialogHeader>
+        <DialogContent dir={isRtl ? "rtl" : "ltr"} className="max-w-md">
+          <DialogHeader><DialogTitle>{t.editTitle}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>الاسم</Label>
+              <Label>{t.name}</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label>البريد الإلكتروني</Label>
+              <Label>{t.email}</Label>
               <Input value={form.email} disabled dir="ltr" className="opacity-60" />
             </div>
             <div className="space-y-2">
-              <Label>الصلاحيات</Label>
+              <Label>{t.permissions}</Label>
               <div className="flex items-center gap-2">
                 <Checkbox id="oc2" checked={form.can_create_owners} onCheckedChange={(v) => setForm({ ...form, can_create_owners: !!v })} />
-                <label htmlFor="oc2" className="text-sm cursor-pointer">إنشاء حسابات أصحاب المغاسل</label>
+                <label htmlFor="oc2" className="text-sm cursor-pointer">{t.ownerAccounts}</label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="sc2" checked={form.can_create_stations} onCheckedChange={(v) => setForm({ ...form, can_create_stations: !!v })} />
-                <label htmlFor="sc2" className="text-sm cursor-pointer">إنشاء محطات</label>
+                <label htmlFor="sc2" className="text-sm cursor-pointer">{t.stationCreate}</label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="as2" checked={form.can_add_service} onCheckedChange={(v) => setForm({ ...form, can_add_service: !!v })} />
-                <label htmlFor="as2" className="text-sm cursor-pointer">إضافة خدمات للمحطات</label>
+                <label htmlFor="as2" className="text-sm cursor-pointer">{t.addStationServices}</label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="ep2" checked={form.can_edit_prices} onCheckedChange={(v) => setForm({ ...form, can_edit_prices: !!v })} />
-                <label htmlFor="ep2" className="text-sm cursor-pointer">تعديل أسعار الخدمات</label>
+                <label htmlFor="ep2" className="text-sm cursor-pointer">{t.modifyPrices}</label>
               </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEdit(false)}>إلغاء</Button>
-            <Button onClick={handleEdit} disabled={saving}>{saving ? "جاري الحفظ..." : "حفظ التغييرات"}</Button>
+            <Button variant="outline" onClick={() => setShowEdit(false)}>{t.cancel}</Button>
+            <Button onClick={handleEdit} disabled={saving}>{saving ? t.saving : t.save}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
-        <AlertDialogContent dir="rtl">
+        <AlertDialogContent dir={isRtl ? "rtl" : "ltr"}>
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-            <AlertDialogDescription>
-              هل تريد حذف حساب الموظف <strong>{deleteTarget?.name}</strong>؟ سيتم حذف حساب الدخول نهائياً.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t.deleteTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{t.deleteDescription} <strong>{deleteTarget?.name}</strong>? {t.deletePermanent}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDelete}>
-              حذف
-            </AlertDialogAction>
+            <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDelete}>{t.delete}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

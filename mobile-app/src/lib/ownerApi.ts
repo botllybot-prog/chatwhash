@@ -71,7 +71,7 @@ export async function signUpOwner(payload: OwnerSignupPayload): Promise<OwnerLog
           name: payload.firstServiceName,
           price: Number(payload.firstServicePrice || 0),
           duration_minutes: Number(payload.firstServiceDuration || 30),
-          customer_discount: payload.firstServiceDiscount || null,
+          customer_discount: null,
           sort_order: 0,
         },
       ],

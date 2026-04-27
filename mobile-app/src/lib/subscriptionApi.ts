@@ -1,4 +1,4 @@
-import { SUPABASE_ANON_PUBLIC_KEY, SUPABASE_FUNCTIONS_BASE, supabase } from "./supabase";
+import { supabase } from "./supabase";
 import type {
   OwnerContext,
   PackageDefinition,
@@ -6,16 +6,12 @@ import type {
   SubscriptionSummary,
 } from "../types";
 
-type PaymentCallbackResponse = {
-  success?: boolean;
-  error?: string;
-  callback_url?: string;
-  redirect_url?: string;
-  payment_status?: string;
-  subscription_id?: string | null;
+export type OwnerPaymentMethods = {
+  zainCash: string;
+  rafidain: string;
+  nasWallet: string;
+  cardUrl: string;
 };
-
-const FALLBACK_APP_URL = "https://washlly.com";
 
 export const OWNER_PACKAGES: PackageDefinition[] = [
   {
@@ -23,14 +19,14 @@ export const OWNER_PACKAGES: PackageDefinition[] = [
     title: "باقة 20 طلب",
     priceUsd: 5,
     requestLimit: 20,
-    description: "مناسبة للبداية السريعة للمحطة.",
+    description: "مناسبة للانطلاق السريع.",
   },
   {
     code: "growth_50",
     title: "باقة 50 طلب",
     priceUsd: 10,
     requestLimit: 50,
-    description: "توازن ممتاز بين السعر والحجم.",
+    description: "أفضل توازن بين السعر والطلبات.",
   },
   {
     code: "scale_110",
@@ -44,7 +40,7 @@ export const OWNER_PACKAGES: PackageDefinition[] = [
     title: "باقة غير محدودة",
     priceUsd: 50,
     requestLimit: null,
-    description: "أفضل حل للتشغيل المكثف بلا سقف.",
+    description: "تشغيل مكثف بدون سقف.",
   },
 ];
 
@@ -62,7 +58,9 @@ export async function getSignedInUserId() {
 export async function loadOwnerContext(userId: string): Promise<OwnerContext> {
   const { data, error } = await (supabase as any)
     .from("station_owners")
-    .select("id, station_id, owner_name, owner_phone, free_requests_quota, free_requests_used, stations(name, is_active, suspension_reason)")
+    .select(
+      "id, station_id, owner_name, owner_phone, free_requests_quota, free_requests_used, stations(name, is_active, suspension_reason)",
+    )
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -130,50 +128,25 @@ export function getPackageByCode(code: string | null | undefined) {
   return OWNER_PACKAGES.find((item) => item.code === code) || null;
 }
 
-export function getPaymentIntegrationInfo() {
-  return {
-    callbackUrl: `${SUPABASE_FUNCTIONS_BASE}/payment-callback`,
-    redirectionTemplate: `${FALLBACK_APP_URL}/app/station-portal?payment={status}&package={package_code}&reference={transaction_id}`,
-  };
-}
+export async function loadOwnerPaymentMethods(): Promise<OwnerPaymentMethods> {
+  const { data, error } = await (supabase as any)
+    .from("app_settings")
+    .select("key, value")
+    .in("key", ["PAYMENT_ZAIN_CASH", "PAYMENT_SUPER_KEY", "PAYMENT_NAS_WALLET", "PAYMENT_CARD_URL"]);
 
-export async function activatePackageForTesting(input: {
-  stationId: string;
-  packageCode: PackageDefinition["code"];
-  returnUrl?: string;
-}) {
-  const pkg = getPackageByCode(input.packageCode);
-  if (!pkg) throw new Error("الباقة غير معروفة.");
+  if (error) {
+    throw new Error(error.message);
+  }
 
-  const tx = `mobile_${Date.now()}`;
-  const response = await fetch(`${SUPABASE_FUNCTIONS_BASE}/payment-callback?response=json`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: SUPABASE_ANON_PUBLIC_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_PUBLIC_KEY}`,
-    },
-    body: JSON.stringify({
-      station_id: input.stationId,
-      package_code: pkg.code,
-      amount: pkg.priceUsd,
-      method: "mobile_app_test",
-      status: "paid",
-      transaction_id: tx,
-      return_url: input.returnUrl || `${FALLBACK_APP_URL}/app/station-portal`,
-    }),
-  });
-
-  const payload = (await response.json().catch(() => ({}))) as PaymentCallbackResponse;
-  if (!response.ok || payload.error || payload.success === false) {
-    throw new Error(payload.error || "تعذر تفعيل الباقة.");
+  const map: Record<string, string> = {};
+  for (const row of data || []) {
+    map[row.key] = row.value || "";
   }
 
   return {
-    callbackUrl: payload.callback_url || `${SUPABASE_FUNCTIONS_BASE}/payment-callback`,
-    redirectUrl: payload.redirect_url || `${FALLBACK_APP_URL}/app/station-portal`,
-    paymentStatus: payload.payment_status || "paid",
-    transactionId: tx,
-    subscriptionId: payload.subscription_id || null,
+    zainCash: map.PAYMENT_ZAIN_CASH || "",
+    rafidain: map.PAYMENT_SUPER_KEY || "",
+    nasWallet: map.PAYMENT_NAS_WALLET || "",
+    cardUrl: map.PAYMENT_CARD_URL || "",
   };
 }

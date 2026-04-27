@@ -28,15 +28,24 @@ type Mode = "home" | "map" | "stations";
 
 const DATE_OPTIONS = getNextDays(7);
 
+function extractGovernorate(area: string) {
+  if (!area) return "غير محدد";
+  const normalized = area.replace(/\s+/g, " ").trim();
+  const firstPart = normalized.split("-")[0]?.split("،")[0]?.trim();
+  return firstPart || "غير محدد";
+}
+
 function formatCurrency(value: number) {
   return `${value.toLocaleString("en-US")} د.ع`;
 }
 
 export function CustomerHomeScreen({
   onOpenOwner,
+  onOpenMap,
   mode = "home",
 }: {
   onOpenOwner: () => void;
+  onOpenMap: () => void;
   mode?: Mode;
 }) {
   const { stations, loading, source, error, reload, mapRegion } = useStations();
@@ -56,10 +65,21 @@ export function CustomerHomeScreen({
   const [bookingResult, setBookingResult] = useState<BookingCreateResult | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackType, setFeedbackType] = useState<"success" | "error" | "info">("info");
+  const [selectedGovernorate, setSelectedGovernorate] = useState<string>("الكل");
+
+  const governorateOptions = useMemo(() => {
+    const unique = Array.from(new Set(stations.map((station) => extractGovernorate(station.area))));
+    return ["الكل", ...unique];
+  }, [stations]);
+
+  const visibleStations = useMemo(() => {
+    if (selectedGovernorate === "الكل") return stations;
+    return stations.filter((station) => extractGovernorate(station.area) === selectedGovernorate);
+  }, [selectedGovernorate, stations]);
 
   const selectedStation = useMemo(
-    () => stations.find((station) => station.id === selectedStationId) || null,
-    [stations, selectedStationId],
+    () => visibleStations.find((station) => station.id === selectedStationId) || null,
+    [visibleStations, selectedStationId],
   );
   const selectedService = useMemo(
     () =>
@@ -74,10 +94,15 @@ export function CustomerHomeScreen({
   const finalPrice = selectedService ? selectedService.price - discountAmount : 0;
 
   useEffect(() => {
-    if (!selectedStationId && stations.length > 0) {
-      setSelectedStationId(stations[0].id);
+    if (visibleStations.length === 0) {
+      setSelectedStationId(null);
+      setSelectedServiceId(null);
+      return;
     }
-  }, [selectedStationId, stations]);
+    if (!selectedStationId || !visibleStations.some((station) => station.id === selectedStationId)) {
+      setSelectedStationId(visibleStations[0].id);
+    }
+  }, [selectedStationId, visibleStations]);
 
   useEffect(() => {
     if (!selectedStation) return;
@@ -135,7 +160,7 @@ export function CustomerHomeScreen({
   ]);
 
   const titleByMode: Record<Mode, string> = {
-    home: "احجز من الخريطة بخطوات كاملة",
+    home: "احجز من الخريطة بخطوات بسيطة",
     map: "الخريطة المباشرة للمحطات المتاحة",
     stations: "المحطات والخدمات المتاحة الآن",
   };
@@ -264,23 +289,13 @@ export function CustomerHomeScreen({
       <LinearGradient colors={gradients.hero} style={styles.heroCard}>
         <Text style={styles.heroBadge}>Washlly Mobile</Text>
         <Text style={styles.heroTitle}>{titleByMode[mode]}</Text>
-        <Text style={styles.heroText}>
-          نسخة متكاملة للتجربة: اختيار محطة وخدمة ووقت، تدوير عجلة الخصم، تأكيد الحجز أو إلغاؤه، مع
-          ربط مباشر بدوال Supabase.
-        </Text>
         <View style={styles.heroActions}>
-          <Pressable style={styles.primaryButton} onPress={reload}>
-            <Text style={styles.primaryButtonText}>{loading ? "جاري التحديث..." : "تحديث البيانات"}</Text>
+          <Pressable style={styles.primaryButton} onPress={onOpenMap}>
+            <Text style={styles.primaryButtonText}>إظهار الخارطة</Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={onOpenOwner}>
             <Text style={styles.secondaryButtonText}>دخول المحطة</Text>
           </Pressable>
-        </View>
-        <View style={styles.statusRow}>
-          <Text style={styles.statusText}>
-            المصدر: {source === "live" ? "Supabase مباشر" : "بيانات تجريبية"}
-          </Text>
-          <Text style={styles.statusText}>المحطات: {stations.length}</Text>
         </View>
       </LinearGradient>
 
@@ -295,12 +310,28 @@ export function CustomerHomeScreen({
         />
       ) : null}
 
+      <SectionTitle title="فلتر المحافظات" subtitle="اختر محافظتك أو اعرض جميع المحطات." />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+        {governorateOptions.map((governorate) => {
+          const active = governorate === selectedGovernorate;
+          return (
+            <Pressable
+              key={governorate}
+              style={[styles.dateChip, active && styles.dateChipActive]}
+              onPress={() => setSelectedGovernorate(governorate)}
+            >
+              <Text style={[styles.dateChipText, active && styles.dateChipTextActive]}>{governorate}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
       {mode === "map" && (
         <>
           <SectionTitle title="الخريطة" subtitle="اختر المحطة التي تناسبك ثم أكمل الحجز بالأسفل." />
           <View style={styles.mapWrap}>
             <MapView style={StyleSheet.absoluteFill} initialRegion={mapRegion} region={mapRegion}>
-              {stations.map((station) => (
+              {visibleStations.map((station) => (
                 <Marker
                   key={station.id}
                   coordinate={{ latitude: station.latitude, longitude: station.longitude }}
@@ -322,7 +353,7 @@ export function CustomerHomeScreen({
 
       <SectionTitle title="1) اختر المحطة" subtitle="المحطة المحددة ستستخدم لكل خطوات الحجز." />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
-        {stations.map((station) => {
+        {visibleStations.map((station) => {
           const active = station.id === selectedStation?.id;
           return (
             <Pressable

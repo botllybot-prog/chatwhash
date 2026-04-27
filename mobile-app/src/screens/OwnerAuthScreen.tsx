@@ -31,7 +31,6 @@ export function OwnerAuthScreen({
     firstServiceName: '',
     firstServicePrice: '',
     firstServiceDuration: '30',
-    firstServiceDiscount: '',
   });
 
   const handleSignIn = async () => {
@@ -123,7 +122,6 @@ export function OwnerAuthScreen({
               <View style={styles.rowField}><Field label="السعر" value={signup.firstServicePrice} onChangeText={(value) => setSignup((prev) => ({ ...prev, firstServicePrice: value }))} placeholder="10000" /></View>
               <View style={styles.rowField}><Field label="المدة" value={signup.firstServiceDuration} onChangeText={(value) => setSignup((prev) => ({ ...prev, firstServiceDuration: value }))} placeholder="30" /></View>
             </View>
-            <Field label="الخصم الظاهر للعميل" value={signup.firstServiceDiscount} onChangeText={(value) => setSignup((prev) => ({ ...prev, firstServiceDiscount: value }))} placeholder="مثال: 10% أو 5000 د.ع" />
           </View>
 
           <Pressable style={styles.primaryAction} onPress={handleSignUp} disabled={loading}>
