@@ -33,3 +33,7 @@ supabase/.temp/
 
 # Local Netlify folder
 .netlify
+
+# Expo local cache
+.expo
+mobile-app/.expo

@@ -1,0 +1,23 @@
+﻿{
+  "expo": {
+    "name": "Washlly",
+    "slug": "washlly-mobile-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#f4f8fb"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.washlly.app"
+    },
+    "android": {
+      "package": "com.washlly.app"
+    }
+  }
+}
