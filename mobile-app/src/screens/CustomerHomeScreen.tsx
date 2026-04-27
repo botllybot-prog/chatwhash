@@ -295,7 +295,7 @@ export function CustomerHomeScreen({
         />
       ) : null}
 
-      {(mode === "home" || mode === "map") && (
+      {mode === "map" && (
         <>
           <SectionTitle title="الخريطة" subtitle="اختر المحطة التي تناسبك ثم أكمل الحجز بالأسفل." />
           <View style={styles.mapWrap}>
