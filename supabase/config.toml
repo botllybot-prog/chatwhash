@@ -1,4 +1,4 @@
-﻿project_id = "yhklvtzonvgzkodysawu"
+project_id = "yhklvtzonvgzkodysawu"
 
 [functions.whatsapp-webhook]
 verify_jwt = false
