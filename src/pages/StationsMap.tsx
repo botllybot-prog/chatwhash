@@ -852,11 +852,14 @@ function StationCard({
     });
 
     if (error || data?.error || !data?.segmentKey) {
+      const fallbackError = error?.context && typeof error.context === "object" && "error" in error.context
+        ? String((error.context as { error?: string }).error || "")
+        : "";
       setSpinning(false);
       setSpinHint(t.spinFailedDescription);
       toast({
         title: t.spinFailedTitle,
-        description: data?.error || error?.message || t.spinFailedDescription,
+        description: data?.error || fallbackError || error?.message || t.spinFailedDescription,
         variant: "destructive",
       });
       return;
@@ -1176,18 +1179,18 @@ function StationCard({
             </CardContent>
           </Card>
 
-          <Card className="overflow-hidden border-0 bg-[#070b13] text-white shadow-2xl">
+          <Card className="overflow-hidden border border-amber-200 bg-gradient-to-b from-amber-50 via-orange-50 to-rose-50 text-slate-900 shadow-lg">
             <CardContent className="space-y-5 pt-5">
               <StepHeader number="4" title={t.step4Title} description={t.step4Description} />
 
-              <div className="rounded-[30px] border border-white/10 bg-[radial-gradient(circle_at_top,_#15213d,_#0a0f1a_72%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <div className="rounded-[24px] border-2 border-amber-200 bg-white p-4 shadow-sm">
                 <div className="relative mx-auto h-[292px] w-[292px] max-w-full">
                   {Array.from({ length: 12 }, (_, lightIndex) => {
                     const angle = (360 / 12) * lightIndex;
                     return (
                       <div
                         key={lightIndex}
-                        className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-yellow-300 shadow-[0_0_14px_rgba(253,224,71,0.95)]"
+                        className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.55)]"
                         style={{
                           transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-146px)`,
                         }}
@@ -1196,15 +1199,15 @@ function StationCard({
                   })}
 
                   <div className="absolute left-1/2 top-2 z-20 -translate-x-1/2">
-                    <div className="rounded-full bg-gradient-to-b from-amber-300 to-yellow-500 p-1 shadow-[0_8px_18px_rgba(250,204,21,0.4)]">
-                      <div className="h-0 w-0 border-l-[20px] border-r-[20px] border-b-[36px] border-l-transparent border-r-transparent border-b-[#ffc928]" />
+                    <div className="rounded-full bg-gradient-to-b from-amber-400 to-orange-500 p-1.5 shadow-md">
+                      <div className="h-0 w-0 border-l-[16px] border-r-[16px] border-b-[28px] border-l-transparent border-r-transparent border-b-amber-500" />
                     </div>
                   </div>
 
-                  <div className="absolute inset-0 rounded-full border-[14px] border-white/10 bg-white/5 shadow-[0_0_0_2px_rgba(255,255,255,0.06),0_18px_55px_rgba(0,0,0,0.5)]" />
+                  <div className="absolute inset-0 rounded-full border-[14px] border-amber-200 bg-amber-100 shadow-[0_0_0_2px_rgba(217,119,6,0.18),0_12px_25px_rgba(180,83,9,0.15)]" />
 
                   <div
-                    className="absolute inset-[16px] rounded-full border-[6px] border-white/15 shadow-[inset_0_2px_16px_rgba(255,255,255,0.08)]"
+                    className="absolute inset-[16px] rounded-full border-[6px] border-white shadow-[inset_0_2px_10px_rgba(255,255,255,0.4)]"
                     style={{
                       background: wheelBackground,
                       transform: `rotate(${spinRotation}deg)`,
@@ -1226,45 +1229,45 @@ function StationCard({
                             color: segment.textColor,
                           }}
                         >
-                          <div className={`${labelSize} font-black leading-none`}>{segment.label}</div>
+                          <div className={`${labelSize} font-extrabold leading-none`}>{segment.label}</div>
                           <div className={`mt-1 ${subtitleSize} font-semibold leading-4`}>{segment.subtitle}</div>
                         </div>
                       );
                     })}
 
-                    <div className="absolute inset-[34%] flex flex-col items-center justify-center rounded-full border-4 border-white/10 bg-[radial-gradient(circle,_#1a2233,_#090e18)] text-center shadow-[inset_0_2px_10px_rgba(255,255,255,0.05),0_12px_30px_rgba(0,0,0,0.45)]">
-                      <div className="text-[11px] font-bold tracking-[0.22em] text-yellow-300">WASHLLY</div>
-                      <div className="mt-2 text-xs leading-5 text-slate-300">{t.wheelCurrentBookingDiscount}</div>
-                      <div className="mt-2 text-2xl font-black text-white">
+                    <div className="absolute inset-[34%] flex flex-col items-center justify-center rounded-full border-4 border-amber-100 bg-[radial-gradient(circle,_#fff7ed,_#fed7aa)] text-center shadow-[inset_0_2px_10px_rgba(255,255,255,0.6),0_8px_18px_rgba(217,119,6,0.2)]">
+                      <div className="text-[11px] font-extrabold tracking-[0.2em] text-amber-700">WASHLLY</div>
+                      <div className="mt-2 text-xs leading-5 text-slate-600">{t.wheelCurrentBookingDiscount}</div>
+                      <div className="mt-2 text-2xl font-black text-slate-900">
                         {spinResult ? `${spinResult.discountPercent}%` : needsRespin ? "↻" : "?"}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3 text-center text-sm leading-7 text-slate-200">
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-center text-sm leading-7 text-amber-900">
                   {spinHint}
                 </div>
 
                 {selectedService && spinResult && (
                   <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
-                    <div className="rounded-2xl border border-white/10 bg-white/5 p-2">
-                      <div className="text-slate-300">{t.price}</div>
-                      <div className="font-bold text-white">{formatCurrency(selectedService.price, language)}</div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                      <div className="text-slate-600">{t.price}</div>
+                      <div className="font-bold text-slate-900">{formatCurrency(selectedService.price, language)}</div>
                     </div>
-                    <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-2">
-                      <div className="text-emerald-200">{t.discount}</div>
-                      <div className="font-bold text-emerald-100">{formatCurrency(discountAmount, language)}</div>
+                    <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-2">
+                      <div className="text-emerald-700">{t.discount}</div>
+                      <div className="font-bold text-emerald-900">{formatCurrency(discountAmount, language)}</div>
                     </div>
-                    <div className="rounded-2xl border border-sky-400/20 bg-sky-500/10 p-2">
-                      <div className="text-sky-200">{t.afterDiscount}</div>
-                      <div className="font-bold text-white">{formatCurrency(finalPrice, language)}</div>
+                    <div className="rounded-2xl border border-sky-300 bg-sky-50 p-2">
+                      <div className="text-sky-700">{t.afterDiscount}</div>
+                      <div className="font-bold text-sky-900">{formatCurrency(finalPrice, language)}</div>
                     </div>
                   </div>
                 )}
 
                 <Button
-                  className="mt-5 h-12 w-full gap-2 bg-gradient-to-l from-yellow-400 via-amber-400 to-yellow-300 text-slate-950 hover:from-yellow-300 hover:to-amber-300"
+                  className="mt-5 h-12 w-full gap-2 bg-gradient-to-l from-amber-500 via-orange-500 to-rose-500 text-white hover:from-amber-600 hover:to-rose-600"
                   disabled={spinning || !!spinResult || !canSpin}
                   onClick={handleSpin}
                 >

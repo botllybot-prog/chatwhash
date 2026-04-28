@@ -22,11 +22,7 @@ function normalizePhone(phone: string): string {
 }
 
 function toBase64Url(input: Uint8Array | string): string {
-  const raw =
-    typeof input === "string"
-      ? input
-      : String.fromCharCode(...input);
-
+  const raw = typeof input === "string" ? input : String.fromCharCode(...input);
   return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
@@ -55,6 +51,13 @@ function pickDiscountSegment(): DiscountSegment {
   return DISCOUNT_SEGMENTS[0];
 }
 
+function businessError(message: string) {
+  return new Response(JSON.stringify({ success: false, error: message }), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -81,33 +84,26 @@ Deno.serve(async (req) => {
     const customerPhone = normalizePhone((body.customer_phone as string | undefined)?.trim() || "");
 
     if (!stationId || !serviceId || !bookingDate || !customerPhone) {
-      return new Response(JSON.stringify({ error: "بيانات الحجز غير مكتملة لتدوير العجلة." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return businessError("بيانات الحجز غير مكتملة لتدوير العجلة.");
     }
 
-    const { data: existingBooking } = await supabase
+    let existingBookingQuery = supabase
       .from("bookings")
       .select("id, booking_number")
       .eq("station_id", stationId)
       .eq("service_id", serviceId)
       .eq("booking_date", bookingDate)
       .eq("customer_phone", customerPhone)
-      .eq("booking_time", bookingTime)
-      .in("status", ["pending", "confirmed"])
-      .maybeSingle();
+      .in("status", ["pending", "confirmed"]);
+
+    existingBookingQuery = bookingTime
+      ? existingBookingQuery.eq("booking_time", bookingTime)
+      : existingBookingQuery.is("booking_time", null);
+
+    const { data: existingBooking } = await existingBookingQuery.maybeSingle();
 
     if (existingBooking) {
-      return new Response(
-        JSON.stringify({
-          error: `تم استخدام عجلة الخصم لهذا الحجز بالفعل برقم #${existingBooking.booking_number}.`,
-        }),
-        {
-          status: 409,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return businessError(`تم استخدام عجلة الخصم لهذا الحجز بالفعل برقم #${existingBooking.booking_number}.`);
     }
 
     const { count: activeBookingsCount, error: activeBookingsError } = await supabase
@@ -124,15 +120,7 @@ Deno.serve(async (req) => {
     }
 
     if ((activeBookingsCount || 0) >= 2) {
-      return new Response(
-        JSON.stringify({
-          error: "لديك بالفعل حجزان نشطان على هذا الرقم. ألغ أحدهما أولاً قبل تدوير العجلة.",
-        }),
-        {
-          status: 409,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return businessError("لديك بالفعل حجزان نشطان على هذا الرقم. ألغ أحدهما أولاً قبل تدوير العجلة.");
     }
 
     const segment = pickDiscountSegment();
@@ -192,7 +180,6 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "حدث خطأ غير متوقع.";
-
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
