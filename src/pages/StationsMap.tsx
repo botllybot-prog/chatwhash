@@ -1368,6 +1368,13 @@ const StationsMap = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [showQuickBooking, setShowQuickBooking] = useState(false);
+  const [quickCustomerName, setQuickCustomerName] = useState("");
+  const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
+  const [quickServiceKind, setQuickServiceKind] = useState("غسل سطحي");
+  const [quickDate, setQuickDate] = useState(new Date().toISOString().split("T")[0]);
+  const [quickTime, setQuickTime] = useState("");
+  const [quickSubmitting, setQuickSubmitting] = useState(false);
   const { language, setLanguage, isRtl } = useAppLanguage();
 
   const t = translations[language];
@@ -1471,6 +1478,46 @@ const StationsMap = () => {
     );
   };
 
+  const handleQuickBooking = async () => {
+    if (!quickCustomerName || !quickCustomerPhone || !quickServiceKind || !quickDate || !quickTime) {
+      toast({
+        title: "أكمل البيانات",
+        description: "يرجى ملء كل حقول الحجز السريع أولاً.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setQuickSubmitting(true);
+    const { data, error } = await supabase.functions.invoke("create-quick-booking", {
+      body: {
+        customer_name: quickCustomerName,
+        customer_phone: quickCustomerPhone,
+        service_kind: quickServiceKind,
+        booking_date: quickDate,
+        booking_time: quickTime,
+        customer_lat: userLocation?.lat ?? null,
+        customer_lng: userLocation?.lng ?? null,
+      },
+    });
+    setQuickSubmitting(false);
+
+    if (error || (data && (data as any).error)) {
+      toast({
+        title: "تعذر إرسال الحجز السريع",
+        description: (data as any)?.message || error?.message || "حدث خطأ غير متوقع.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "تم إرسال الحجز السريع",
+      description: "تم إرسال الطلب لأقرب 3 محطات، وأسرع رد سيحصل على الحجز.",
+    });
+    setShowQuickBooking(false);
+  };
+
   return (
     <div className="relative h-[100vh] w-full" dir={isRtl ? "rtl" : "ltr"}>
       <div className="absolute left-4 right-4 top-4 z-[900] mx-auto max-w-xl">
@@ -1510,6 +1557,16 @@ const StationsMap = () => {
                 {t.myLocation}
               </Button>
 
+              <Button
+                variant={showQuickBooking ? "default" : "outline"}
+                size="sm"
+                className="shrink-0 gap-2"
+                onClick={() => setShowQuickBooking((prev) => !prev)}
+              >
+                <CalendarCheck className="h-4 w-4" />
+                حجز سريع
+              </Button>
+
               {filteredStations.slice(0, 5).map((station) => (
                 <Button
                   key={station.id}
@@ -1524,6 +1581,40 @@ const StationsMap = () => {
             </div>
           </CardContent>
         </Card>
+
+        {showQuickBooking && (
+          <Card className="mt-3 border-0 bg-background/95 shadow-xl backdrop-blur">
+            <CardContent className="space-y-3 p-3">
+              <div className="text-sm font-semibold">الحجز السريع (بدون تحديد السعر)</div>
+              <Input
+                placeholder="اسم العميل"
+                value={quickCustomerName}
+                onChange={(event) => setQuickCustomerName(event.target.value)}
+              />
+              <Input
+                placeholder="رقم واتساب العميل"
+                value={quickCustomerPhone}
+                onChange={(event) => setQuickCustomerPhone(event.target.value)}
+              />
+              <Select value={quickServiceKind} onValueChange={setQuickServiceKind}>
+                <SelectTrigger>
+                  <SelectValue placeholder="نوع الغسل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="غسل سطحي">غسل سطحي</SelectItem>
+                  <SelectItem value="غسل جك">غسل جك</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" value={quickDate} onChange={(event) => setQuickDate(event.target.value)} />
+                <Input type="time" value={quickTime} onChange={(event) => setQuickTime(event.target.value)} />
+              </div>
+              <Button className="w-full" disabled={quickSubmitting} onClick={handleQuickBooking}>
+                {quickSubmitting ? "جاري الإرسال..." : "إرسال الحجز السريع"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {isLoaded ? (
