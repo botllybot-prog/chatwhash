@@ -36,3 +36,12 @@ verify_jwt = false
 [functions.payment-callback]
 verify_jwt = false
 
+[functions.create-map-booking]
+verify_jwt = false
+
+[functions.create-quick-booking]
+verify_jwt = false
+
+[functions.cancel-all-map-bookings]
+verify_jwt = false
+

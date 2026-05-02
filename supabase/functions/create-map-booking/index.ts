@@ -573,6 +573,7 @@ Deno.serve(async (req) => {
         booking_date: bookingDate,
         booking_time: bookingTime,
         spin_discount_percent: spinDiscountPercent,
+        booking_language: language,
         status: "pending",
       })
       .select("id, booking_number")

@@ -427,6 +427,7 @@ const translations = {
 const quickBookingTranslations = {
   ar: {
     cta: "حجز سريع",
+    cancelAllCta: "إلغاء كل الحجوزات",
     cardTitle: "الحجز السريع (بدون تحديد السعر)",
     cardHint: "أسرع محطة توافق على الطلب تستلم الحجز. بدون عجلة خصم في هذا النوع.",
     customerName: "اسم العميل",
@@ -442,9 +443,17 @@ const quickBookingTranslations = {
     failDesc: "حدث خطأ غير متوقع.",
     okTitle: "تم إرسال الحجز السريع",
     okDesc: "تم إرسال الطلب لأقرب 3 محطات، وأسرع رد سيحصل على الحجز.",
+    cancelAllNeedPhoneTitle: "أدخل رقم الواتساب",
+    cancelAllNeedPhoneDesc: "أدخل رقم العميل أولاً لإلغاء كل الحجوزات النشطة لهذا الرقم.",
+    cancelAllSubmitting: "جاري الإلغاء...",
+    cancelAllOkTitle: "تم إلغاء جميع الحجوزات",
+    cancelAllOkDesc: "تم إلغاء كل الحجوزات النشطة وإرسال إشعارات واتساب حسب لغة كل حجز.",
+    cancelAllFailTitle: "تعذر إلغاء الحجوزات",
+    cancelAllFailDesc: "حدث خطأ أثناء إلغاء الحجوزات.",
   },
   en: {
     cta: "Quick booking",
+    cancelAllCta: "Cancel all bookings",
     cardTitle: "Quick booking (price not fixed yet)",
     cardHint: "The first station to approve gets the booking. No discount wheel for this flow.",
     customerName: "Customer name",
@@ -460,9 +469,17 @@ const quickBookingTranslations = {
     failDesc: "Unexpected error occurred.",
     okTitle: "Quick booking sent",
     okDesc: "Request sent to the nearest 3 stations. Fastest reply wins the booking.",
+    cancelAllNeedPhoneTitle: "Enter WhatsApp number",
+    cancelAllNeedPhoneDesc: "Enter customer phone first to cancel all active bookings for this number.",
+    cancelAllSubmitting: "Cancelling...",
+    cancelAllOkTitle: "All bookings cancelled",
+    cancelAllOkDesc: "All active bookings were cancelled and WhatsApp notices were sent in each booking language.",
+    cancelAllFailTitle: "Could not cancel bookings",
+    cancelAllFailDesc: "An error occurred while cancelling bookings.",
   },
   ku: {
     cta: "حجزی خێرا",
+    cancelAllCta: "هەڵوەشاندنەوەی هەموو حجزەکان",
     cardTitle: "حجزی خێرا (نرخ دیاری نەکراوە)",
     cardHint: "ئەو وێستگەیەی زوو وەڵام بدات حجزەکە وەردەگرێت. لەم جۆرەدا گەردی داشکاندن نییە.",
     customerName: "ناوی کڕیار",
@@ -478,9 +495,17 @@ const quickBookingTranslations = {
     failDesc: "هەڵەیەکی نەناسراو ڕوویدا.",
     okTitle: "حجزی خێرا نێردرا",
     okDesc: "داواکارییەکە بۆ 3 وێستگەی نزیک نێردرا. خێراترین وەڵام حجزەکە وەردەگرێت.",
+    cancelAllNeedPhoneTitle: "ژمارەی واتساپ بنووسە",
+    cancelAllNeedPhoneDesc: "سەرەتا ژمارەی کڕیار بنووسە بۆ هەڵوەشاندنەوەی هەموو حجزە چالاکەکان.",
+    cancelAllSubmitting: "هەڵوەشاندنەوە...",
+    cancelAllOkTitle: "هەموو حجزەکان هەڵوەشێندرایەوە",
+    cancelAllOkDesc: "هەموو حجزە چالاکەکان هەڵوەشێندرایەوە و ئاگادارکردنەوەی واتساپ بە زمانی هەر حجزێک نێردرا.",
+    cancelAllFailTitle: "هەڵوەشاندنەوە سەرکەوتوو نەبوو",
+    cancelAllFailDesc: "هەڵەیەک ڕوویدا لە کاتی هەڵوەشاندنەوە.",
   },
   tr: {
     cta: "Hızlı rezervasyon",
+    cancelAllCta: "Tüm rezervasyonları iptal et",
     cardTitle: "Hızlı rezervasyon (fiyat henüz sabit değil)",
     cardHint: "İlk onay veren istasyon rezervasyonu alır. Bu akışta indirim çarkı yok.",
     customerName: "Müşteri adı",
@@ -496,6 +521,13 @@ const quickBookingTranslations = {
     failDesc: "Beklenmeyen bir hata oluştu.",
     okTitle: "Hızlı rezervasyon gönderildi",
     okDesc: "Talep en yakın 3 istasyona gönderildi. En hızlı yanıt rezervasyonu alır.",
+    cancelAllNeedPhoneTitle: "WhatsApp numarası girin",
+    cancelAllNeedPhoneDesc: "Önce müşteri numarasını girin, sonra bu numaranın tüm aktif rezervasyonları iptal edilir.",
+    cancelAllSubmitting: "İptal ediliyor...",
+    cancelAllOkTitle: "Tüm rezervasyonlar iptal edildi",
+    cancelAllOkDesc: "Tüm aktif rezervasyonlar iptal edildi ve her rezervasyon diline göre WhatsApp bildirimi gönderildi.",
+    cancelAllFailTitle: "Rezervasyonlar iptal edilemedi",
+    cancelAllFailDesc: "İptal sırasında bir hata oluştu.",
   },
 } as const;
 
@@ -546,6 +578,13 @@ type SpinDiscountResponse = {
 
 type CancelBookingResponse = {
   success?: boolean;
+  error?: string;
+};
+
+type CancelAllBookingsResponse = {
+  success?: boolean;
+  cancelledCount?: number;
+  alreadyEmpty?: boolean;
   error?: string;
 };
 
@@ -1444,6 +1483,7 @@ const StationsMap = () => {
   const [quickDate, setQuickDate] = useState(new Date().toISOString().split("T")[0]);
   const [quickTime, setQuickTime] = useState("");
   const [quickSubmitting, setQuickSubmitting] = useState(false);
+  const [quickCancelSubmitting, setQuickCancelSubmitting] = useState(false);
   const { language, isRtl } = useAppLanguage();
 
   const t = translations[language];
@@ -1589,6 +1629,39 @@ const StationsMap = () => {
     setShowQuickBooking(false);
   };
 
+  const handleCancelAllBookings = async () => {
+    if (!quickCustomerPhone.trim()) {
+      toast({
+        title: q.cancelAllNeedPhoneTitle,
+        description: q.cancelAllNeedPhoneDesc,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setQuickCancelSubmitting(true);
+    const { data, error } = await supabase.functions.invoke<CancelAllBookingsResponse>("cancel-all-map-bookings", {
+      body: {
+        customer_phone: quickCustomerPhone.trim(),
+      },
+    });
+    setQuickCancelSubmitting(false);
+
+    if (error || !data?.success) {
+      toast({
+        title: q.cancelAllFailTitle,
+        description: data?.error || error?.message || q.cancelAllFailDesc,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: q.cancelAllOkTitle,
+      description: data.alreadyEmpty ? q.cancelAllOkDesc : `${q.cancelAllOkDesc} (${data.cancelledCount ?? 0})`,
+    });
+  };
+
   return (
     <div className="relative h-[100vh] w-full" dir={isRtl ? "rtl" : "ltr"}>
       <div className="absolute left-4 right-4 top-4 z-[900] mx-auto max-w-xl">
@@ -1638,6 +1711,16 @@ const StationsMap = () => {
             >
               <CalendarCheck className="h-4 w-4" />
               {q.cta}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-2 shadow"
+              onClick={handleCancelAllBookings}
+              disabled={quickCancelSubmitting}
+            >
+              {quickCancelSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+              {quickCancelSubmitting ? q.cancelAllSubmitting : q.cancelAllCta}
             </Button>
           </div>
         </div>

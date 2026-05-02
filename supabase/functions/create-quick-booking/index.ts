@@ -321,6 +321,7 @@ Deno.serve(async (req) => {
         customer_name: customerName,
         customer_phone: customerPhone,
         service_kind: serviceKind,
+        language,
         booking_date: bookingDate,
         booking_time: bookingTime,
         customer_lat: baseLat,
@@ -342,6 +343,7 @@ Deno.serve(async (req) => {
           service_id: item.service.id,
           booking_date: bookingDate,
           booking_time: bookingTime,
+          booking_language: language,
           status: "pending",
         })
         .select("id, booking_number")
@@ -422,4 +424,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-
