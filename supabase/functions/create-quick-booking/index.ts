@@ -315,39 +315,69 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: requestRow } = await supabase
+    let requestRow: { id: string } | null = null;
+    const requestPayload = {
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      service_kind: serviceKind,
+      language,
+      booking_date: bookingDate,
+      booking_time: bookingTime,
+      customer_lat: baseLat,
+      customer_lng: baseLng,
+      status: "pending",
+    };
+
+    const requestInsert = await supabase
       .from("quick_booking_requests")
-      .insert({
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        service_kind: serviceKind,
-        language,
-        booking_date: bookingDate,
-        booking_time: bookingTime,
-        customer_lat: baseLat,
-        customer_lng: baseLng,
-        status: "pending",
-      })
+      .insert(requestPayload)
       .select("id")
       .single();
+
+    if (requestInsert.error && requestInsert.error.message.includes("language")) {
+      const { language: _legacyIgnore, ...legacyRequestPayload } = requestPayload;
+      const legacyInsert = await supabase
+        .from("quick_booking_requests")
+        .insert(legacyRequestPayload)
+        .select("id")
+        .single();
+      requestRow = legacyInsert.data || null;
+    } else {
+      requestRow = requestInsert.data || null;
+    }
 
     const bookingRows: { station_id: string; booking_id: string; station_name: string }[] = [];
 
     for (const item of matched) {
-      const { data: booking } = await supabase
+      const bookingPayload = {
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        station_id: item.station.id,
+        service_id: item.service.id,
+        booking_date: bookingDate,
+        booking_time: bookingTime,
+        booking_language: language,
+        status: "pending",
+      };
+
+      let booking: { id: string; booking_number: number } | null = null;
+      const bookingInsert = await supabase
         .from("bookings")
-        .insert({
-          customer_name: customerName,
-          customer_phone: customerPhone,
-          station_id: item.station.id,
-          service_id: item.service.id,
-          booking_date: bookingDate,
-          booking_time: bookingTime,
-          booking_language: language,
-          status: "pending",
-        })
+        .insert(bookingPayload)
         .select("id, booking_number")
         .single();
+
+      if (bookingInsert.error && bookingInsert.error.message.includes("booking_language")) {
+        const { booking_language: _legacyIgnore, ...legacyBookingPayload } = bookingPayload;
+        const legacyInsert = await supabase
+          .from("bookings")
+          .insert(legacyBookingPayload)
+          .select("id, booking_number")
+          .single();
+        booking = legacyInsert.data || null;
+      } else {
+        booking = bookingInsert.data || null;
+      }
 
       if (!booking) continue;
 

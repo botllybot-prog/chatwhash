@@ -563,21 +563,40 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: booking, error: bookingError } = await supabase
+    const bookingPayload = {
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      station_id: stationId,
+      service_id: serviceId,
+      booking_date: bookingDate,
+      booking_time: bookingTime,
+      spin_discount_percent: spinDiscountPercent,
+      booking_language: language,
+      status: "pending",
+    };
+
+    let booking: { id: string; booking_number: number } | null = null;
+    let bookingError: { message: string } | null = null;
+
+    const bookingInsert = await supabase
       .from("bookings")
-      .insert({
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        station_id: stationId,
-        service_id: serviceId,
-        booking_date: bookingDate,
-        booking_time: bookingTime,
-        spin_discount_percent: spinDiscountPercent,
-        booking_language: language,
-        status: "pending",
-      })
+      .insert(bookingPayload)
       .select("id, booking_number")
       .single();
+
+    if (bookingInsert.error && bookingInsert.error.message.includes("booking_language")) {
+      const { booking_language: _legacyIgnore, ...legacyPayload } = bookingPayload;
+      const legacyInsert = await supabase
+        .from("bookings")
+        .insert(legacyPayload)
+        .select("id, booking_number")
+        .single();
+      booking = legacyInsert.data || null;
+      bookingError = legacyInsert.error;
+    } else {
+      booking = bookingInsert.data || null;
+      bookingError = bookingInsert.error;
+    }
 
     if (bookingError || !booking) {
       return new Response(JSON.stringify({ error: bookingError?.message || tt.errors.saveFailed }), {
