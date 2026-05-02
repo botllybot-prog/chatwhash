@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { normalizeOwnerPhone } from "@/lib/ownerAuth";
 import { useAppLanguage } from "@/lib/language";
+import InstallAppButton from "@/components/InstallAppButton";
 import {
   ArrowRight,
   Loader2,
@@ -643,10 +644,13 @@ const OwnerAccess = () => {
             <h1 className="text-3xl font-black text-foreground">{t.title}</h1>
             <p className="mt-2 max-w-3xl text-muted-foreground">{t.subtitle}</p>
           </div>
-          <Button variant="ghost" onClick={() => navigate("/")}>
-            <ArrowRight className={`h-4 w-4 ${isRtl ? "ml-1" : "mr-1 rotate-180"}`} />
-            {t.home}
-          </Button>
+          <div className="flex items-center gap-2 self-start">
+            <InstallAppButton />
+            <Button variant="ghost" onClick={() => navigate("/")}>
+              <ArrowRight className={`h-4 w-4 ${isRtl ? "ml-1" : "mr-1 rotate-180"}`} />
+              {t.home}
+            </Button>
+          </div>
         </div>
 
         {view === "entry" && (

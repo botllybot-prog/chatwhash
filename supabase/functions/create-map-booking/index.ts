@@ -6,6 +6,183 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+type Language = "ar" | "en" | "ku" | "tr";
+
+const i18n: Record<
+  Language,
+  {
+    dateLocale: string;
+    errors: {
+      missing: string;
+      spinRequired: string;
+      pastDate: string;
+      stationUnavailable: string;
+      serviceMismatch: string;
+      chooseTime: string;
+      slotTaken: string;
+      verifyActiveBookings: string;
+      activeLimit: string;
+      verifySpin: string;
+      spinInvalid: string;
+      saveFailed: string;
+      duplicateAtStation: (bookingNo: string | number) => string;
+      unexpected: string;
+    };
+    ownerButtons: { approve: string; reject: string };
+    labels: {
+      newMapBooking: string;
+      station: string;
+      service: string;
+      discount: string;
+      date: string;
+      time: string;
+      bookingNo: string;
+      customer: string;
+      phone: string;
+      ownerChoose: string;
+      customerPending: string;
+    };
+  }
+> = {
+  ar: {
+    dateLocale: "ar-IQ",
+    errors: {
+      missing: "البيانات المطلوبة غير مكتملة.",
+      spinRequired: "يرجى تدوير عجلة الخصم قبل تأكيد الحجز.",
+      pastDate: "لا يمكن إنشاء حجز بتاريخ سابق.",
+      stationUnavailable: "المحطة غير متاحة حالياً.",
+      serviceMismatch: "الخدمة المحددة لا تنتمي إلى هذه المحطة.",
+      chooseTime: "يرجى اختيار وقت للحجز.",
+      slotTaken: "هذا الموعد محجوز بالفعل. اختر وقتاً آخر.",
+      verifyActiveBookings: "تعذر التحقق من عدد الحجوزات الحالية.",
+      activeLimit: "لا يمكن إنشاء أكثر من حجزين نشطين لنفس الرقم. ألغِ أحد الحجوزات الحالية أولاً.",
+      verifySpin: "تعذر التحقق من خصم عجلة الحظ.",
+      spinInvalid: "تعذر اعتماد نتيجة عجلة الخصم. أعد المحاولة مرة أخرى.",
+      saveFailed: "تعذر حفظ الحجز.",
+      duplicateAtStation: (bookingNo) => `لديك حجز سابق بالفعل برقم #${bookingNo} في هذه المحطة. يجب عليك إلغاء الحجز الحالي ثم الحجز من جديد.`,
+      unexpected: "حدث خطأ غير متوقع.",
+    },
+    ownerButtons: { approve: "✅ تأكيد", reject: "❌ رفض" },
+    labels: {
+      newMapBooking: "طلب حجز جديد من الخريطة",
+      station: "المحطة",
+      service: "الخدمة",
+      discount: "الخصم",
+      date: "التاريخ",
+      time: "الوقت",
+      bookingNo: "رقم الحجز",
+      customer: "العميل",
+      phone: "الهاتف",
+      ownerChoose: "اختر أحد الخيارات:",
+      customerPending: "الطلب الآن بانتظار موافقة صاحب المحطة، وسيصلك إشعار القبول أو الرفض على هذا الرقم.",
+    },
+  },
+  en: {
+    dateLocale: "en-US",
+    errors: {
+      missing: "Required booking data is incomplete.",
+      spinRequired: "Please spin the discount wheel before confirming.",
+      pastDate: "Cannot create a booking in the past.",
+      stationUnavailable: "Station is currently unavailable.",
+      serviceMismatch: "Selected service does not belong to this station.",
+      chooseTime: "Please choose a booking time.",
+      slotTaken: "This time slot is already booked. Choose another time.",
+      verifyActiveBookings: "Could not verify active bookings count.",
+      activeLimit: "You cannot have more than 2 active bookings for the same phone number.",
+      verifySpin: "Could not verify spin discount.",
+      spinInvalid: "Spin result is no longer valid. Please spin again.",
+      saveFailed: "Could not save booking.",
+      duplicateAtStation: (bookingNo) => `You already have an active booking #${bookingNo} at this station. Cancel it first to book again.`,
+      unexpected: "Unexpected error occurred.",
+    },
+    ownerButtons: { approve: "✅ Approve", reject: "❌ Reject" },
+    labels: {
+      newMapBooking: "New booking request from map",
+      station: "Station",
+      service: "Service",
+      discount: "Discount",
+      date: "Date",
+      time: "Time",
+      bookingNo: "Booking number",
+      customer: "Customer",
+      phone: "Phone",
+      ownerChoose: "Choose an action:",
+      customerPending: "Your request is pending station approval. You will receive an approve/reject update on this number.",
+    },
+  },
+  ku: {
+    dateLocale: "ckb-IQ",
+    errors: {
+      missing: "زانیاری پێویست تەواو نییە.",
+      spinRequired: "تکایە پێش پشتڕاستکردنەوە گەردی داشکاندن بگێڕە.",
+      pastDate: "ناتوانرێت بۆ ڕۆژی ڕابردوو حجز دروست بکرێت.",
+      stationUnavailable: "وێستگەکە ئێستا بەردەست نییە.",
+      serviceMismatch: "خزمەتگوزاری هەڵبژێردراو بۆ ئەم وێستگەیە نییە.",
+      chooseTime: "تکایە کاتی حجز هەڵبژێرە.",
+      slotTaken: "ئەم کاتە پڕکراوە. کاتێکی تر هەڵبژێرە.",
+      verifyActiveBookings: "ناتوانرێت ژمارەی حجزە چالاکەکان بپشکنرێت.",
+      activeLimit: "بۆ هەمان ژمارە زیاتر لە 2 حجزی چالاک ناتوانرێت دروست بکرێت.",
+      verifySpin: "ناتوانرێت داشکاندنی گەردەکە بپشکنرێت.",
+      spinInvalid: "ئەنجامی گەردەکە ناگونجاوە. تکایە دووبارە بگێڕە.",
+      saveFailed: "پاشەکەوتکردنی حجز سەرکەوتوو نەبوو.",
+      duplicateAtStation: (bookingNo) => `لەو وێستگەیە حجزێکی چالاکت هەیە (#${bookingNo}). سەرەتا هەڵیبوەشێنەوە.`,
+      unexpected: "هەڵەیەکی نەناسراو ڕوویدا.",
+    },
+    ownerButtons: { approve: "✅ پەسەندکردن", reject: "❌ ڕەتکردنەوە" },
+    labels: {
+      newMapBooking: "داواکاری حجزی نوێ لە نەخشە",
+      station: "وێستگە",
+      service: "خزمەتگوزاری",
+      discount: "داشکاندن",
+      date: "بەروار",
+      time: "کات",
+      bookingNo: "ژمارەی حجز",
+      customer: "کڕیار",
+      phone: "تەلەفۆن",
+      ownerChoose: "یەکێک هەڵبژێرە:",
+      customerPending: "داواکارییەکە چاوەڕێی پەسەندکردنی وێستگەیە. ئاگادارکردنەوە لەم ژمارەیە وەردەگریت.",
+    },
+  },
+  tr: {
+    dateLocale: "tr-TR",
+    errors: {
+      missing: "Gerekli rezervasyon bilgileri eksik.",
+      spinRequired: "Onaydan önce indirim çarkını çevirin.",
+      pastDate: "Geçmiş tarih için rezervasyon oluşturulamaz.",
+      stationUnavailable: "İstasyon şu anda uygun değil.",
+      serviceMismatch: "Seçilen hizmet bu istasyona ait değil.",
+      chooseTime: "Lütfen rezervasyon saatini seçin.",
+      slotTaken: "Bu saat dolu. Lütfen başka bir saat seçin.",
+      verifyActiveBookings: "Aktif rezervasyon sayısı doğrulanamadı.",
+      activeLimit: "Aynı numara için 2’den fazla aktif rezervasyon oluşturulamaz.",
+      verifySpin: "Çark indirimi doğrulanamadı.",
+      spinInvalid: "Çark sonucu geçersiz. Lütfen tekrar çevirin.",
+      saveFailed: "Rezervasyon kaydedilemedi.",
+      duplicateAtStation: (bookingNo) => `Bu istasyonda zaten aktif rezervasyonunuz var (#${bookingNo}). Yeniden rezervasyon için önce iptal edin.`,
+      unexpected: "Beklenmeyen bir hata oluştu.",
+    },
+    ownerButtons: { approve: "✅ Onayla", reject: "❌ Reddet" },
+    labels: {
+      newMapBooking: "Haritadan yeni rezervasyon talebi",
+      station: "İstasyon",
+      service: "Hizmet",
+      discount: "İndirim",
+      date: "Tarih",
+      time: "Saat",
+      bookingNo: "Rezervasyon no",
+      customer: "Müşteri",
+      phone: "Telefon",
+      ownerChoose: "Bir seçenek seçin:",
+      customerPending: "Talebiniz istasyon onayı bekliyor. Onay/red sonucu bu numaraya gönderilecek.",
+    },
+  },
+};
+
+function normalizeLanguage(value: unknown): Language {
+  if (value === "ar" || value === "en" || value === "ku" || value === "tr") return value;
+  return "ar";
+}
+
 function normalizePhone(phone: string): string {
   const cleaned = phone.replace(/[^\d+]/g, "").replace(/^\+/, "");
   if (/^07\d{9}$/.test(cleaned)) return `964${cleaned.substring(1)}`;
@@ -208,6 +385,8 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json();
+    const language = normalizeLanguage(body.language);
+    const tt = i18n[language];
     const stationId = body.station_id as string | undefined;
     const serviceId = body.service_id as string | undefined;
     const customerName = (body.customer_name as string | undefined)?.trim() || null;
@@ -219,14 +398,14 @@ Deno.serve(async (req) => {
     const customerPhone = normalizePhone(rawPhone);
 
     if (!stationId || !serviceId || !customerName || !customerPhone || !bookingDate) {
-      return new Response(JSON.stringify({ error: "البيانات المطلوبة غير مكتملة." }), {
+      return new Response(JSON.stringify({ error: tt.errors.missing }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (!spinToken || ![0, 5, 10, 15].includes(spinDiscountPercent)) {
-      return new Response(JSON.stringify({ error: "يرجى تدوير عجلة الخصم قبل تأكيد الحجز." }), {
+      return new Response(JSON.stringify({ error: tt.errors.spinRequired }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -234,7 +413,7 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().split("T")[0];
     if (bookingDate < today) {
-      return new Response(JSON.stringify({ error: "لا يمكن إنشاء حجز بتاريخ سابق." }), {
+      return new Response(JSON.stringify({ error: tt.errors.pastDate }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -256,21 +435,21 @@ Deno.serve(async (req) => {
     ]);
 
     if (!station) {
-      return new Response(JSON.stringify({ error: "المحطة غير متاحة حاليا." }), {
+      return new Response(JSON.stringify({ error: tt.errors.stationUnavailable }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (!service || (service.station_id && service.station_id !== stationId)) {
-      return new Response(JSON.stringify({ error: "الخدمة المحددة لا تنتمي إلى هذه المحطة." }), {
+      return new Response(JSON.stringify({ error: tt.errors.serviceMismatch }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (station.scheduling_type === "slots" && !bookingTime) {
-      return new Response(JSON.stringify({ error: "يرجى اختيار وقت للحجز." }), {
+      return new Response(JSON.stringify({ error: tt.errors.chooseTime }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -287,7 +466,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existingSlot) {
-        return new Response(JSON.stringify({ error: "هذا الموعد محجوز بالفعل. اختر وقتا آخر." }), {
+        return new Response(JSON.stringify({ error: tt.errors.slotTaken }), {
           status: 409,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -307,7 +486,7 @@ Deno.serve(async (req) => {
     if (existingCustomerBooking) {
       return new Response(
         JSON.stringify({
-          error: `لديك حجز سابق بالفعل برقم #${existingCustomerBooking.booking_number} في هذه المحطة. يجب عليك إلغاء الحجز الحالي ثم الحجز من جديد.`,
+          error: tt.errors.duplicateAtStation(existingCustomerBooking.booking_number),
         }),
         {
           status: 409,
@@ -323,7 +502,7 @@ Deno.serve(async (req) => {
       .in("status", ["pending", "confirmed"]);
 
     if (activeBookingsError) {
-      return new Response(JSON.stringify({ error: "تعذر التحقق من عدد الحجوزات الحالية." }), {
+      return new Response(JSON.stringify({ error: tt.errors.verifyActiveBookings }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -332,7 +511,7 @@ Deno.serve(async (req) => {
     if ((activeBookingsCount || 0) >= 2) {
       return new Response(
         JSON.stringify({
-          error: "لا يمكن إنشاء أكثر من حجزين نشطين لنفس الرقم. ألغ أحد الحجوزات الحالية أولاً.",
+          error: tt.errors.activeLimit,
         }),
         {
           status: 409,
@@ -343,7 +522,7 @@ Deno.serve(async (req) => {
 
     const spinSecret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!spinSecret) {
-      return new Response(JSON.stringify({ error: "تعذر التحقق من خصم عجلة الحظ." }), {
+      return new Response(JSON.stringify({ error: tt.errors.verifySpin }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -363,7 +542,7 @@ Deno.serve(async (req) => {
     );
 
     if (!isSpinValid) {
-      return new Response(JSON.stringify({ error: "تعذر اعتماد نتيجة عجلة الخصم. أعد المحاولة مرة أخرى." }), {
+      return new Response(JSON.stringify({ error: tt.errors.spinInvalid }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -400,7 +579,7 @@ Deno.serve(async (req) => {
       .single();
 
     if (bookingError || !booking) {
-      return new Response(JSON.stringify({ error: bookingError?.message || "تعذر حفظ الحجز." }), {
+      return new Response(JSON.stringify({ error: bookingError?.message || tt.errors.saveFailed }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -423,12 +602,12 @@ Deno.serve(async (req) => {
     const owner = ownerResult.data;
     const adminUser = adminResult.data;
     const stationName = owner?.stations?.name || station.name;
-    const summary = `حجز جديد #${booking.booking_number} - ${service.name} - ${bookingDate} ${formatTime(bookingTime)} - الخصم ${spinDiscountPercent}%`;
+    const summary = `${tt.labels.newMapBooking} #${booking.booking_number} - ${service.name} - ${bookingDate} ${formatTime(bookingTime)} - ${tt.labels.discount} ${spinDiscountPercent}%`;
 
     if (owner?.user_id) {
       await supabase.from("notifications").insert({
         user_id: owner.user_id,
-        title: "حجز جديد من الخريطة",
+        title: tt.labels.newMapBooking,
         body: summary,
         type: "booking",
         reference_id: booking.id,
@@ -438,14 +617,14 @@ Deno.serve(async (req) => {
     if (adminUser?.user_id) {
       await supabase.from("notifications").insert({
         user_id: adminUser.user_id,
-        title: "حجز جديد من الخريطة",
+        title: tt.labels.newMapBooking,
         body: `${customerName} - ${stationName} - ${summary}`,
         type: "booking",
         reference_id: booking.id,
       });
     }
 
-    const dateLabel = new Date(bookingDate).toLocaleDateString("ar-IQ", {
+    const dateLabel = new Date(bookingDate).toLocaleDateString(tt.dateLocale, {
       calendar: "gregory",
       weekday: "long",
       year: "numeric",
@@ -453,12 +632,12 @@ Deno.serve(async (req) => {
       day: "numeric",
     });
 
-    const pendingMsg = `📩 تم استلام طلب حجزك من الخريطة.\n\n🏪 المحطة: ${stationName}\n🧽 الخدمة: ${service.name}\n🎯 الخصم: (${spinDiscountPercent})%\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${formatTime(bookingTime)}\n🔢 رقم الحجز: #${booking.booking_number}\n\n⏳ الطلب الآن بانتظار موافقة صاحب المحطة، وسيصلك إشعار القبول أو الرفض على هذا الرقم.`;
+    const pendingMsg = `📩 ${tt.labels.newMapBooking}\n\n🏪 ${tt.labels.station}: ${stationName}\n🧽 ${tt.labels.service}: ${service.name}\n🎯 ${tt.labels.discount}: (${spinDiscountPercent})%\n📅 ${tt.labels.date}: ${dateLabel}\n⏰ ${tt.labels.time}: ${formatTime(bookingTime)}\n🔢 ${tt.labels.bookingNo}: #${booking.booking_number}\n\n⏳ ${tt.labels.customerPending}`;
     const notificationTasks: Promise<unknown>[] = [sendWhatsAppMessage(customerPhone, pendingMsg, settings)];
 
     if (owner?.owner_phone) {
       const ownerPhone = normalizePhone(owner.owner_phone);
-      const ownerMsg = `📢 طلب حجز جديد من الخريطة!\n\n🏪 المحطة: ${stationName}\n🔢 رقم الحجز: #${booking.booking_number}\n👤 العميل: ${customerName}\n📱 الهاتف: ${customerPhone}\n🧽 الخدمة: ${service.name}\n🎯 الخصم: (${spinDiscountPercent})%\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${formatTime(bookingTime)}\n\nاختر أحد الخيارات:`;
+      const ownerMsg = `📢 ${tt.labels.newMapBooking}!\n\n🏪 ${tt.labels.station}: ${stationName}\n🔢 ${tt.labels.bookingNo}: #${booking.booking_number}\n👤 ${tt.labels.customer}: ${customerName}\n📱 ${tt.labels.phone}: ${customerPhone}\n🧽 ${tt.labels.service}: ${service.name}\n🎯 ${tt.labels.discount}: (${spinDiscountPercent})%\n📅 ${tt.labels.date}: ${dateLabel}\n⏰ ${tt.labels.time}: ${formatTime(bookingTime)}\n\n${tt.labels.ownerChoose}`;
 
       await getOrCreateSession(supabase, ownerPhone);
       await updateSession(supabase, ownerPhone, {
@@ -472,8 +651,8 @@ Deno.serve(async (req) => {
           ownerPhone,
           ownerMsg,
           [
-            { id: "approve_yes", title: "✅ تأكيد" },
-            { id: "approve_no", title: "❌ رفض" },
+            { id: "approve_yes", title: tt.ownerButtons.approve },
+            { id: "approve_no", title: tt.ownerButtons.reject },
           ],
           settings,
         ),
@@ -495,7 +674,7 @@ Deno.serve(async (req) => {
       },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "حدث خطأ غير متوقع.";
+    const message = error instanceof Error ? error.message : i18n.ar.errors.unexpected;
 
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
