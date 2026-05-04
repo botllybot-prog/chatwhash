@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { consumeStationRequestQuota } from "../_shared/request-packages.ts";
+import { sendWhatsAppInteractiveReliable, sendWhatsAppTextReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -221,45 +222,54 @@ function downloadAndStoreMedia(mediaId: string, accessToken: string, supabase: a
 
 // ==================== MESSAGING ====================
 
-async function sendWhatsAppMessage(phone: string, message: string, settings: Record<string, string>) {
-  const token = settings.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneId) return null;
-  try {
-    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ messaging_product: "whatsapp", to: phone, type: "text", text: { body: message } }),
-    });
-    const data = await res.json();
-    return data.messages?.[0]?.id || null;
-  } catch { return null; }
+async function sendWhatsAppMessage(
+  phone: string,
+  message: string,
+  settings: Record<string, string>,
+  language?: BookingLanguage,
+) {
+  const result = await sendWhatsAppTextReliable({
+    phone,
+    message,
+    settings,
+    language,
+  });
+  if (!result.ok) {
+    console.error("[whatsapp-webhook] WhatsApp text send failed:", result.error);
+  }
+  return result.messageId;
 }
 
-async function sendWhatsAppInteractive(phone: string, body: string, buttons: { id: string; title: string }[], settings: Record<string, string>) {
-  const token = settings.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneId) return null;
-  try {
-    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messaging_product: "whatsapp", to: phone, type: "interactive",
-        interactive: {
-          type: "button", body: { text: body },
-          action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) },
-        },
-      }),
-    });
-    const data = await res.json();
-    return data.messages?.[0]?.id || null;
-  } catch { return null; }
+async function sendWhatsAppInteractive(
+  phone: string,
+  body: string,
+  buttons: { id: string; title: string }[],
+  settings: Record<string, string>,
+  language?: BookingLanguage,
+) {
+  const result = await sendWhatsAppInteractiveReliable({
+    phone,
+    body,
+    buttons,
+    settings,
+    language,
+  });
+  if (!result.ok) {
+    console.error("[whatsapp-webhook] WhatsApp interactive send failed:", result.error);
+  }
+  return result.messageId;
 }
 
 // Fire-and-forget: send message + save to DB in parallel (don't block on DB save)
-async function sendAndSave(supabase: any, convId: string, phone: string, message: string, settings: Record<string, string>) {
-  const waId = await sendWhatsAppMessage(phone, message, settings);
+async function sendAndSave(
+  supabase: any,
+  convId: string,
+  phone: string,
+  message: string,
+  settings: Record<string, string>,
+  language?: BookingLanguage,
+) {
+  const waId = await sendWhatsAppMessage(phone, message, settings, language);
   // Save to DB without blocking the caller
   saveBotMessage(supabase, convId, message, waId);
   return waId;
@@ -565,7 +575,7 @@ async function confirmBookingAndNotifyCustomer(
         custMsg += `\n\n${bl.enjoy}`;
       }
 
-      await sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings);
+      await sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings, language);
 
       // Google Maps link
       const stationData = booking.stations as any;
@@ -575,19 +585,19 @@ async function confirmBookingAndNotifyCustomer(
       if (lat && lng) {
         const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
         const locationMsg = `${bl.locationOnMap}\n${stationAddress ? stationAddress + "\n" : ""}${mapsUrl}`;
-        await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings);
+        await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings, language);
       } else if (stationAddress) {
         const encoded = encodeURIComponent(stationAddress);
         const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
         const locationMsg = `${bl.location}\n${stationAddress}\n${mapsUrl}`;
-        await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings);
+        await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings, language);
       }
 
       // Follow-up buttons for customer
       const followWaId = await sendWhatsAppInteractive(booking.customer_phone, bt.whatNext, [
         { id: "btn_bookings", title: bt.myBookings },
         { id: "btn_menu", title: bt.mainMenu },
-      ], settings);
+      ], settings, language);
       saveBotMessage(supabase, custConvId, "أزرار بعد التأكيد", followWaId);
       updateSession(supabase, booking.customer_phone, { current_step: "idle" });
     }
@@ -827,7 +837,7 @@ async function handleOwnerLogic(
             `${bl.rejectedBody}`;
           const custWaId = await sendWhatsAppInteractive(booking.customer_phone, custMsg, [
             { id: "btn_menu", title: bl.rebookBtn },
-          ], settings);
+          ], settings, language);
           saveBotMessage(supabase, custConvId, custMsg, custWaId);
           updateSession(supabase, booking.customer_phone, { current_step: "idle" });
         }
@@ -927,7 +937,7 @@ async function handleOwnerLogic(
       const custWaId = await sendWhatsAppInteractive(custPhone, custMsg, [
         { id: "new_time_accept", title: bt.agreeBtn },
         { id: "new_time_reject", title: bt.searchAnother },
-      ], settings);
+      ], settings, language);
       if (custWaId) {
         updateSession(supabase, custPhone, {
           current_step: "awaiting_new_time_approval",
@@ -1614,12 +1624,12 @@ async function handleCustomerLogic(
         `🕐 ${bl.time}: ${timeLabel}\n` +
         `📋 ${bl.bookingNo}: #${pb.booking_number}\n\n` +
         `${bl.enjoy}`;
-      await sendAndSave(supabase, convId, phone, custConfirmMsg, settings);
+      await sendAndSave(supabase, convId, phone, custConfirmMsg, settings, language);
       // Follow-up buttons for customer
       const acceptFollowWaId = await sendWhatsAppInteractive(phone, bt.whatNext, [
         { id: "btn_bookings", title: bt.myBookings },
         { id: "btn_menu", title: bt.mainMenu },
-      ], settings);
+      ], settings, language);
       saveBotMessage(supabase, convId, "أزرار بعد قبول الوقت البديل", acceptFollowWaId);
       updateSession(supabase, phone, { current_step: "idle", pending_booking_id: null });
       // Notify station owner
@@ -1649,7 +1659,8 @@ async function handleCustomerLogic(
       const rejectWaId = await sendWhatsAppInteractive(phone,
         `${bt.rejectedNewTime}\n\n${bt.searchAnother}:`,
         [{ id: "btn_search", title: bt.searchAnother }, { id: "btn_menu", title: bt.mainMenu }],
-        settings);
+        settings,
+        language);
       saveBotMessage(supabase, convId, "رفض الوقت البديل", rejectWaId);
       return true;
     }
@@ -1662,7 +1673,8 @@ async function handleCustomerLogic(
     const fbWaId = await sendWhatsAppInteractive(phone,
       `${bt.proposedTimeBody(stationName, propTimeLabel)}`,
       [{ id: "new_time_accept", title: bt.agreeBtn }, { id: "new_time_reject", title: bt.searchAnother }],
-      settings);
+      settings,
+      language);
     saveBotMessage(supabase, convId, "إعادة إرسال اقتراح الوقت", fbWaId);
     return true;
   }

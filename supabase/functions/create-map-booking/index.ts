@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { consumeStationRequestQuota, loadAppSettings } from "../_shared/request-packages.ts";
+import { sendWhatsAppInteractiveReliable, sendWhatsAppTextReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -258,25 +259,18 @@ async function sendWhatsAppMessage(
   phone: string,
   message: string,
   settings: Record<string, string>,
+  language?: Language,
 ) {
-  const token = settings.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
-
-  if (!token || !phoneId || !phone) return;
-
-  await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: phone,
-      type: "text",
-      text: { body: message },
-    }),
+  const result = await sendWhatsAppTextReliable({
+    phone,
+    message,
+    settings,
+    language,
   });
+
+  if (!result.ok) {
+    console.error("[create-map-booking] WhatsApp text send failed:", result.error);
+  }
 }
 
 async function sendWhatsAppInteractive(
@@ -284,40 +278,21 @@ async function sendWhatsAppInteractive(
   body: string,
   buttons: { id: string; title: string }[],
   settings: Record<string, string>,
+  language?: Language,
 ) {
-  const token = settings.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
-
-  if (!token || !phoneId || !phone) return null;
-
-  const response = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: phone,
-      type: "interactive",
-      interactive: {
-        type: "button",
-        body: { text: body },
-        action: {
-          buttons: buttons.map((button) => ({
-            type: "reply",
-            reply: {
-              id: button.id,
-              title: button.title,
-            },
-          })),
-        },
-      },
-    }),
+  const result = await sendWhatsAppInteractiveReliable({
+    phone,
+    body,
+    buttons,
+    settings,
+    language,
   });
 
-  const data = await response.json();
-  return data?.messages?.[0]?.id || null;
+  if (!result.ok) {
+    console.error("[create-map-booking] WhatsApp interactive send failed:", result.error);
+  }
+
+  return result.messageId;
 }
 
 async function getOrCreateSession(supabase: ReturnType<typeof createClient>, phone: string) {
@@ -653,7 +628,7 @@ Deno.serve(async (req) => {
     });
 
     const pendingMsg = `📩 ${tt.labels.newMapBooking}\n\n🏪 ${tt.labels.station}: ${stationName}\n🧽 ${tt.labels.service}: ${service.name}\n🎯 ${tt.labels.discount}: (${spinDiscountPercent})%\n📅 ${tt.labels.date}: ${dateLabel}\n⏰ ${tt.labels.time}: ${formatTime(bookingTime)}\n🔢 ${tt.labels.bookingNo}: #${booking.booking_number}\n\n⏳ ${tt.labels.customerPending}`;
-    const notificationTasks: Promise<unknown>[] = [sendWhatsAppMessage(customerPhone, pendingMsg, settings)];
+    const notificationTasks: Promise<unknown>[] = [sendWhatsAppMessage(customerPhone, pendingMsg, settings, language)];
 
     if (owner?.owner_phone) {
       const ownerPhone = normalizePhone(owner.owner_phone);
@@ -675,6 +650,7 @@ Deno.serve(async (req) => {
             { id: "approve_no", title: tt.ownerButtons.reject },
           ],
           settings,
+          language,
         ),
       );
     }

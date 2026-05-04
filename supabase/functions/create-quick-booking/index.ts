@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendWhatsAppInteractiveReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -174,37 +175,21 @@ async function sendWhatsAppInteractive(
   body: string,
   buttons: { id: string; title: string }[],
   settings: Record<string, string>,
+  language?: Language,
 ) {
-  const token = settings.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneId) return null;
-
-  const response = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to,
-      type: "interactive",
-      interactive: {
-        type: "button",
-        body: { text: body },
-        action: {
-          buttons: buttons.map((b) => ({
-            type: "reply",
-            reply: { id: b.id, title: b.title },
-          })),
-        },
-      },
-    }),
+  const result = await sendWhatsAppInteractiveReliable({
+    phone: to,
+    body,
+    buttons,
+    settings,
+    language,
   });
 
-  if (!response.ok) return null;
-  const data = await response.json();
-  return data?.messages?.[0]?.id ?? null;
+  if (!result.ok) {
+    console.error("[create-quick-booking] WhatsApp interactive send failed:", result.error);
+  }
+
+  return result.messageId;
 }
 
 Deno.serve(async (req) => {
@@ -422,6 +407,7 @@ Deno.serve(async (req) => {
             { id: `change_time_${booking.id}`, title: msg.changeTime },
           ],
           settings,
+          language,
         );
 
         await supabase.from("bot_sessions").upsert(

@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendWhatsAppTextReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,25 +31,18 @@ async function sendWhatsAppMessage(
   phone: string,
   message: string,
   settings: Record<string, string>,
+  language?: string,
 ) {
-  const token = settings.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
-
-  if (!token || !phoneId || !phone) return;
-
-  await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: phone,
-      type: "text",
-      text: { body: message },
-    }),
+  const result = await sendWhatsAppTextReliable({
+    phone,
+    message,
+    settings,
+    language,
   });
+
+  if (!result.ok) {
+    console.error("[cancel-map-booking] WhatsApp send failed:", result.error);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -89,6 +83,7 @@ Deno.serve(async (req) => {
         customer_phone,
         booking_date,
         booking_time,
+        booking_language,
         status,
         station_id,
         spin_discount_percent,
@@ -167,12 +162,12 @@ Deno.serve(async (req) => {
     const customerName = booking.customer_name || customerPhone;
 
     const customerCancelMsg = `تم إلغاء الحجز #${booking.booking_number} بناءً على طلبك من الخريطة. ✅\n\n🏪 المحطة: ${stationName}\n🔧 الخدمة: ${serviceName}\n🎯 الخصم: (${booking.spin_discount_percent || 0})%\n📅 التاريخ: ${dateLabel}\n⏰ الوقت: ${formatTime(booking.booking_time)}\n\nيمكنك الآن إنشاء حجز جديد إذا رغبت.`;
-    await sendWhatsAppMessage(customerPhone, customerCancelMsg, settings);
+    await sendWhatsAppMessage(customerPhone, customerCancelMsg, settings, booking.booking_language || "ar");
 
     if (ownerResult.data?.owner_phone) {
       const ownerPhone = normalizePhone(ownerResult.data.owner_phone);
       const ownerCancelMsg = `⚠️ الزبون قام بإلغاء الحجز.\n\n📋 رقم الحجز: #${booking.booking_number}\n👤 العميل: ${customerName}\n🏪 المحطة: ${stationName}\n🔧 الخدمة: ${serviceName}\n🎯 الخصم: (${booking.spin_discount_percent || 0})%\n📅 التاريخ: ${dateLabel}\n🕐 الوقت: ${formatTime(booking.booking_time)}`;
-      await sendWhatsAppMessage(ownerPhone, ownerCancelMsg, settings);
+      await sendWhatsAppMessage(ownerPhone, ownerCancelMsg, settings, booking.booking_language || "ar");
     }
 
     if (ownerResult.data?.user_id) {

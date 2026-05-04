@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendWhatsAppTextReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -105,24 +106,22 @@ async function getSettings(supabase: ReturnType<typeof createClient>) {
   return settings;
 }
 
-async function sendWhatsAppMessage(phone: string, message: string, settings: Record<string, string>) {
-  const token = settings.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneId || !phone) return;
-
-  await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: phone,
-      type: "text",
-      text: { body: message },
-    }),
+async function sendWhatsAppMessage(
+  phone: string,
+  message: string,
+  settings: Record<string, string>,
+  language?: string,
+) {
+  const result = await sendWhatsAppTextReliable({
+    phone,
+    message,
+    settings,
+    language,
   });
+
+  if (!result.ok) {
+    console.error("[cancel-all-map-bookings] WhatsApp send failed:", result.error);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -235,7 +234,8 @@ Deno.serve(async (req) => {
       await sendWhatsAppMessage(
         customerPhone,
         tt.customerCancelled(booking.booking_number, stationName, serviceName, dateLabel, timeLabel),
-        settings
+        settings,
+        language,
       );
 
       const { data: owner } = await supabase
@@ -249,7 +249,8 @@ Deno.serve(async (req) => {
         await sendWhatsAppMessage(
           ownerPhone,
           tt.ownerCancelled(booking.booking_number, customerName, stationName, serviceName, dateLabel, timeLabel),
-          settings
+          settings,
+          language,
         );
       }
     }
