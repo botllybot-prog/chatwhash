@@ -489,12 +489,22 @@ const OwnerAccess = () => {
       return;
     }
 
+    if (!window.isSecureContext && window.location.hostname !== "localhost") {
+      toast({ title: t.locateFailed, variant: "destructive" });
+      return;
+    }
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
         toast({ title: t.located });
       },
       () => toast({ title: t.locateFailed, variant: "destructive" }),
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      },
     );
   };
 

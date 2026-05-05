@@ -152,7 +152,19 @@ export async function sendWhatsAppTextReliable(params: {
 
   const fallback = await sendTemplateFallback(settings, phone, message, language);
   if (fallback.ok) {
-    return { ok: true, messageId: fallback.messageId, usedTemplateFallback: true };
+    // Once the approved template wakes the chat outside the 24h window,
+    // retry the plain text so the recipient sees the full live message too.
+    const followUp = await sendRaw(settings, {
+      to: normalizePhone(phone),
+      type: "text",
+      text: { body: message },
+    });
+
+    return {
+      ok: true,
+      messageId: followUp.messageId || fallback.messageId,
+      usedTemplateFallback: true,
+    };
   }
 
   return {
