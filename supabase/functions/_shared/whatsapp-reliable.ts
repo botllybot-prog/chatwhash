@@ -26,16 +26,22 @@ function normalizeTemplateLanguage(code: string | undefined): string {
   return value;
 }
 
-function isOutsideSessionWindow(status: number, data: any): boolean {
-  const code = Number(data?.error?.code || 0);
-  const text = String(data?.error?.message || "").toLowerCase();
+function getFallbackTemplateName(settings: Record<string, string>): string {
+  return (
+    settings.WHATSAPP_UTILITY_TEMPLATE_NAME ||
+    settings.WHATSAPP_FALLBACK_TEMPLATE_NAME ||
+    ""
+  ).trim();
+}
 
-  if (code === 131047 || code === 470) return true;
-  if (status === 470) return true;
-  if (text.includes("24 hour") || text.includes("outside the allowed window") || text.includes("re-engagement")) {
-    return true;
-  }
-  return false;
+function getFallbackTemplateLanguage(settings: Record<string, string>, language?: string): string {
+  // Prefer the approved template language configured in Supabase. This avoids
+  // sending "en", "ku", or "tr" when only the Arabic template is approved.
+  return normalizeTemplateLanguage(
+    settings.WHATSAPP_UTILITY_TEMPLATE_LANG ||
+      settings.WHATSAPP_FALLBACK_TEMPLATE_LANG ||
+      language,
+  );
 }
 
 async function sendRaw(
@@ -81,13 +87,8 @@ async function sendTemplateFallback(
   plainText: string,
   language?: string,
 ): Promise<SendRawResult> {
-  const templateName =
-    settings.WHATSAPP_UTILITY_TEMPLATE_NAME ||
-    settings.WHATSAPP_FALLBACK_TEMPLATE_NAME ||
-    "";
-  const templateLang = normalizeTemplateLanguage(
-    language || settings.WHATSAPP_UTILITY_TEMPLATE_LANG || settings.WHATSAPP_FALLBACK_TEMPLATE_LANG,
-  );
+  const templateName = getFallbackTemplateName(settings);
+  const templateLang = getFallbackTemplateLanguage(settings, language);
 
   if (!templateName) {
     return {
@@ -140,7 +141,7 @@ export async function sendWhatsAppTextReliable(params: {
     return { ok: true, messageId: direct.messageId, usedTemplateFallback: false };
   }
 
-  if (!isOutsideSessionWindow(direct.status, direct.data)) {
+  if (!getFallbackTemplateName(settings)) {
     return {
       ok: false,
       messageId: null,
@@ -158,7 +159,11 @@ export async function sendWhatsAppTextReliable(params: {
     ok: false,
     messageId: null,
     usedTemplateFallback: true,
-    error: String(fallback?.data?.error?.message || "Template fallback send failed."),
+    error: String(
+      fallback?.data?.error?.message ||
+        direct?.data?.error?.message ||
+        "Template fallback send failed.",
+    ),
   };
 }
 
@@ -194,7 +199,7 @@ export async function sendWhatsAppInteractiveReliable(params: {
     return { ok: true, messageId: direct.messageId, usedTemplateFallback: false };
   }
 
-  if (!isOutsideSessionWindow(direct.status, direct.data)) {
+  if (!getFallbackTemplateName(settings)) {
     return {
       ok: false,
       messageId: null,
@@ -216,6 +221,10 @@ export async function sendWhatsAppInteractiveReliable(params: {
     ok: false,
     messageId: null,
     usedTemplateFallback: true,
-    error: String(fallback?.data?.error?.message || "Template fallback send failed."),
+    error: String(
+      fallback?.data?.error?.message ||
+        direct?.data?.error?.message ||
+        "Template fallback send failed.",
+    ),
   };
 }
