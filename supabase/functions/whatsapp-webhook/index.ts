@@ -805,6 +805,17 @@ async function handleOwnerLogic(
 
     // ── تأكيد ──
     if (input === "تأكيد" || input === "approve_yes" || input === "موافق") {
+      const { data: quickTarget } = await supabase
+        .from("quick_booking_targets")
+        .select("id")
+        .eq("booking_id", bookingId)
+        .maybeSingle();
+
+      if (quickTarget) {
+        await confirmBookingAndNotifyCustomer(supabase, phone, convId, settings, owner, bookingId, null, null);
+        return true;
+      }
+
       // Ask for optional offer/note before sending confirmation
       const waId = await sendWhatsAppInteractive(phone, "✅ ممتاز!\n\nهل تريد إضافة عرض أو ملاحظة للعميل؟", [
         { id: "owner_offer_skip", title: "⏭️ لا، أرسل التأكيد" },
