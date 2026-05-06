@@ -1,6 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { consumeStationRequestQuota } from "../_shared/request-packages.ts";
-import { sendWhatsAppInteractiveReliable, sendWhatsAppTextReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,166 +13,6 @@ function normalizePhone(phone: string): string {
   // Iraqi local → international: 07XXXXXXXXX (11 digits) → 9647XXXXXXXXX
   if (/^07\d{9}$/.test(cleaned)) return "964" + cleaned.substring(1);
   return cleaned;
-}
-
-type BookingLanguage = "ar" | "en" | "ku" | "tr";
-
-function normalizeBookingLanguage(value: unknown): BookingLanguage {
-  if (value === "ar" || value === "en" || value === "ku" || value === "tr") return value;
-  return "ar";
-}
-
-const bookingLanguageI18n = {
-  ar: {
-    dateLocale: "ar-IQ",
-    confirmedTitle: "✅ تم تأكيد حجزك!",
-    rejectedTitle: "❌ تم رفض الحجز",
-    proposedTimeTitle: "⚠️ تحديث بخصوص حجزك",
-    proposedTimeBody: (stationName: string, timeLabel: string) =>
-      `عذراً، المغسلة مزدحمة في الوقت المطلوب.\nلقد اقترحت إدارة مغسلة ${stationName} موعداً بديلاً في الساعة (${timeLabel}).\n\nهل توافق؟`,
-    acceptedNewTime: "✅ تم تأكيد حجزك بالوقت الجديد!",
-    rejectedNewTime: "❌ تم رفض الوقت البديل وإلغاء الحجز.",
-    whatNext: "ماذا تريد أن تفعل؟",
-    searchAnother: "🔍 ابحث عن مغسلة",
-    mainMenu: "🏠 القائمة الرئيسية",
-    myBookings: "📋 حجوزاتي",
-    agreeBtn: "✅ موافق",
-  },
-  en: {
-    dateLocale: "en-US",
-    confirmedTitle: "✅ Your booking is confirmed!",
-    rejectedTitle: "❌ Booking rejected",
-    proposedTimeTitle: "⚠️ Update about your booking",
-    proposedTimeBody: (stationName: string, timeLabel: string) =>
-      `Sorry, the station is busy at your requested time.\n${stationName} proposed a new time at (${timeLabel}).\n\nDo you agree?`,
-    acceptedNewTime: "✅ Your booking was confirmed with the new time!",
-    rejectedNewTime: "❌ New time rejected and booking cancelled.",
-    whatNext: "What would you like to do?",
-    searchAnother: "🔍 Find another station",
-    mainMenu: "🏠 Main menu",
-    myBookings: "📋 My bookings",
-    agreeBtn: "✅ Agree",
-  },
-  ku: {
-    dateLocale: "ckb-IQ",
-    confirmedTitle: "✅ حجزەکەت پشتڕاست کرایەوە!",
-    rejectedTitle: "❌ حجزەکە ڕەتکرایەوە",
-    proposedTimeTitle: "⚠️ نوێکردنەوە سەبارەت بە حجزەکەت",
-    proposedTimeBody: (stationName: string, timeLabel: string) =>
-      `ببورە، وێستگەکە لەو کاتەدا قەرەباڵغە.\nبەڕێوەبەرایەتی ${stationName} کاتێکی جێگرەوەی پێشنیار کردووە (${timeLabel}).\n\nپەسەندتە؟`,
-    acceptedNewTime: "✅ حجزەکەت بە کاتی نوێ پشتڕاست کرایەوە!",
-    rejectedNewTime: "❌ کاتی جێگرەوە ڕەتکرایەوە و حجزەکە هەڵوەشێندرایەوە.",
-    whatNext: "چی دەتەوێت بکەیت؟",
-    searchAnother: "🔍 وێستگەیەکی تر بدۆزەوە",
-    mainMenu: "🏠 لیستی سەرەکی",
-    myBookings: "📋 حجزەکانم",
-    agreeBtn: "✅ پەسەندە",
-  },
-  tr: {
-    dateLocale: "tr-TR",
-    confirmedTitle: "✅ Rezervasyonunuz onaylandı!",
-    rejectedTitle: "❌ Rezervasyon reddedildi",
-    proposedTimeTitle: "⚠️ Rezervasyon güncellemesi",
-    proposedTimeBody: (stationName: string, timeLabel: string) =>
-      `Üzgünüz, istasyon istediğiniz saatte yoğun.\n${stationName} için alternatif saat önerildi (${timeLabel}).\n\nKabul ediyor musunuz?`,
-    acceptedNewTime: "✅ Rezervasyonunuz yeni saat ile onaylandı!",
-    rejectedNewTime: "❌ Yeni saat reddedildi ve rezervasyon iptal edildi.",
-    whatNext: "Ne yapmak istersiniz?",
-    searchAnother: "🔍 Başka istasyon ara",
-    mainMenu: "🏠 Ana menü",
-    myBookings: "📋 Rezervasyonlarım",
-    agreeBtn: "✅ Kabul",
-  },
-} as const;
-
-function formatDateByLanguage(dateStr: string, language: BookingLanguage): string {
-  try {
-    return new Date(dateStr).toLocaleDateString(bookingLanguageI18n[language].dateLocale, {
-      calendar: "gregory",
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    } as Intl.DateTimeFormatOptions);
-  } catch {
-    return dateStr;
-  }
-}
-
-const bookingLanguageLabels = {
-  ar: {
-    station: "المحطة",
-    service: "الخدمة",
-    price: "السعر",
-    date: "التاريخ",
-    time: "الوقت",
-    bookingNo: "رقم الحجز",
-    specialOffer: "عرض خاص",
-    note: "ملاحظة",
-    enjoy: "نتمنى لك تجربة رائعة! 🚗✨",
-    rejectedBody: "عذراً على الإزعاج. يمكنك الحجز في وقت آخر.",
-    rebookBtn: "🔄 احجز من جديد",
-    locationOnMap: "📍 موقع المغسلة على الخريطة:",
-    location: "📍 موقع المغسلة:",
-  },
-  en: {
-    station: "Station",
-    service: "Service",
-    price: "Price",
-    date: "Date",
-    time: "Time",
-    bookingNo: "Booking #",
-    specialOffer: "Special offer",
-    note: "Note",
-    enjoy: "We wish you a great experience! 🚗✨",
-    rejectedBody: "Sorry for the inconvenience. You can book another time.",
-    rebookBtn: "🔄 Book again",
-    locationOnMap: "📍 Station location on map:",
-    location: "📍 Station location:",
-  },
-  ku: {
-    station: "وێستگە",
-    service: "خزمەتگوزاری",
-    price: "نرخ",
-    date: "بەروار",
-    time: "کات",
-    bookingNo: "ژمارەی حجز",
-    specialOffer: "ئۆفەری تایبەت",
-    note: "تێبینی",
-    enjoy: "هیوادارین ئەزموونێکی جوانت هەبێت! 🚗✨",
-    rejectedBody: "ببورە بۆ ناڕەحەتی. دەتوانیت لە کاتێکی تر حجز بکەیت.",
-    rebookBtn: "🔄 دووبارە حجز بکە",
-    locationOnMap: "📍 شوێنی وێستگە لە نەخشە:",
-    location: "📍 شوێنی وێستگە:",
-  },
-  tr: {
-    station: "İstasyon",
-    service: "Hizmet",
-    price: "Fiyat",
-    date: "Tarih",
-    time: "Saat",
-    bookingNo: "Rezervasyon #",
-    specialOffer: "Özel teklif",
-    note: "Not",
-    enjoy: "Harika bir deneyim dileriz! 🚗✨",
-    rejectedBody: "Üzgünüz. Başka bir saate tekrar rezervasyon yapabilirsiniz.",
-    rebookBtn: "🔄 Tekrar rezervasyon",
-    locationOnMap: "📍 İstasyon konumu (harita):",
-    location: "📍 İstasyon konumu:",
-  },
-} as const;
-
-function to12HourByLanguage(time24: string, language: BookingLanguage): string {
-  const parts = time24.split(":");
-  const h = parseInt(parts[0]);
-  const m = parseInt(parts[1]);
-  const pm = h >= 12;
-  let period = pm ? "مساءً" : "صباحاً";
-  if (language === "en") period = pm ? "PM" : "AM";
-  if (language === "tr") period = pm ? "ÖS" : "ÖÖ";
-  if (language === "ku") period = pm ? "ئێوارە" : "بەیانی";
-  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 async function getSettings(supabase: any) {
@@ -222,54 +61,45 @@ function downloadAndStoreMedia(mediaId: string, accessToken: string, supabase: a
 
 // ==================== MESSAGING ====================
 
-async function sendWhatsAppMessage(
-  phone: string,
-  message: string,
-  settings: Record<string, string>,
-  language?: BookingLanguage,
-) {
-  const result = await sendWhatsAppTextReliable({
-    phone,
-    message,
-    settings,
-    language,
-  });
-  if (!result.ok) {
-    console.error("[whatsapp-webhook] WhatsApp text send failed:", result.error);
-  }
-  return result.messageId;
+async function sendWhatsAppMessage(phone: string, message: string, settings: Record<string, string>) {
+  const token = settings.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId) return null;
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to: phone, type: "text", text: { body: message } }),
+    });
+    const data = await res.json();
+    return data.messages?.[0]?.id || null;
+  } catch { return null; }
 }
 
-async function sendWhatsAppInteractive(
-  phone: string,
-  body: string,
-  buttons: { id: string; title: string }[],
-  settings: Record<string, string>,
-  language?: BookingLanguage,
-) {
-  const result = await sendWhatsAppInteractiveReliable({
-    phone,
-    body,
-    buttons,
-    settings,
-    language,
-  });
-  if (!result.ok) {
-    console.error("[whatsapp-webhook] WhatsApp interactive send failed:", result.error);
-  }
-  return result.messageId;
+async function sendWhatsAppInteractive(phone: string, body: string, buttons: { id: string; title: string }[], settings: Record<string, string>) {
+  const token = settings.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId) return null;
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp", to: phone, type: "interactive",
+        interactive: {
+          type: "button", body: { text: body },
+          action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) },
+        },
+      }),
+    });
+    const data = await res.json();
+    return data.messages?.[0]?.id || null;
+  } catch { return null; }
 }
 
 // Fire-and-forget: send message + save to DB in parallel (don't block on DB save)
-async function sendAndSave(
-  supabase: any,
-  convId: string,
-  phone: string,
-  message: string,
-  settings: Record<string, string>,
-  language?: BookingLanguage,
-) {
-  const waId = await sendWhatsAppMessage(phone, message, settings, language);
+async function sendAndSave(supabase: any, convId: string, phone: string, message: string, settings: Record<string, string>) {
+  const waId = await sendWhatsAppMessage(phone, message, settings);
   // Save to DB without blocking the caller
   saveBotMessage(supabase, convId, message, waId);
   return waId;
@@ -531,7 +361,7 @@ async function confirmBookingAndNotifyCustomer(
 
   // Fetch full booking details
   const { data: booking } = await supabase.from("bookings")
-    .select("booking_number, customer_phone, booking_date, booking_time, owner_offer, owner_note, booking_language, stations(name, address, latitude, longitude), services(name, price)")
+    .select("booking_number, customer_phone, booking_date, booking_time, owner_offer, owner_note, stations(name, address, latitude, longitude), services(name, price)")
     .eq("id", bookingId).single();
 
   // Notify owner immediately
@@ -542,13 +372,10 @@ async function confirmBookingAndNotifyCustomer(
 
   // Send full confirmation to customer
   if (booking) {
-    const language = normalizeBookingLanguage((booking as any).booking_language);
-    const bt = bookingLanguageI18n[language];
-    const bl = bookingLanguageLabels[language];
     const custConvId = await getOrCreateConvForPhone(supabase, booking.customer_phone);
     if (custConvId) {
       const timeLabel = booking.booking_time ? to12Hour(booking.booking_time.substring(0, 5)) : "-";
-      const dateFormatted = formatDateByLanguage(booking.booking_date, "ar");
+      const dateFormatted = new Date(booking.booking_date).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
       let custMsg = `✅ تم تأكيد حجزك!\n\n📍 المحطة: ${(booking.stations as any)?.name || ""}\n🔧 الخدمة: ${booking.services?.name || ""}\n💰 السعر: ${booking.services?.price || ""} د.ع\n📅 التاريخ: ${dateFormatted}\n🕐 الوقت: ${timeLabel}\n📋 رقم الحجز: #${booking.booking_number}`;
       const finalOffer = offer || booking.owner_offer;
@@ -557,32 +384,7 @@ async function confirmBookingAndNotifyCustomer(
       if (finalNote) custMsg += `\n📝 ملاحظة: ${finalNote}`;
       custMsg += "\n\nنتمنى لك تجربة رائعة! 🚗✨";
 
-      if (language !== "ar") {
-        const localizedTime = booking.booking_time ? to12HourByLanguage(booking.booking_time.substring(0, 5), language) : "-";
-        const localizedDate = formatDateByLanguage(booking.booking_date, language);
-        custMsg =
-          `${bt.confirmedTitle}\n\n` +
-          `📍 ${bl.station}: ${(booking.stations as any)?.name || ""}\n` +
-          `🔧 ${bl.service}: ${booking.services?.name || ""}\n` +
-          `💰 ${bl.price}: ${booking.services?.price || ""} IQD\n` +
-          `📅 ${bl.date}: ${localizedDate}\n` +
-          `🕐 ${bl.time}: ${localizedTime}\n` +
-          `📋 ${bl.bookingNo}: #${booking.booking_number}`;
-        const finalOfferLocalized = offer || booking.owner_offer;
-        const finalNoteLocalized = note || booking.owner_note;
-        if (finalOfferLocalized) custMsg += `\n\n🎁 ${bl.specialOffer}: ${finalOfferLocalized}`;
-        if (finalNoteLocalized) custMsg += `\n📝 ${bl.note}: ${finalNoteLocalized}`;
-        custMsg += `\n\n${bl.enjoy}`;
-      }
-
-      const primaryWaId = await sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings, language);
-      if (!primaryWaId) {
-        const emergencyMsg =
-          language === "ar"
-            ? `لديك تحديث جديد بخصوص حجزك رقم #${booking.booking_number}. افتح المحادثة للاطلاع على التفاصيل.`
-            : `${bt.confirmedTitle}\n${bl.bookingNo}: #${booking.booking_number}`;
-        await sendAndSave(supabase, custConvId, booking.customer_phone, emergencyMsg, settings, language);
-      }
+      await sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings);
 
       // Google Maps link
       const stationData = booking.stations as any;
@@ -591,20 +393,20 @@ async function confirmBookingAndNotifyCustomer(
       const stationAddress = stationData?.address || "";
       if (lat && lng) {
         const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-        const locationMsg = `${bl.locationOnMap}\n${stationAddress ? stationAddress + "\n" : ""}${mapsUrl}`;
-        await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings, language);
+        const locationMsg = `📍 موقع المغسلة على الخريطة:\n${stationAddress ? stationAddress + "\n" : ""}${mapsUrl}`;
+        await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings);
       } else if (stationAddress) {
         const encoded = encodeURIComponent(stationAddress);
         const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
-        const locationMsg = `${bl.location}\n${stationAddress}\n${mapsUrl}`;
-        await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings, language);
+        const locationMsg = `📍 موقع المغسلة:\n${stationAddress}\n${mapsUrl}`;
+        await sendAndSave(supabase, custConvId, booking.customer_phone, locationMsg, settings);
       }
 
       // Follow-up buttons for customer
-      const followWaId = await sendWhatsAppInteractive(booking.customer_phone, bt.whatNext, [
-        { id: "btn_bookings", title: bt.myBookings },
-        { id: "btn_menu", title: bt.mainMenu },
-      ], settings, language);
+      const followWaId = await sendWhatsAppInteractive(booking.customer_phone, "ماذا تريد أن تفعل؟", [
+        { id: "btn_bookings", title: "📋 حجوزاتي" },
+        { id: "btn_menu", title: "🏠 القائمة الرئيسية" },
+      ], settings);
       saveBotMessage(supabase, custConvId, "أزرار بعد التأكيد", followWaId);
       updateSession(supabase, booking.customer_phone, { current_step: "idle" });
     }
@@ -812,17 +614,6 @@ async function handleOwnerLogic(
 
     // ── تأكيد ──
     if (input === "تأكيد" || input === "approve_yes" || input === "موافق") {
-      const { data: quickTarget } = await supabase
-        .from("quick_booking_targets")
-        .select("id")
-        .eq("booking_id", bookingId)
-        .maybeSingle();
-
-      if (quickTarget) {
-        await confirmBookingAndNotifyCustomer(supabase, phone, convId, settings, owner, bookingId, null, null);
-        return true;
-      }
-
       // Ask for optional offer/note before sending confirmation
       const waId = await sendWhatsAppInteractive(phone, "✅ ممتاز!\n\nهل تريد إضافة عرض أو ملاحظة للعميل؟", [
         { id: "owner_offer_skip", title: "⏭️ لا، أرسل التأكيد" },
@@ -837,25 +628,17 @@ async function handleOwnerLogic(
     if (input === "رفض" || input === "approve_no" || input === "غير موافق") {
       const [, bookingResult] = await Promise.all([
         supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId),
-        supabase.from("bookings").select("customer_phone, booking_number, booking_date, booking_time, booking_language, stations(name), services(name)").eq("id", bookingId).single(),
+        supabase.from("bookings").select("customer_phone, booking_number, booking_date, booking_time, stations(name), services(name)").eq("id", bookingId).single(),
       ]);
       const booking = bookingResult.data;
 
       if (booking) {
         const custConvId = await getOrCreateConvForPhone(supabase, booking.customer_phone);
         if (custConvId) {
-          const language = normalizeBookingLanguage((booking as any).booking_language);
-          const bt = bookingLanguageI18n[language];
-          const bl = bookingLanguageLabels[language];
-          let custMsg =
-            `${bt.rejectedTitle}\n\n` +
-            `📋 ${bl.bookingNo}: #${booking.booking_number}\n` +
-            `📍 ${bl.station}: ${booking.stations?.name || ""}\n` +
-            `🔧 ${bl.service}: ${booking.services?.name || ""}\n\n` +
-            `${bl.rejectedBody}`;
+          const custMsg = `❌ تم رفض الحجز\n\n📋 رقم الحجز: #${booking.booking_number}\n📍 المحطة: ${booking.stations?.name || ""}\n🔧 الخدمة: ${booking.services?.name || ""}\n\nعذراً على الإزعاج. يمكنك الحجز في وقت آخر.`;
           const custWaId = await sendWhatsAppInteractive(booking.customer_phone, custMsg, [
-            { id: "btn_menu", title: bl.rebookBtn },
-          ], settings, language);
+            { id: "btn_menu", title: "🔄 حجز موعد جديد" },
+          ], settings);
           saveBotMessage(supabase, custConvId, custMsg, custWaId);
           updateSession(supabase, booking.customer_phone, { current_step: "idle" });
         }
@@ -939,7 +722,7 @@ async function handleOwnerLogic(
     }).eq("id", bookingId);
     // Fetch booking details to notify customer
     const { data: proposedBk } = await supabase.from("bookings")
-      .select("booking_number, customer_phone, booking_language, stations(name), services(name, price)")
+      .select("booking_number, customer_phone, stations(name), services(name, price)")
       .eq("id", bookingId).single();
 
     let customerNotified = false;
@@ -947,15 +730,15 @@ async function handleOwnerLogic(
       const custPhone = normalizePhone(proposedBk.customer_phone);
       const custConvId = await getOrCreateConvForPhone(supabase, custPhone);
       const stationName = (proposedBk.stations as any)?.name || "";
-      const language = normalizeBookingLanguage((proposedBk as any).booking_language);
-      const bt = bookingLanguageI18n[language];
       const custMsg =
-        `${bt.proposedTimeTitle}\n\n` +
-        `${bt.proposedTimeBody(stationName, to12HourByLanguage(proposedTime, language))}`;
+        `⚠️ تحديث بخصوص حجزك ⚠️\n\n` +
+        `عذراً، المغسلة مزدحمة في الوقت المطلوب.\n` +
+        `لقد اقترحت إدارة مغسلة ${stationName} موعداً بديلاً في الساعة (${to12Hour(proposedTime)}).\n\n` +
+        `هل توافق؟`;
       const custWaId = await sendWhatsAppInteractive(custPhone, custMsg, [
-        { id: "new_time_accept", title: bt.agreeBtn },
-        { id: "new_time_reject", title: bt.searchAnother },
-      ], settings, language);
+        { id: "new_time_accept", title: "✅ موافق" },
+        { id: "new_time_reject", title: "🔍 ابحث عن مغسلة" },
+      ], settings);
       if (custWaId) {
         updateSession(supabase, custPhone, {
           current_step: "awaiting_new_time_approval",
@@ -1616,7 +1399,7 @@ async function handleCustomerLogic(
     if (input === "new_time_accept") {
       // Fetch proposed booking details
       const { data: pb } = await supabase.from("bookings")
-        .select("booking_number, proposed_time, proposed_date, station_id, booking_language, stations(name, address, latitude, longitude), services(name, price)")
+        .select("booking_number, proposed_time, proposed_date, station_id, stations(name, address, latitude, longitude), services(name, price)")
         .eq("id", bookingId).single();
       if (!pb) {
         updateSession(supabase, phone, { current_step: "idle", pending_booking_id: null });
@@ -1628,26 +1411,15 @@ async function handleCustomerLogic(
         booking_time: pb.proposed_time,
         booking_date: pb.proposed_date,
       }).eq("id", bookingId);
-      const language = normalizeBookingLanguage((pb as any).booking_language);
-      const bt = bookingLanguageI18n[language];
-      const bl = bookingLanguageLabels[language];
-      const timeLabel = pb.proposed_time ? to12HourByLanguage(pb.proposed_time.substring(0, 5), language) : "-";
-      const dateFormatted = formatDateByLanguage(pb.proposed_date || "", language);
-      const custConfirmMsg =
-        `${bt.acceptedNewTime}\n\n` +
-        `📍 ${bl.station}: ${(pb.stations as any)?.name || ""}\n` +
-        `🔧 ${bl.service}: ${pb.services?.name || ""}\n` +
-        `💰 ${bl.price}: ${pb.services?.price || ""} IQD\n` +
-        `📅 ${bl.date}: ${dateFormatted}\n` +
-        `🕐 ${bl.time}: ${timeLabel}\n` +
-        `📋 ${bl.bookingNo}: #${pb.booking_number}\n\n` +
-        `${bl.enjoy}`;
-      await sendAndSave(supabase, convId, phone, custConfirmMsg, settings, language);
+      const timeLabel = pb.proposed_time ? to12Hour(pb.proposed_time.substring(0, 5)) : "-";
+      const dateFormatted = new Date(pb.proposed_date || "").toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
+      const custConfirmMsg = `✅ تم تأكيد حجزك بالوقت الجديد!\n\n📍 المحطة: ${(pb.stations as any)?.name || ""}\n🔧 الخدمة: ${pb.services?.name || ""}\n💰 السعر: ${pb.services?.price || ""} د.ع\n📅 التاريخ: ${dateFormatted}\n🕐 الوقت: ${timeLabel}\n📋 رقم الحجز: #${pb.booking_number}\n\nنتمنى لك تجربة رائعة! 🚗✨`;
+      await sendAndSave(supabase, convId, phone, custConfirmMsg, settings);
       // Follow-up buttons for customer
-      const acceptFollowWaId = await sendWhatsAppInteractive(phone, bt.whatNext, [
-        { id: "btn_bookings", title: bt.myBookings },
-        { id: "btn_menu", title: bt.mainMenu },
-      ], settings, language);
+      const acceptFollowWaId = await sendWhatsAppInteractive(phone, "ماذا تريد أن تفعل؟", [
+        { id: "btn_bookings", title: "📋 حجوزاتي" },
+        { id: "btn_menu", title: "🏠 القائمة الرئيسية" },
+      ], settings);
       saveBotMessage(supabase, convId, "أزرار بعد قبول الوقت البديل", acceptFollowWaId);
       updateSession(supabase, phone, { current_step: "idle", pending_booking_id: null });
       // Notify station owner
@@ -1666,33 +1438,26 @@ async function handleCustomerLogic(
     if (input === "new_time_reject") {
       // Cancel booking and let customer search for another station
       await supabase.from("bookings").update({ status: "cancelled" as any }).eq("id", bookingId);
-      const { data: rejBk } = await supabase.from("bookings").select("service_id, booking_language").eq("id", bookingId).single();
-      const language = normalizeBookingLanguage((rejBk as any)?.booking_language);
-      const bt = bookingLanguageI18n[language];
+      const { data: rejBk } = await supabase.from("bookings").select("service_id").eq("id", bookingId).single();
       updateSession(supabase, phone, {
         current_step: "idle",
         pending_booking_id: null,
         selected_service_id: rejBk?.service_id || null,
       });
       const rejectWaId = await sendWhatsAppInteractive(phone,
-        `${bt.rejectedNewTime}\n\n${bt.searchAnother}:`,
-        [{ id: "btn_search", title: bt.searchAnother }, { id: "btn_menu", title: bt.mainMenu }],
-        settings,
-        language);
+        "❌ تم رفض الوقت البديل وإلغاء الحجز.\n\nيمكنك البحث عن مغسلة أخرى:",
+        [{ id: "btn_search", title: "🔍 بحث عن مغسلة" }, { id: "btn_menu", title: "🏠 القائمة الرئيسية" }],
+        settings);
       saveBotMessage(supabase, convId, "رفض الوقت البديل", rejectWaId);
       return true;
     }
     // Fallback: resend buttons
-    const { data: pbFb } = await supabase.from("bookings").select("booking_number, proposed_time, booking_language, stations(name)").eq("id", bookingId).single();
-    const language = normalizeBookingLanguage((pbFb as any)?.booking_language);
-    const bt = bookingLanguageI18n[language];
-    const propTimeLabel = pbFb?.proposed_time ? to12HourByLanguage(pbFb.proposed_time.substring(0, 5), language) : "-";
-    const stationName = (pbFb?.stations as any)?.name || "";
+    const { data: pbFb } = await supabase.from("bookings").select("booking_number, proposed_time, stations(name)").eq("id", bookingId).single();
+    const propTimeLabel = pbFb?.proposed_time ? to12Hour(pbFb.proposed_time.substring(0, 5)) : "-";
     const fbWaId = await sendWhatsAppInteractive(phone,
-      `${bt.proposedTimeBody(stationName, propTimeLabel)}`,
-      [{ id: "new_time_accept", title: bt.agreeBtn }, { id: "new_time_reject", title: bt.searchAnother }],
-      settings,
-      language);
+      `هل توافق على الوقت البديل ${propTimeLabel} في مغسلة ${(pbFb?.stations as any)?.name || ""}؟`,
+      [{ id: "new_time_accept", title: "✅ موافق" }, { id: "new_time_reject", title: "🔍 ابحث عن مغسلة" }],
+      settings);
     saveBotMessage(supabase, convId, "إعادة إرسال اقتراح الوقت", fbWaId);
     return true;
   }
