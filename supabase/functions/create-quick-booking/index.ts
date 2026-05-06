@@ -175,15 +175,21 @@ type OwnerStationInfo = { ownerPhone: string; ownerActive: boolean };
 async function getStationOwnerInfoMap(supabase: any): Promise<Map<string, OwnerStationInfo>> {
   const { data } = await supabase
     .from("station_owners")
-    .select("station_id, owner_phone, is_active")
-    .not("owner_phone", "is", null);
+    .select("station_id, owner_phone, is_active, created_at")
+    .not("owner_phone", "is", null)
+    .order("created_at", { ascending: false });
 
   const ownerMap = new Map<string, OwnerStationInfo>();
   for (const row of data || []) {
     const stationId = String(row.station_id || "");
     const ownerPhone = normalizePhone(String(row.owner_phone || ""));
     const ownerActive = row.is_active !== false;
-    if (stationId && ownerPhone) ownerMap.set(stationId, { ownerPhone, ownerActive });
+    if (!stationId || !ownerPhone) continue;
+    // Keep latest owner row per station (first one due to created_at DESC),
+    // so old account rows don't override current station status.
+    if (!ownerMap.has(stationId)) {
+      ownerMap.set(stationId, { ownerPhone, ownerActive });
+    }
   }
   return ownerMap;
 }
@@ -433,8 +439,8 @@ Deno.serve(async (req) => {
           ownerPhone,
           ownerText,
           [
-            { id: "approve_yes", title: msg.approve },
-            { id: "approve_no", title: msg.reject },
+            { id: `approve_yes_${booking.id}`, title: msg.approve },
+            { id: `approve_no_${booking.id}`, title: msg.reject },
             { id: `change_time_${booking.id}`, title: msg.changeTime },
           ],
           settings,

@@ -1495,6 +1495,25 @@ const StationsMap = () => {
 
   useEffect(() => {
     const loadStations = async () => {
+      const { data: ownersData, error: ownersError } = await supabase
+        .from("station_owners")
+        .select("station_id, is_active");
+
+      if (ownersError) {
+        toast({
+          title: t.searchLoadErrorTitle,
+          description: ownersError.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const activeOwnerStationIds = new Set(
+        (ownersData || [])
+          .filter((row: any) => row?.station_id && row?.is_active !== false)
+          .map((row: any) => String(row.station_id)),
+      );
+
       const { data, error } = await supabase
         .from("stations")
         .select("*")
@@ -1511,7 +1530,10 @@ const StationsMap = () => {
         return;
       }
 
-      setStations(data as Station[]);
+      const filteredByOwner = (data || []).filter((station: any) =>
+        activeOwnerStationIds.has(String(station.id)),
+      );
+      setStations(filteredByOwner as Station[]);
     };
 
     void loadStations();
