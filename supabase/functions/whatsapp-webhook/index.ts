@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { consumeStationRequestQuota } from "../_shared/request-packages.ts";
+import { sendWhatsAppInteractiveReliable, sendWhatsAppTextReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,39 +63,28 @@ function downloadAndStoreMedia(mediaId: string, accessToken: string, supabase: a
 // ==================== MESSAGING ====================
 
 async function sendWhatsAppMessage(phone: string, message: string, settings: Record<string, string>) {
-  const token = settings.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneId) return null;
-  try {
-    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ messaging_product: "whatsapp", to: phone, type: "text", text: { body: message } }),
-    });
-    const data = await res.json();
-    return data.messages?.[0]?.id || null;
-  } catch { return null; }
+  const result = await sendWhatsAppTextReliable({
+    phone,
+    message,
+    settings,
+  });
+  if (!result.ok) {
+    console.error("[whatsapp-webhook] sendWhatsAppMessage failed:", result.error);
+  }
+  return result.messageId;
 }
 
 async function sendWhatsAppInteractive(phone: string, body: string, buttons: { id: string; title: string }[], settings: Record<string, string>) {
-  const token = settings.WHATSAPP_ACCESS_TOKEN;
-  const phoneId = settings.WHATSAPP_PHONE_NUMBER_ID;
-  if (!token || !phoneId) return null;
-  try {
-    const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messaging_product: "whatsapp", to: phone, type: "interactive",
-        interactive: {
-          type: "button", body: { text: body },
-          action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title } })) },
-        },
-      }),
-    });
-    const data = await res.json();
-    return data.messages?.[0]?.id || null;
-  } catch { return null; }
+  const result = await sendWhatsAppInteractiveReliable({
+    phone,
+    body,
+    buttons,
+    settings,
+  });
+  if (!result.ok) {
+    console.error("[whatsapp-webhook] sendWhatsAppInteractive failed:", result.error);
+  }
+  return result.messageId;
 }
 
 // Fire-and-forget: send message + save to DB in parallel (don't block on DB save)

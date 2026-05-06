@@ -170,6 +170,21 @@ async function getSettings(supabase: any) {
   return settings;
 }
 
+async function getStationOwnerPhoneMap(supabase: any): Promise<Map<string, string>> {
+  const { data } = await supabase
+    .from("station_owners")
+    .select("station_id, owner_phone")
+    .not("owner_phone", "is", null);
+
+  const ownerMap = new Map<string, string>();
+  for (const row of data || []) {
+    const stationId = String(row.station_id || "");
+    const ownerPhone = normalizePhone(String(row.owner_phone || ""));
+    if (stationId && ownerPhone) ownerMap.set(stationId, ownerPhone);
+  }
+  return ownerMap;
+}
+
 async function sendWhatsAppInteractive(
   to: string,
   body: string,
@@ -258,7 +273,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [{ data: stations }, { data: services }, settings] = await Promise.all([
+    const [{ data: stations }, { data: services }, settings, ownerPhoneMap] = await Promise.all([
       supabase
         .from("stations")
         .select("id,name,latitude,longitude,is_active")
@@ -267,6 +282,7 @@ Deno.serve(async (req) => {
         .not("longitude", "is", null),
       supabase.from("services").select("id,station_id,name,is_active").eq("is_active", true),
       getSettings(supabase),
+      getStationOwnerPhoneMap(supabase),
     ]);
 
     const stationRows = (stations || []) as StationRow[];
@@ -278,6 +294,8 @@ Deno.serve(async (req) => {
 
     const matched = stationRows
       .map((station) => {
+        const ownerPhone = ownerPhoneMap.get(station.id);
+        if (!ownerPhone) return null;
         const stationServices = serviceRows.filter(
           (svc) => svc.is_active && svc.station_id === station.id && serviceMatches(svc.name, serviceKind),
         );
@@ -286,12 +304,13 @@ Deno.serve(async (req) => {
         return {
           station,
           service: firstService,
+          ownerPhone,
           distance: haversineDistance(baseLat, baseLng, station.latitude, station.longitude),
         };
       })
       .filter(Boolean)
       .sort((a: any, b: any) => a.distance - b.distance)
-      .slice(0, 3) as { station: StationRow; service: ServiceRow; distance: number }[];
+      .slice(0, 3) as { station: StationRow; service: ServiceRow; distance: number; ownerPhone: string }[];
 
     if (matched.length === 0) {
       return new Response(JSON.stringify({ error: "no_station_found", message: msg.noStations }), {
@@ -380,14 +399,8 @@ Deno.serve(async (req) => {
         state: "pending",
       });
 
-      const { data: owner } = await supabase
-        .from("station_owners")
-        .select("owner_phone, owner_name")
-        .eq("station_id", item.station.id)
-        .maybeSingle();
-
-      if (owner?.owner_phone) {
-        const ownerPhone = normalizePhone(owner.owner_phone);
+      if (item.ownerPhone) {
+        const ownerPhone = item.ownerPhone;
         const ownerText =
           `📢 ${msg.ownerTitle}\n\n` +
           `👤 ${msg.customer}: ${customerName}\n` +
