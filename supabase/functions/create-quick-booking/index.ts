@@ -176,17 +176,25 @@ async function getStationOwnerInfoMap(supabase: any): Promise<Map<string, OwnerS
   const { data } = await supabase
     .from("station_owners")
     .select("station_id, owner_phone, is_active, created_at")
-    .not("owner_phone", "is", null)
-    .order("created_at", { ascending: false });
+    .not("owner_phone", "is", null);
 
   const ownerMap = new Map<string, OwnerStationInfo>();
-  for (const row of data || []) {
+  const sortedRows = [...(data || [])].sort((a: any, b: any) => {
+    const aActive = a?.is_active !== false ? 1 : 0;
+    const bActive = b?.is_active !== false ? 1 : 0;
+    if (aActive !== bActive) return bActive - aActive;
+    const aCreated = new Date(String(a?.created_at || 0)).getTime();
+    const bCreated = new Date(String(b?.created_at || 0)).getTime();
+    return bCreated - aCreated;
+  });
+
+  for (const row of sortedRows) {
     const stationId = String(row.station_id || "");
     const ownerPhone = normalizePhone(String(row.owner_phone || ""));
     const ownerActive = row.is_active !== false;
     if (!stationId || !ownerPhone) continue;
-    // Keep latest owner row per station (first one due to created_at DESC),
-    // so old account rows don't override current station status.
+    // Keep one best owner row per station:
+    // active rows first, then newest row.
     if (!ownerMap.has(stationId)) {
       ownerMap.set(stationId, { ownerPhone, ownerActive });
     }
