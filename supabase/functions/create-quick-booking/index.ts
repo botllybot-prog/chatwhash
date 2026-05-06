@@ -170,17 +170,20 @@ async function getSettings(supabase: any) {
   return settings;
 }
 
-async function getStationOwnerPhoneMap(supabase: any): Promise<Map<string, string>> {
+type OwnerStationInfo = { ownerPhone: string; ownerActive: boolean };
+
+async function getStationOwnerInfoMap(supabase: any): Promise<Map<string, OwnerStationInfo>> {
   const { data } = await supabase
     .from("station_owners")
-    .select("station_id, owner_phone")
+    .select("station_id, owner_phone, is_active")
     .not("owner_phone", "is", null);
 
-  const ownerMap = new Map<string, string>();
+  const ownerMap = new Map<string, OwnerStationInfo>();
   for (const row of data || []) {
     const stationId = String(row.station_id || "");
     const ownerPhone = normalizePhone(String(row.owner_phone || ""));
-    if (stationId && ownerPhone) ownerMap.set(stationId, ownerPhone);
+    const ownerActive = row.is_active !== false;
+    if (stationId && ownerPhone) ownerMap.set(stationId, { ownerPhone, ownerActive });
   }
   return ownerMap;
 }
@@ -273,7 +276,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [{ data: stations }, { data: services }, settings, ownerPhoneMap] = await Promise.all([
+    const [{ data: stations }, { data: services }, settings, ownerInfoMap] = await Promise.all([
       supabase
         .from("stations")
         .select("id,name,latitude,longitude,is_active")
@@ -282,7 +285,7 @@ Deno.serve(async (req) => {
         .not("longitude", "is", null),
       supabase.from("services").select("id,station_id,name,is_active").eq("is_active", true),
       getSettings(supabase),
-      getStationOwnerPhoneMap(supabase),
+      getStationOwnerInfoMap(supabase),
     ]);
 
     const stationRows = (stations || []) as StationRow[];
@@ -292,19 +295,34 @@ Deno.serve(async (req) => {
     const baseLat = Number.isFinite(customerLat) ? customerLat : fallbackLat;
     const baseLng = Number.isFinite(customerLng) ? customerLng : fallbackLng;
 
+    const skippedStations: { station_id: string; station_name: string; reason: string }[] = [];
     const matched = stationRows
       .map((station) => {
-        const ownerPhone = ownerPhoneMap.get(station.id);
-        if (!ownerPhone) return null;
+        const ownerInfo = ownerInfoMap.get(station.id);
+        if (!ownerInfo?.ownerPhone) {
+          skippedStations.push({ station_id: station.id, station_name: station.name, reason: "missing_owner_phone" });
+          return null;
+        }
+        if (!ownerInfo.ownerActive) {
+          skippedStations.push({ station_id: station.id, station_name: station.name, reason: "owner_inactive" });
+          return null;
+        }
         const stationServices = serviceRows.filter(
           (svc) => svc.is_active && svc.station_id === station.id && serviceMatches(svc.name, serviceKind),
         );
         const firstService = stationServices[0];
-        if (!firstService || station.latitude === null || station.longitude === null) return null;
+        if (!firstService) {
+          skippedStations.push({ station_id: station.id, station_name: station.name, reason: "service_mismatch_or_missing" });
+          return null;
+        }
+        if (station.latitude === null || station.longitude === null) {
+          skippedStations.push({ station_id: station.id, station_name: station.name, reason: "missing_location" });
+          return null;
+        }
         return {
           station,
           service: firstService,
-          ownerPhone,
+          ownerPhone: ownerInfo.ownerPhone,
           distance: haversineDistance(baseLat, baseLng, station.latitude, station.longitude),
         };
       })
@@ -442,6 +460,8 @@ Deno.serve(async (req) => {
         success: true,
         request_id: requestRow?.id || null,
         targets: bookingRows,
+        target_count: bookingRows.length,
+        skipped: skippedStations,
         message: msg.requestSent,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
