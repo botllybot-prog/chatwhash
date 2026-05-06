@@ -548,7 +548,7 @@ async function confirmBookingAndNotifyCustomer(
     const custConvId = await getOrCreateConvForPhone(supabase, booking.customer_phone);
     if (custConvId) {
       const timeLabel = booking.booking_time ? to12Hour(booking.booking_time.substring(0, 5)) : "-";
-      const dateFormatted = new Date(booking.booking_date).toLocaleDateString("ar-IQ", { calendar: "gregory", weekday: "long", year: "numeric", month: "long", day: "numeric" });
+      const dateFormatted = formatDateByLanguage(booking.booking_date, "ar");
 
       let custMsg = `✅ تم تأكيد حجزك!\n\n📍 المحطة: ${(booking.stations as any)?.name || ""}\n🔧 الخدمة: ${booking.services?.name || ""}\n💰 السعر: ${booking.services?.price || ""} د.ع\n📅 التاريخ: ${dateFormatted}\n🕐 الوقت: ${timeLabel}\n📋 رقم الحجز: #${booking.booking_number}`;
       const finalOffer = offer || booking.owner_offer;
@@ -575,7 +575,14 @@ async function confirmBookingAndNotifyCustomer(
         custMsg += `\n\n${bl.enjoy}`;
       }
 
-      await sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings, language);
+      const primaryWaId = await sendAndSave(supabase, custConvId, booking.customer_phone, custMsg, settings, language);
+      if (!primaryWaId) {
+        const emergencyMsg =
+          language === "ar"
+            ? `لديك تحديث جديد بخصوص حجزك رقم #${booking.booking_number}. افتح المحادثة للاطلاع على التفاصيل.`
+            : `${bt.confirmedTitle}\n${bl.bookingNo}: #${booking.booking_number}`;
+        await sendAndSave(supabase, custConvId, booking.customer_phone, emergencyMsg, settings, language);
+      }
 
       // Google Maps link
       const stationData = booking.stations as any;
