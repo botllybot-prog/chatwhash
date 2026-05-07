@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { sendWhatsAppInteractiveReliable } from "../_shared/whatsapp-reliable.ts";
+import { sendWhatsAppInteractiveReliable, sendWhatsAppTextReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,7 +65,7 @@ const localizedMessages: Record<
   },
   en: {
     duplicateSameTime: "You already have a booking at the same time. Please cancel it first.",
-    activeLimit: "You can keep up to 2 active bookings. Cancel an older one first.",
+    activeLimit: "You can keep up to 3 active bookings. Cancel an older one first.",
     noStations: "No stations are currently available for this service type.",
     requestSent: "Quick booking request sent to the nearest 3 stations.",
     ownerTitle: "New quick booking request",
@@ -101,7 +101,7 @@ const localizedMessages: Record<
   },
   tr: {
     duplicateSameTime: "Aynı saatte mevcut rezervasyonunuz var. Lütfen önce iptal edin.",
-    activeLimit: "En fazla 2 aktif rezervasyonunuz olabilir. Önce eski bir rezervasyonu iptal edin.",
+    activeLimit: "En fazla 3 aktif rezervasyonunuz olabilir. Önce eski bir rezervasyonu iptal edin.",
     noStations: "Bu hizmet türü için şu an uygun istasyon yok.",
     requestSent: "Hızlı rezervasyon isteği en yakın 3 istasyona gönderildi.",
     ownerTitle: "Yeni hızlı rezervasyon talebi",
@@ -180,9 +180,6 @@ async function getStationOwnerInfoMap(supabase: any): Promise<Map<string, OwnerS
 
   const ownerMap = new Map<string, OwnerStationInfo>();
   const sortedRows = [...(data || [])].sort((a: any, b: any) => {
-    const aActive = a?.is_active !== false ? 1 : 0;
-    const bActive = b?.is_active !== false ? 1 : 0;
-    if (aActive !== bActive) return bActive - aActive;
     const aCreated = new Date(String(a?.created_at || 0)).getTime();
     const bCreated = new Date(String(b?.created_at || 0)).getTime();
     return bCreated - aCreated;
@@ -193,8 +190,8 @@ async function getStationOwnerInfoMap(supabase: any): Promise<Map<string, OwnerS
     const ownerPhone = normalizePhone(String(row.owner_phone || ""));
     const ownerActive = row.is_active !== false;
     if (!stationId || !ownerPhone) continue;
-    // Keep one best owner row per station:
-    // active rows first, then newest row.
+    // Keep the newest owner row per station only.
+    // This ensures "suspended/paused" latest state is respected.
     if (!ownerMap.has(stationId)) {
       ownerMap.set(stationId, { ownerPhone, ownerActive });
     }
@@ -222,6 +219,24 @@ async function sendWhatsAppInteractive(
   }
 
   return result.messageId;
+}
+
+async function sendWhatsAppText(
+  to: string,
+  body: string,
+  settings: Record<string, string>,
+  language?: Language,
+) {
+  const result = await sendWhatsAppTextReliable({
+    phone: to,
+    body,
+    settings,
+    language,
+  });
+
+  if (!result.ok) {
+    console.error("[create-quick-booking] WhatsApp text send failed:", result.error);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -281,9 +296,9 @@ Deno.serve(async (req) => {
       .select("id")
       .eq("customer_phone", customerPhone)
       .in("status", ["pending", "confirmed"])
-      .limit(2);
+      .limit(3);
 
-    if ((activeBookings?.length || 0) >= 2) {
+    if ((activeBookings?.length || 0) >= 3) {
       return new Response(JSON.stringify({ error: "active_bookings_limit", message: msg.activeLimit }), {
         status: 409,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -310,8 +325,19 @@ Deno.serve(async (req) => {
     const baseLng = Number.isFinite(customerLng) ? customerLng : fallbackLng;
 
     const skippedStations: { station_id: string; station_name: string; reason: string }[] = [];
-    const matched = stationRows
+    const excludedStationIds = new Set<string>(
+      Array.isArray(body.exclude_station_ids)
+        ? body.exclude_station_ids.map((v: unknown) => String(v || "")).filter(Boolean)
+        : [],
+    );
+    const searchMode = String(body.search_mode || "nearest");
+
+    const ranked = stationRows
       .map((station) => {
+        if (excludedStationIds.has(station.id)) {
+          skippedStations.push({ station_id: station.id, station_name: station.name, reason: "excluded_station" });
+          return null;
+        }
         const ownerInfo = ownerInfoMap.get(station.id);
         if (!ownerInfo?.ownerPhone) {
           skippedStations.push({ station_id: station.id, station_name: station.name, reason: "missing_owner_phone" });
@@ -341,8 +367,11 @@ Deno.serve(async (req) => {
         };
       })
       .filter(Boolean)
-      .sort((a: any, b: any) => a.distance - b.distance)
-      .slice(0, 3) as { station: StationRow; service: ServiceRow; distance: number; ownerPhone: string }[];
+      .sort((a: any, b: any) => a.distance - b.distance) as {
+        station: StationRow; service: ServiceRow; distance: number; ownerPhone: string
+      }[];
+
+    const matched = (searchMode === "farther" ? ranked.slice(3) : ranked).slice(0, 3);
 
     if (matched.length === 0) {
       return new Response(JSON.stringify({ error: "no_station_found", message: msg.noStations }), {
@@ -468,6 +497,17 @@ Deno.serve(async (req) => {
         );
       }
     }
+
+    const waitingOwnerReply =
+      language === "en"
+        ? "Your request was sent to 3 stations and we are waiting for the first response."
+        : language === "tr"
+          ? "Talebiniz 3 istasyona gönderildi. İlk yanıt bekleniyor."
+          : language === "ku"
+            ? "داواکارییەکەت بۆ 3 وێستگە نێردرا. چاوەڕێی یەکەم وەڵام دەکەین."
+            : "تم إرسال طلبك إلى 3 محطات وبانتظار الرد.";
+
+    await sendWhatsAppText(customerPhone, waitingOwnerReply, settings, language);
 
     return new Response(
       JSON.stringify({

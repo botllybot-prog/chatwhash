@@ -1497,7 +1497,7 @@ const StationsMap = () => {
     const loadStations = async () => {
       const { data: ownersData, error: ownersError } = await supabase
         .from("station_owners")
-        .select("station_id, is_active");
+        .select("station_id, is_active, created_at");
 
       if (ownersError) {
         toast({
@@ -1508,10 +1508,22 @@ const StationsMap = () => {
         return;
       }
 
+      const latestOwnerByStation = new Map<string, any>();
+      for (const row of ownersData || []) {
+        if (!row?.station_id) continue;
+        const key = String(row.station_id);
+        const prev = latestOwnerByStation.get(key);
+        const rowTs = new Date(String(row?.created_at || 0)).getTime();
+        const prevTs = prev ? new Date(String(prev?.created_at || 0)).getTime() : -1;
+        if (!prev || rowTs >= prevTs) {
+          latestOwnerByStation.set(key, row);
+        }
+      }
+
       const activeOwnerStationIds = new Set(
-        (ownersData || [])
-          .filter((row: any) => row?.station_id && row?.is_active !== false)
-          .map((row: any) => String(row.station_id)),
+        [...latestOwnerByStation.entries()]
+          .filter(([, row]) => row?.is_active !== false)
+          .map(([stationId]) => stationId),
       );
 
       const { data, error } = await supabase

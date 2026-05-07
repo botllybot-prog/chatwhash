@@ -89,7 +89,7 @@ const i18n: Record<
       chooseTime: "Please choose a booking time.",
       slotTaken: "This time slot is already booked. Choose another time.",
       verifyActiveBookings: "Could not verify active bookings count.",
-      activeLimit: "You cannot have more than 2 active bookings for the same phone number.",
+      activeLimit: "You cannot have more than 3 active bookings for the same phone number.",
       verifySpin: "Could not verify spin discount.",
       spinInvalid: "Spin result is no longer valid. Please spin again.",
       saveFailed: "Could not save booking.",
