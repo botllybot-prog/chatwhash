@@ -206,19 +206,24 @@ async function sendWhatsAppInteractive(
   settings: Record<string, string>,
   language?: Language,
 ) {
-  const result = await sendWhatsAppInteractiveReliable({
-    phone: to,
-    body,
-    buttons,
-    settings,
-    language,
-  });
+  try {
+    const result = await sendWhatsAppInteractiveReliable({
+      phone: to,
+      body,
+      buttons,
+      settings,
+      language,
+    });
 
-  if (!result.ok) {
-    console.error("[create-quick-booking] WhatsApp interactive send failed:", result.error);
+    if (!result.ok) {
+      console.error("[create-quick-booking] WhatsApp interactive send failed:", result.error);
+    }
+
+    return result.messageId;
+  } catch (error) {
+    console.error("[create-quick-booking] WhatsApp interactive send crashed:", error);
+    return null;
   }
-
-  return result.messageId;
 }
 
 async function sendWhatsAppText(
@@ -227,15 +232,22 @@ async function sendWhatsAppText(
   settings: Record<string, string>,
   language?: Language,
 ) {
-  const result = await sendWhatsAppTextReliable({
-    phone: to,
-    body,
-    settings,
-    language,
-  });
+  try {
+    const result = await sendWhatsAppTextReliable({
+      phone: to,
+      message: body,
+      settings,
+      language,
+    });
 
-  if (!result.ok) {
-    console.error("[create-quick-booking] WhatsApp text send failed:", result.error);
+    if (!result.ok) {
+      console.error("[create-quick-booking] WhatsApp text send failed:", result.error);
+    }
+
+    return result.messageId;
+  } catch (error) {
+    console.error("[create-quick-booking] WhatsApp text send crashed:", error);
+    return null;
   }
 }
 

@@ -104,7 +104,8 @@ async function sendTemplateFallback(
     };
   }
 
-  const safeText = plainText.length > 1000 ? `${plainText.slice(0, 997)}...` : plainText;
+  const normalizedText = String(plainText || "");
+  const safeText = normalizedText.length > 1000 ? `${normalizedText.slice(0, 997)}...` : normalizedText;
 
   return sendRaw(settings, {
     to: normalizePhone(phone),
@@ -130,11 +131,12 @@ export async function sendWhatsAppTextReliable(params: {
 }): Promise<WhatsAppSendResult> {
   const { phone, message, settings, language } = params;
   if (!phone) return { ok: false, messageId: null, usedTemplateFallback: false, error: "Missing phone." };
+  const normalizedMessage = String(message || "");
 
   const direct = await sendRaw(settings, {
     to: normalizePhone(phone),
     type: "text",
-    text: { body: message },
+    text: { body: normalizedMessage },
   });
 
   if (direct.ok) {
@@ -150,14 +152,14 @@ export async function sendWhatsAppTextReliable(params: {
     };
   }
 
-  const fallback = await sendTemplateFallback(settings, phone, message, language);
+  const fallback = await sendTemplateFallback(settings, phone, normalizedMessage, language);
   if (fallback.ok) {
     // Once the approved template wakes the chat outside the 24h window,
     // retry the plain text so the recipient sees the full live message too.
     const followUp = await sendRaw(settings, {
       to: normalizePhone(phone),
       type: "text",
-      text: { body: message },
+      text: { body: normalizedMessage },
     });
 
     return {
