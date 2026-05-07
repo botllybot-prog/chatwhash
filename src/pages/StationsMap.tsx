@@ -1479,7 +1479,6 @@ const StationsMap = () => {
   const [showQuickBooking, setShowQuickBooking] = useState(false);
   const [quickCustomerName, setQuickCustomerName] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
-  const [quickServiceKind, setQuickServiceKind] = useState("surface");
   const [quickDate, setQuickDate] = useState(new Date().toISOString().split("T")[0]);
   const [quickTime, setQuickTime] = useState("");
   const [quickSubmitting, setQuickSubmitting] = useState(false);
@@ -1623,7 +1622,7 @@ const StationsMap = () => {
   };
 
   const handleQuickBooking = async () => {
-    if (!quickCustomerName || !quickCustomerPhone || !quickServiceKind || !quickDate || !quickTime) {
+    if (!quickCustomerName || !quickCustomerPhone || !quickDate || !quickTime) {
       toast({
         title: q.completeTitle,
         description: q.completeDesc,
@@ -1637,7 +1636,7 @@ const StationsMap = () => {
       body: {
         customer_name: quickCustomerName,
         customer_phone: quickCustomerPhone,
-        service_kind: quickServiceKind,
+        service_kind: "quick",
         booking_date: quickDate,
         booking_time: quickTime,
         language,
@@ -1699,44 +1698,17 @@ const StationsMap = () => {
   return (
     <div className="relative h-[100vh] w-full" dir={isRtl ? "rtl" : "ltr"}>
       <div className="absolute left-4 right-4 top-4 z-[900] mx-auto max-w-xl">
-        <Card className="border-0 bg-background/95 shadow-xl backdrop-blur">
-          <CardContent className="space-y-3 p-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative flex-1">
-                <Search className={`${isRtl ? "right-3" : "left-3"} absolute top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground`} />
-                <Input
-                  placeholder={t.searchPlaceholder}
-                  className={isRtl ? "pr-9" : "pl-9"}
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <Button variant="outline" size="sm" className="shrink-0 gap-2" onClick={handleLocateMe}>
-                <LocateFixed className="h-4 w-4" />
-                {t.myLocation}
-              </Button>
-
-              {filteredStations.slice(0, 5).map((station) => (
-                <Button
-                  key={station.id}
-                  variant="secondary"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => handleMarkerClick(station)}
-                >
-                  {station.name}
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
         <div className="mt-3 flex justify-end">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <InstallAppButton />
+            <Button
+              size="sm"
+              className="gap-2 bg-blue-600 text-white hover:bg-blue-700"
+              onClick={handleLocateMe}
+            >
+              <LocateFixed className="h-4 w-4" />
+              {t.myLocation}
+            </Button>
             <Button
               variant={showQuickBooking ? "default" : "outline"}
               size="sm"
@@ -1774,21 +1746,19 @@ const StationsMap = () => {
                 value={quickCustomerPhone}
                 onChange={(event) => setQuickCustomerPhone(event.target.value)}
               />
-              <Select value={quickServiceKind} onValueChange={setQuickServiceKind}>
-                <SelectTrigger>
-                  <SelectValue placeholder={q.servicePlaceholder} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="surface">{q.serviceSurface}</SelectItem>
-                  <SelectItem value="jack">{q.serviceJack}</SelectItem>
-                </SelectContent>
-              </Select>
               <div className="grid grid-cols-2 gap-2">
                 <Input type="date" value={quickDate} onChange={(event) => setQuickDate(event.target.value)} />
                 <Input type="time" value={quickTime} onChange={(event) => setQuickTime(event.target.value)} />
               </div>
               <Button className="w-full" disabled={quickSubmitting} onClick={handleQuickBooking}>
                 {quickSubmitting ? q.submitting : q.submit}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowQuickBooking(false)}
+              >
+                رجوع
               </Button>
             </CardContent>
           </Card>
