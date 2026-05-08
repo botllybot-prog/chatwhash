@@ -33,7 +33,7 @@ export async function fetchStationsWithServices(): Promise<{ stations: MobileSta
   try {
     const { data: stationsData, error: stationsError } = await supabase
       .from('stations')
-      .select('id, name, address, detailed_address, latitude, longitude, working_hours_start, working_hours_end, scheduling_type, slot_duration_minutes, is_active')
+      .select('id, name, address, detailed_address, image_url, latitude, longitude, working_hours_start, working_hours_end, scheduling_type, slot_duration_minutes, is_active')
       .eq('is_active', true)
       .not('latitude', 'is', null)
       .not('longitude', 'is', null)
@@ -75,6 +75,7 @@ export async function fetchStationsWithServices(): Promise<{ stations: MobileSta
       area: row.address || 'بغداد',
       address: row.address || 'بدون عنوان مختصر',
       detailedAddress: row.detailed_address || null,
+      imageUrl: row.image_url || null,
       latitude: Number(row.latitude),
       longitude: Number(row.longitude),
       open: isOpenNow(row.working_hours_start, row.working_hours_end),

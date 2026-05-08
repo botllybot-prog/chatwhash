@@ -4,6 +4,7 @@ import type {
   BookingCreatePayload,
   BookingCreateResult,
   MobileStation,
+  QuickBookingResult,
   SpinResult,
 } from "../types";
 
@@ -198,6 +199,38 @@ export async function createMapBooking(payload: BookingCreatePayload): Promise<B
 
   if (!data || (data as ApiErrorResponse).error || !data.success) {
     throw new Error((data as ApiErrorResponse)?.error || "تعذر إنشاء الحجز.");
+  }
+
+  return data;
+}
+
+export async function createQuickBooking(payload: {
+  customerName: string;
+  customerPhone: string;
+  bookingDate: string;
+  bookingTime: string;
+  customerLatitude: number;
+  customerLongitude: number;
+}): Promise<QuickBookingResult> {
+  const { data, error } = await supabase.functions.invoke<QuickBookingResult & ApiErrorResponse>("create-quick-booking", {
+    body: {
+      customer_name: payload.customerName.trim(),
+      customer_phone: normalizePhone(payload.customerPhone),
+      booking_date: payload.bookingDate,
+      booking_time: payload.bookingTime,
+      service_kind: "quick",
+      language: "ar",
+      customer_lat: payload.customerLatitude,
+      customer_lng: payload.customerLongitude,
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data || (data as ApiErrorResponse).error || !data.success) {
+    throw new Error((data as ApiErrorResponse)?.error || "تعذر إرسال الحجز السريع.");
   }
 
   return data;

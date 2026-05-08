@@ -12,6 +12,7 @@ export type MobileStation = {
   area: string;
   address: string;
   detailedAddress?: string | null;
+  imageUrl?: string | null;
   latitude: number;
   longitude: number;
   open: boolean;
@@ -72,6 +73,18 @@ export type BookingCreateResult = {
   status: string;
 };
 
+export type QuickBookingResult = {
+  success: true;
+  request_id?: string;
+  target_count?: number;
+  targets?: Array<{
+    station_id: string;
+    station_name?: string;
+    booking_id?: string;
+  }>;
+  message?: string;
+};
+
 export type BookingCancelResult = {
   success: true;
   bookingNumber?: number;
@@ -86,6 +99,12 @@ export type OwnerContext = {
   freeRequestsQuota: number;
   freeRequestsUsed: number;
   stationName: string;
+  stationAddress: string;
+  stationDetailedAddress: string | null;
+  stationImageUrl: string | null;
+  stationWorkingHoursStart: string | null;
+  stationWorkingHoursEnd: string | null;
+  stationSlotDurationMinutes: number;
   stationIsActive: boolean;
   suspensionReason: string | null;
 };

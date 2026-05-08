@@ -1,9 +1,10 @@
-import React, { useState } from "react";
-import { SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Text, View } from "react-native";
 import { BottomTabs } from "./src/components/BottomTabs";
 import { CustomerHomeScreen } from "./src/screens/CustomerHomeScreen";
 import { OwnerAuthScreen } from "./src/screens/OwnerAuthScreen";
 import { OwnerPortalScreen } from "./src/screens/OwnerPortalScreen";
+import { supabase } from "./src/lib/supabase";
 import { palette } from "./src/theme";
 
 type TabKey = "home" | "map" | "stations" | "owner";
@@ -17,6 +18,41 @@ type OwnerSession = {
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [ownerSession, setOwnerSession] = useState<OwnerSession | null>(null);
+  const [restoringSession, setRestoringSession] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      const session = data.session;
+      if (session?.user) {
+        setOwnerSession({
+          userId: session.user.id,
+          email: session.user.email || "",
+          sessionToken: session.access_token,
+        });
+      }
+      setRestoringSession(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        setOwnerSession({
+          userId: session.user.id,
+          email: session.user.email || "",
+          sessionToken: session.access_token,
+        });
+      } else {
+        setOwnerSession(null);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   const renderScreen = () => {
     if (activeTab === "owner") {
@@ -33,9 +69,7 @@ export default function App() {
       return (
         <OwnerPortalScreen
           ownerUserId={ownerSession.userId}
-          onLogout={() => {
-            setOwnerSession(null);
-          }}
+          onLogout={() => supabase.auth.signOut()}
         />
       );
     }
@@ -73,7 +107,9 @@ export default function App() {
       <View style={styles.header}>
         <Text style={styles.brand}>Washlly Mobile</Text>
       </View>
-      <View style={styles.body}>{renderScreen()}</View>
+      <View style={styles.body}>
+        {restoringSession ? <ActivityIndicator color={palette.deepBlue} style={styles.loader} /> : renderScreen()}
+      </View>
       <BottomTabs active={activeTab} onChange={setActiveTab} />
     </SafeAreaView>
   );
@@ -91,4 +127,5 @@ const styles = StyleSheet.create({
   },
   brand: { textAlign: "right", fontSize: 24, color: palette.deepBlue, fontWeight: "900" },
   body: { flex: 1 },
+  loader: { marginTop: 40 },
 });

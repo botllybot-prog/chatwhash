@@ -59,7 +59,7 @@ export async function loadOwnerContext(userId: string): Promise<OwnerContext> {
   const { data, error } = await (supabase as any)
     .from("station_owners")
     .select(
-      "id, station_id, owner_name, owner_phone, free_requests_quota, free_requests_used, stations(name, is_active, suspension_reason)",
+      "id, station_id, owner_name, owner_phone, free_requests_quota, free_requests_used, stations(name, address, detailed_address, image_url, working_hours_start, working_hours_end, slot_duration_minutes, is_active, suspension_reason)",
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -76,6 +76,12 @@ export async function loadOwnerContext(userId: string): Promise<OwnerContext> {
     freeRequestsQuota: normalizeMaybeNumber(data.free_requests_quota, 0),
     freeRequestsUsed: normalizeMaybeNumber(data.free_requests_used, 0),
     stationName: data.stations?.name || "محطتي",
+    stationAddress: data.stations?.address || "",
+    stationDetailedAddress: data.stations?.detailed_address || null,
+    stationImageUrl: data.stations?.image_url || null,
+    stationWorkingHoursStart: data.stations?.working_hours_start || null,
+    stationWorkingHoursEnd: data.stations?.working_hours_end || null,
+    stationSlotDurationMinutes: normalizeMaybeNumber(data.stations?.slot_duration_minutes, 30),
     stationIsActive: !!data.stations?.is_active,
     suspensionReason: data.stations?.suspension_reason || null,
   };
