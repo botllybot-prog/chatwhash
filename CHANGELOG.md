@@ -5,6 +5,10 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-05-08] — Quick Booking Distance Match & WhatsApp Actions
+
+- Quick booking now matches nearby stations by distance only and no longer rejects stations because their active service name differs from the selected quick-booking label.
+- Updated the customer WhatsApp confirmation after quick booking with the 15 km resend notice and action buttons for current stations, cancelling quick bookings, and returning to the map.
 ## [2026-04-23] — Advanced Debt Collection, Suspension Flow & Payment Gateway
 
 ### New Features
