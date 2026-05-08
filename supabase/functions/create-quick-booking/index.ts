@@ -270,6 +270,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const language = normalizeLanguage(body.language);
     const msg = localizedMessages[language];
+    const authHeader = req.headers.get("Authorization") || "";
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const isInternalResend = body.internal_resend === true && authHeader === `Bearer ${serviceRoleKey}`;
     const quickBookingAlreadyPendingMessage =
       language === "en"
         ? "You already have a quick booking waiting for a response. You cannot create another booking right now. Please wait 10 minutes; if the first 3 stations do not answer, we will send your request to 3 farther stations within your current area."
@@ -304,34 +307,36 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: duplicateAtSameTime } = await supabase
-      .from("bookings")
-      .select("id")
-      .eq("customer_phone", customerPhone)
-      .eq("booking_date", bookingDate)
-      .eq("booking_time", bookingTime)
-      .in("status", ["pending", "confirmed"])
-      .limit(1);
+    if (!isInternalResend) {
+      const { data: duplicateAtSameTime } = await supabase
+        .from("bookings")
+        .select("id")
+        .eq("customer_phone", customerPhone)
+        .eq("booking_date", bookingDate)
+        .eq("booking_time", bookingTime)
+        .in("status", ["pending", "confirmed"])
+        .limit(1);
 
-    if (duplicateAtSameTime && duplicateAtSameTime.length > 0) {
-      return new Response(JSON.stringify({ error: "quick_booking_already_pending", message: quickBookingAlreadyPendingMessage }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+      if (duplicateAtSameTime && duplicateAtSameTime.length > 0) {
+        return new Response(JSON.stringify({ error: "quick_booking_already_pending", message: quickBookingAlreadyPendingMessage }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
-    const { data: activeBookings } = await supabase
-      .from("bookings")
-      .select("id")
-      .eq("customer_phone", customerPhone)
-      .in("status", ["pending", "confirmed"])
-      .limit(3);
+      const { data: activeBookings } = await supabase
+        .from("bookings")
+        .select("id")
+        .eq("customer_phone", customerPhone)
+        .in("status", ["pending", "confirmed"])
+        .limit(3);
 
-    if ((activeBookings?.length || 0) >= 3) {
-      return new Response(JSON.stringify({ error: "quick_booking_already_pending", message: quickBookingAlreadyPendingMessage }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if ((activeBookings?.length || 0) >= 3) {
+        return new Response(JSON.stringify({ error: "quick_booking_already_pending", message: quickBookingAlreadyPendingMessage }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const [{ data: stations }, { data: services }, settings, ownerInfoMap] = await Promise.all([

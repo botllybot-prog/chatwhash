@@ -40,6 +40,11 @@ function toTimestamp(date: string, time: string) {
   return new Date(`${date}T${time}Z`).getTime();
 }
 
+function baghdadElapsedMinutesSince(timestampMs: number, nowMs: number) {
+  const baghdadOffsetMs = 3 * 60 * 60 * 1000;
+  return Math.floor(((nowMs + baghdadOffsetMs) - (timestampMs + baghdadOffsetMs)) / 60000);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -89,7 +94,7 @@ Deno.serve(async (req) => {
         .filter((value: number) => Number.isFinite(value) && value > 0)
         .sort((a: number, b: number) => a - b)[0] || new Date((request as any).created_at || 0).getTime();
 
-      if (!Number.isFinite(firstSentAt) || firstSentAt > now - 10 * 60 * 1000) {
+      if (!Number.isFinite(firstSentAt) || baghdadElapsedMinutesSince(firstSentAt, now) < 10) {
         continue;
       }
 
@@ -122,6 +127,7 @@ Deno.serve(async (req) => {
             customer_lng: request.customer_lng,
             language: request.language || "ar",
             exclude_station_ids: excludedStationIds,
+            internal_resend: true,
           }),
         });
         const resendData = await resendResponse.json().catch(() => ({}));
