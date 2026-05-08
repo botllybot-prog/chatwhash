@@ -148,10 +148,6 @@ function normalizeServiceKind(value: string): ServiceKind {
   return "surface";
 }
 
-function serviceMatches(_name: string, _kind: ServiceKind): boolean {
-  return true;
-}
-
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -368,9 +364,7 @@ Deno.serve(async (req) => {
           skippedStations.push({ station_id: station.id, station_name: station.name, reason: "owner_inactive" });
           return null;
         }
-        const stationServices = serviceRows.filter(
-          (svc) => svc.is_active && svc.station_id === station.id && serviceMatches(svc.name, serviceKind),
-        );
+        const stationServices = serviceRows.filter((svc) => svc.is_active && svc.station_id === station.id);
         const firstService = stationServices[0];
         if (!firstService) {
           skippedStations.push({ station_id: station.id, station_name: station.name, reason: "service_mismatch_or_missing" });
@@ -550,14 +544,35 @@ Deno.serve(async (req) => {
 
     const waitingOwnerReply =
       language === "en"
-        ? "Your request was sent to 3 stations and we are waiting for the first response."
+        ? "Your request was sent to 3 stations and we are waiting for the first response. We will notify you if none of the stations reply, then send your request to 3 other stations within 15 km."
         : language === "tr"
-          ? "Talebiniz 3 istasyona gönderildi. İlk yanıt bekleniyor."
+          ? "Talebiniz 3 istasyona gönderildi ve yanıt bekleniyor. Hiçbir istasyon yanıt vermezse sizi bilgilendirip talebinizi 15 km içindeki 3 başka istasyona göndereceğiz."
           : language === "ku"
-            ? "داواکارییەکەت بۆ 3 وێستگە نێردرا. چاوەڕێی یەکەم وەڵام دەکەین."
-            : "تم إرسال طلبك إلى 3 محطات وبانتظار الرد.";
+            ? "داواکارییەکەت بۆ 3 وێستگە نێردرا و چاوەڕێی وەڵام دەکەین. ئەگەر هیچ وێستگەیەک وەڵامی نەداوە، ئاگادارت دەکەین و داواکارییەکەت بۆ 3 وێستگەی تری ناو 15 کم دەنێرین."
+            : "تم إرسال طلبك إلى 3 محطات وبانتظار الرد. سنعلمك في حالة لم يجب أحد المحطات ونرسل طلبك إلى 3 محطات أخرى ضمن نطاق 15 كلم.";
 
-    await sendWhatsAppText(customerPhone, waitingOwnerReply, settings, language);
+    await sendWhatsAppInteractive(
+      customerPhone,
+      waitingOwnerReply,
+      [
+        { id: "quick_targets", title: "المحطات الحالية" },
+        { id: "quick_cancel_all", title: "إلغاء الحجوزات" },
+        { id: "quick_map", title: "العودة للخريطة" },
+      ],
+      settings,
+      language,
+    );
+
+    await supabase.from("bot_sessions").upsert(
+      {
+        customer_phone: customerPhone,
+        current_step: "quick_booking_waiting",
+        timeout_request_id: requestRow?.id || null,
+        expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "customer_phone" },
+    );
 
     return new Response(
       JSON.stringify({

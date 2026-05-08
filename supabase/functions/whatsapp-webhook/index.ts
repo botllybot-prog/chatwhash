@@ -1131,6 +1131,95 @@ async function handleCustomerLogic(
   if (input === "btn_bookings") {
     return await showMyBookings(supabase, phone, convId, settings);
   }
+  if (input === "quick_map") {
+    const waId = await sendWhatsAppInteractive(phone, "رابط الخريطة:\nhttps://www.washlly.com/map", [
+      { id: "btn_bookings", title: "حجوزاتي" },
+      { id: "btn_menu", title: "القائمة" },
+    ], settings);
+    saveBotMessage(supabase, convId, "رابط الخريطة", waId);
+    return true;
+  }
+  if (input === "quick_targets") {
+    let requestId = session.timeout_request_id;
+    if (!requestId) {
+      const { data: latestRequest } = await supabase
+        .from("quick_booking_requests")
+        .select("id")
+        .eq("customer_phone", phone)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      requestId = latestRequest?.id || null;
+    }
+
+    if (!requestId) {
+      const waId = await sendWhatsAppInteractive(phone, "لا توجد محطات حالية لهذا الطلب.", [
+        { id: "quick_map", title: "العودة للخريطة" },
+      ], settings);
+      saveBotMessage(supabase, convId, "لا توجد محطات حالية", waId);
+      return true;
+    }
+
+    const { data: targets } = await supabase
+      .from("quick_booking_targets")
+      .select("distance_km, state, bookings(booking_number, status, stations(name))")
+      .eq("request_id", requestId)
+      .order("distance_km", { ascending: true });
+
+    const rows = (targets || []).map((target: any, index: number) => {
+      const booking = target.bookings || {};
+      const stationName = booking.stations?.name || "محطة";
+      const distance = Number(target.distance_km || 0).toFixed(1);
+      const status = booking.status || target.state || "pending";
+      return `${index + 1}. ${stationName} - ${distance} كم - #${booking.booking_number || "---"} - ${status}`;
+    });
+
+    const body = rows.length > 0
+      ? `المحطات الحالية التي وصلها طلبك:\n${rows.join("\n")}`
+      : "لا توجد محطات حالية لهذا الطلب.";
+    const waId = await sendWhatsAppInteractive(phone, body, [
+      { id: "quick_cancel_all", title: "إلغاء الحجوزات" },
+      { id: "quick_map", title: "العودة للخريطة" },
+    ], settings);
+    saveBotMessage(supabase, convId, "المحطات الحالية", waId);
+    return true;
+  }
+  if (input === "quick_cancel_all") {
+    let requestId = session.timeout_request_id;
+    if (!requestId) {
+      const { data: latestRequest } = await supabase
+        .from("quick_booking_requests")
+        .select("id")
+        .eq("customer_phone", phone)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      requestId = latestRequest?.id || null;
+    }
+
+    if (requestId) {
+      const { data: targets } = await supabase
+        .from("quick_booking_targets")
+        .select("booking_id")
+        .eq("request_id", requestId);
+      const bookingIds = (targets || []).map((target: any) => target.booking_id).filter(Boolean);
+      if (bookingIds.length > 0) {
+        await supabase.from("bookings").update({ status: "cancelled" }).in("id", bookingIds).in("status", ["pending", "pending_customer_approval"]);
+        await supabase.from("quick_booking_targets").update({ state: "cancelled" }).in("booking_id", bookingIds);
+      }
+      await supabase.from("quick_booking_requests").update({ status: "cancelled" }).eq("id", requestId);
+    } else {
+      await supabase.from("bookings").update({ status: "cancelled" }).eq("customer_phone", phone).in("status", ["pending", "pending_customer_approval"]);
+    }
+
+    updateSession(supabase, phone, { current_step: "idle", timeout_booking_id: null, timeout_request_id: null });
+    const waId = await sendWhatsAppInteractive(phone, "تم إلغاء حجوزاتك السريعة الحالية.", [
+      { id: "quick_map", title: "العودة للخريطة" },
+      { id: "btn_menu", title: "القائمة" },
+    ], settings);
+    saveBotMessage(supabase, convId, "إلغاء الحجوزات السريعة", waId);
+    return true;
+  }
 
   // Back/menu button callbacks
   if (input === "btn_menu" || input === "svc_back" || input === "time_back" || input === "day_back") {
