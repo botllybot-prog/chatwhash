@@ -70,6 +70,8 @@ Deno.serve(async (req) => {
       station_id,
       owner_name,
       owner_phone: owner_phone || null,
+      free_requests_quota: 20,
+      free_requests_used: 0,
       created_by: caller.id,
     });
 
