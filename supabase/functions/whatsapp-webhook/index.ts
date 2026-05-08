@@ -1186,6 +1186,7 @@ async function handleCustomerLogic(
   }
   if (input === "quick_cancel_all") {
     let requestId = session.timeout_request_id;
+    let bookingIds: string[] = [];
     if (!requestId) {
       const { data: latestRequest } = await supabase
         .from("quick_booking_requests")
@@ -1202,14 +1203,56 @@ async function handleCustomerLogic(
         .from("quick_booking_targets")
         .select("booking_id")
         .eq("request_id", requestId);
-      const bookingIds = (targets || []).map((target: any) => target.booking_id).filter(Boolean);
+      bookingIds = (targets || []).map((target: any) => target.booking_id).filter(Boolean);
       if (bookingIds.length > 0) {
-        await supabase.from("bookings").update({ status: "cancelled" }).in("id", bookingIds).in("status", ["pending", "pending_customer_approval"]);
+        await supabase.from("bookings").update({ status: "cancelled" }).in("id", bookingIds).in("status", ["pending", "confirmed", "pending_customer_approval"]);
         await supabase.from("quick_booking_targets").update({ state: "cancelled" }).in("booking_id", bookingIds);
       }
       await supabase.from("quick_booking_requests").update({ status: "cancelled" }).eq("id", requestId);
     } else {
-      await supabase.from("bookings").update({ status: "cancelled" }).eq("customer_phone", phone).in("status", ["pending", "pending_customer_approval"]);
+      const { data: activeBookings } = await supabase
+        .from("bookings")
+        .select("id")
+        .eq("customer_phone", phone)
+        .in("status", ["pending", "confirmed", "pending_customer_approval"]);
+      bookingIds = (activeBookings || []).map((booking: any) => booking.id).filter(Boolean);
+      if (bookingIds.length > 0) {
+        await supabase.from("bookings").update({ status: "cancelled" }).in("id", bookingIds).in("status", ["pending", "confirmed", "pending_customer_approval"]);
+      }
+    }
+
+    if (bookingIds.length > 0) {
+      const { data: cancelledBookings } = await supabase
+        .from("bookings")
+        .select("id, booking_number, booking_date, booking_time, customer_name, station_id, stations(name), services(name)")
+        .in("id", bookingIds);
+
+      for (const booking of cancelledBookings || []) {
+        if (!booking.station_id) continue;
+        const { data: owner } = await supabase
+          .from("station_owners")
+          .select("owner_phone, owner_name")
+          .eq("station_id", booking.station_id)
+          .maybeSingle();
+
+        if (!owner?.owner_phone) continue;
+        const ownerPhone = normalizePhone(owner.owner_phone);
+        const ownerConvId = await getOrCreateConvForPhone(supabase, ownerPhone, owner.owner_name);
+        if (!ownerConvId) continue;
+
+        const timeLabel = booking.booking_time ? to12Hour(booking.booking_time.substring(0, 5)) : "-";
+        const dateLabel = new Date(booking.booking_date).toLocaleDateString("ar-IQ", {
+          calendar: "gregory",
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        const ownerCancelMsg = `⚠️ الزبون قام بإلغاء الحجز.\n\n📋 رقم الحجز: #${booking.booking_number}\n👤 العميل: ${booking.customer_name || phone}\n🏪 المحطة: ${(booking.stations as any)?.name || ""}\n🔧 الخدمة: ${booking.services?.name || ""}\n📅 التاريخ: ${dateLabel}\n🕐 الوقت: ${timeLabel}`;
+
+        await sendAndSave(supabase, ownerConvId, ownerPhone, ownerCancelMsg, settings);
+        updateSession(supabase, ownerPhone, { current_step: "owner_idle", pending_booking_id: null });
+      }
     }
 
     updateSession(supabase, phone, { current_step: "idle", timeout_booking_id: null, timeout_request_id: null });
