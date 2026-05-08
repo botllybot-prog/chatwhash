@@ -10,11 +10,11 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import MapView, { Marker, type Region } from "react-native-maps";
 import { SectionTitle } from "../components/SectionTitle";
 import { useStations } from "../hooks/useStations";
 import { gradients, palette } from "../theme";
 import {
+  cancelAllMapBookings,
   cancelMapBooking,
   createMapBooking,
   createQuickBooking,
@@ -72,7 +72,7 @@ export function CustomerHomeScreen({
   const [bookingResult, setBookingResult] = useState<BookingCreateResult | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackType, setFeedbackType] = useState<"success" | "error" | "info">("info");
-  const [customerRegion, setCustomerRegion] = useState<Region | null>(null);
+  const [customerRegion, setCustomerRegion] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const selectedStation = useMemo(
     () => stations.find((station) => station.id === selectedStationId) || null,
@@ -83,7 +83,6 @@ export function CustomerHomeScreen({
     [selectedStation, selectedServiceId],
   );
   const quickTime = selectedSlot || getNextHalfHourTime();
-  const activeRegion = customerRegion || mapRegion;
   const discountAmount =
     selectedService && spinResult ? (selectedService.price * spinResult.discountPercent) / 100 : 0;
   const finalPrice = selectedService ? selectedService.price - discountAmount : 0;
@@ -175,8 +174,6 @@ export function CustomerHomeScreen({
     const nextRegion = {
       latitude: location.coords.latitude,
       longitude: location.coords.longitude,
-      latitudeDelta: 0.08,
-      longitudeDelta: 0.08,
     };
     setCustomerRegion(nextRegion);
     return nextRegion;
@@ -203,9 +200,38 @@ export function CustomerHomeScreen({
       showNotice(`تم إرسال الحجز السريع إلى ${count} محطة ضمن نطاقك. سنبلغك عند رد المحطات.`, "success");
       await reload();
     } catch (quickError) {
-      showNotice(quickError instanceof Error ? quickError.message : "تعذر إرسال الحجز السريع.", "error");
+      const rawMessage = quickError instanceof Error ? quickError.message : "";
+      const friendlyMessage =
+        rawMessage.includes("non-2xx") || rawMessage.includes("duplicate") || rawMessage.includes("pending")
+          ? "أنت قمت بإرسال حجز سريع إلى 3 محطات. يمكنك الانتظار لحين الرد، أو لديك محاولة أخيرة لإرسال الطلب إلى 3 محطات أبعد ضمن نطاقك. وإذا تريد البدء من جديد اضغط زر إلغاء كل الحجوزات."
+          : rawMessage || "تعذر إرسال الحجز السريع.";
+      showNotice(friendlyMessage, "info");
     } finally {
       setQuickLoading(false);
+    }
+  };
+
+  const handleCancelAllBookings = async () => {
+    if (!customerPhone.trim()) {
+      showNotice("أدخل رقم الهاتف أولاً حتى نلغي الحجوزات المرتبطة به.", "info");
+      return;
+    }
+
+    setCancelLoading(true);
+    try {
+      const result = await cancelAllMapBookings(customerPhone);
+      setBookingResult(null);
+      setSpinResult(null);
+      setNeedsRespin(false);
+      const message = result.alreadyEmpty
+        ? "لا توجد حجوزات فعالة على هذا الرقم."
+        : `تم إلغاء ${result.cancelledCount} حجز وإبلاغ المحطات.`;
+      showNotice(message, "success");
+      await reload();
+    } catch (cancelError) {
+      showNotice(cancelError instanceof Error ? cancelError.message : "تعذر إلغاء الحجوزات.", "error");
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -319,37 +345,12 @@ export function CustomerHomeScreen({
       ) : null}
 
       <SectionTitle title="الخريطة والحجز السريع" subtitle="حدد موقعك ثم أرسل طلباً لأقرب 3 محطات ضمن نطاقك." />
-      {mode === "map" ? (
-        <View style={styles.mapWrap}>
-          <MapView style={StyleSheet.absoluteFill} initialRegion={mapRegion} region={activeRegion}>
-            {stations.map((station) => (
-              <Marker
-                key={station.id}
-                coordinate={{ latitude: station.latitude, longitude: station.longitude }}
-                title={station.name}
-                description={`${station.area} • ${station.open ? "مفتوح" : "مغلق"}`}
-                onPress={() => setSelectedStationId(station.id)}
-              />
-            ))}
-            {customerRegion ? (
-              <Marker
-                coordinate={{ latitude: customerRegion.latitude, longitude: customerRegion.longitude }}
-                title="موقعي"
-                pinColor="#1d4ed8"
-              />
-            ) : null}
-          </MapView>
-          <View style={styles.mapOverlay}>
-            <Text style={styles.mapOverlayTitle}>الخريطة جاهزة للحجز السريع</Text>
-            <Text style={styles.mapOverlayText}>وقت الحجز السريع الحالي: {selectedDate} - {quickTime}</Text>
-          </View>
-        </View>
-      ) : (
-        <Pressable style={styles.openMapCard} onPress={onOpenMap}>
-          <Text style={styles.openMapTitle}>فتح الخريطة</Text>
-          <Text style={styles.openMapText}>الخريطة تعمل داخل تبويب الخريطة لتقليل مشاكل إغلاق التطبيق عند التشغيل.</Text>
-        </Pressable>
-      )}
+      <View style={styles.openMapCard}>
+        <Text style={styles.openMapTitle}>{mode === "map" ? "المحطات القريبة" : "فتح الخريطة"}</Text>
+        <Text style={styles.openMapText}>
+          تم تعطيل الخريطة الأصلية مؤقتاً داخل التطبيق لأنها تسبب خروجاً على بعض أجهزة أندرويد. يمكنك استخدام الحجز السريع والقائمة أدناه بدون خروج.
+        </Text>
+      </View>
 
       <View style={styles.card}>
         <Field label="اسم الزبون" value={customerName} onChangeText={setCustomerName} placeholder="مصطفى" />
@@ -366,6 +367,13 @@ export function CustomerHomeScreen({
             {quickLoading ? <ActivityIndicator color={palette.white} /> : <Text style={styles.quickButtonText}>حجز سريع لأقرب 3 محطات</Text>}
           </Pressable>
         </View>
+        <Pressable
+          style={[styles.cancelAllButton, cancelLoading && styles.disabledButton]}
+          onPress={handleCancelAllBookings}
+          disabled={cancelLoading}
+        >
+          {cancelLoading ? <ActivityIndicator color={palette.deepBlue} /> : <Text style={styles.cancelAllButtonText}>إلغاء كل الحجوزات</Text>}
+        </Pressable>
       </View>
 
       <SectionTitle title="1) اختر المحطة" subtitle="اختيار محطة محددة يستخدم للحجز الاعتيادي من الخريطة." />
@@ -734,6 +742,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   locateButtonText: { color: palette.deepBlue, fontWeight: "800" },
+  cancelAllButton: {
+    marginTop: 8,
+    backgroundColor: "#f0f4f8",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderColor: palette.line,
+    borderWidth: 1,
+  },
+  cancelAllButtonText: { color: palette.deepBlue, fontWeight: "900" },
   confirmButton: { flex: 1, backgroundColor: palette.deepBlue, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
   confirmButtonText: { color: palette.white, fontWeight: "800" },
   cancelButton: {

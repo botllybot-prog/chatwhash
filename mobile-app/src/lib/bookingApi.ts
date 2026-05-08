@@ -236,6 +236,27 @@ export async function createQuickBooking(payload: {
   return data;
 }
 
+export async function cancelAllMapBookings(customerPhone: string): Promise<{ success: true; cancelledCount: number; alreadyEmpty?: boolean }> {
+  const { data, error } = await supabase.functions.invoke<
+    { success: true; cancelledCount: number; alreadyEmpty?: boolean } & ApiErrorResponse
+  >("cancel-all-map-bookings", {
+    body: {
+      customer_phone: normalizePhone(customerPhone),
+      language: "ar",
+    },
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data || (data as ApiErrorResponse).error || !data.success) {
+    throw new Error((data as ApiErrorResponse)?.error || "تعذر إلغاء الحجوزات.");
+  }
+
+  return data;
+}
+
 export async function cancelMapBooking(bookingId: string, customerPhone: string): Promise<BookingCancelResult> {
   const { data, error } = await supabase.functions.invoke<BookingCancelResult & ApiErrorResponse>("cancel-map-booking", {
     body: {

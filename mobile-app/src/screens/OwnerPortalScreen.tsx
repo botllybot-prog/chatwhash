@@ -125,19 +125,33 @@ export function OwnerPortalScreen({ ownerUserId, onLogout }: { ownerUserId: stri
         imageUrl: owner.stationImageUrl || "",
       });
 
-      const [sub, methods] = await Promise.all([loadLatestSubscription(owner.stationId), loadOwnerPaymentMethods()]);
+      const sub = await loadLatestSubscription(owner.stationId).catch(() => null);
       setSubscription(sub);
+      const methods = await loadOwnerPaymentMethods().catch(() => ({ zainCash: "", rafidain: "", nasWallet: "", cardUrl: "" }));
       setPaymentMethods(methods);
-      setPayments(sub?.id ? await loadPayments(sub.id) : []);
+      setPayments(sub?.id ? await loadPayments(sub.id).catch(() => []) : []);
 
-      const { data: bookingRows, error: bookingError } = await (supabase as any)
+      let bookingRows: any[] = [];
+      const withServices = await (supabase as any)
         .from("bookings")
         .select("id, booking_number, customer_name, customer_phone, booking_date, booking_time, status, services(name)")
         .eq("station_id", owner.stationId)
         .in("status", ["pending", "pending_owner_approval", "pending_customer_approval", "confirmed"])
         .order("created_at", { ascending: false })
         .limit(30);
-      if (bookingError) throw bookingError;
+      if (withServices.error) {
+        const withoutServices = await (supabase as any)
+          .from("bookings")
+          .select("id, booking_number, customer_name, customer_phone, booking_date, booking_time, status")
+          .eq("station_id", owner.stationId)
+          .in("status", ["pending", "pending_owner_approval", "pending_customer_approval", "confirmed"])
+          .order("created_at", { ascending: false })
+          .limit(30);
+        if (withoutServices.error) throw withoutServices.error;
+        bookingRows = withoutServices.data || [];
+      } else {
+        bookingRows = withServices.data || [];
+      }
 
       const normalizedBookings: OwnerBooking[] = (bookingRows || []).map((row: any) => ({
         id: row.id,
@@ -252,11 +266,35 @@ export function OwnerPortalScreen({ ownerUserId, onLogout }: { ownerUserId: stri
           image_url: stationProfile.imageUrl.trim() || null,
         })
         .eq("id", ownerContext.stationId);
-      if (updateError) throw updateError;
-      setNotice("تم حفظ بيانات المحطة.");
+      if (updateError) {
+        const requests = [
+          { field_name: "address", old_value: ownerContext.stationAddress || "", new_value: stationProfile.address.trim() },
+          { field_name: "detailed_address", old_value: ownerContext.stationDetailedAddress || "", new_value: stationProfile.detailedAddress.trim() },
+          { field_name: "image_url", old_value: ownerContext.stationImageUrl || "", new_value: stationProfile.imageUrl.trim() },
+        ].filter((item) => item.old_value !== item.new_value && item.new_value);
+
+        if (!requests.length) {
+          setNotice("لا توجد تغييرات جديدة لحفظها.");
+          return;
+        }
+
+        const { error: requestError } = await (supabase as any).from("edit_requests").insert(
+          requests.map((item) => ({
+            station_id: ownerContext.stationId,
+            requested_by: ownerUserId,
+            field_name: item.field_name,
+            old_value: item.old_value,
+            new_value: item.new_value,
+          })),
+        );
+        if (requestError) throw requestError;
+        setNotice("تم إرسال طلب تعديل بيانات المحطة للإدارة مثل بوابة الويب.");
+      } else {
+        setNotice("تم حفظ بيانات المحطة.");
+      }
       await refresh(true);
     } catch (profileError) {
-      setError(profileError instanceof Error ? profileError.message : "تعذر حفظ بيانات المحطة.");
+      setError(profileError instanceof Error ? profileError.message : "تعذر حفظ أو إرسال تعديل بيانات المحطة.");
     } finally {
       setSavingStationProfile(false);
     }
