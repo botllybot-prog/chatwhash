@@ -270,17 +270,6 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const language = normalizeLanguage(body.language);
     const msg = localizedMessages[language];
-    const authHeader = req.headers.get("Authorization") || "";
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const isInternalResend = body.internal_resend === true && authHeader === `Bearer ${serviceRoleKey}`;
-    const quickBookingAlreadyPendingMessage =
-      language === "en"
-        ? "You already have a quick booking waiting for a response. You cannot create another booking right now. Please wait 10 minutes; if the first 3 stations do not answer, we will send your request to 3 farther stations within your current area."
-        : language === "tr"
-          ? "Zaten yanıt bekleyen bir hızlı rezervasyonunuz var. Şu anda tekrar rezervasyon oluşturamazsınız. Lütfen 10 dakika bekleyin; ilk 3 istasyon yanıt vermezse talebinizi mevcut bölgeniz içindeki 3 daha uzak istasyona göndereceğiz."
-          : language === "ku"
-            ? "پێشتر حجزێکی خێرات هەیە و چاوەڕێی وەڵامە. ئێستا ناتوانیت حجزێکی تر بکەیت. تکایە 10 خولەک چاوەڕێ بکە؛ ئەگەر یەکەم 3 وێستگە وەڵامیان نەدا، داواکارییەکەت بۆ 3 وێستگەی دوورتر لە ناوچەی ئێستات دەنێرین."
-            : "لقد قمت بحجز سريع وبانتظار الرد. لا يمكنك إجراء حجز مرة أخرى، رجاءً انتظر 10 دقائق. في حالة لم تتم الإجابة من قبل أول 3 محطات سنرسل طلبك إلى 3 محطات أبعد ضمن نطاقك الحالي.";
 
     const customerName = String(body.customer_name || "").trim();
     const customerPhone = normalizePhone(String(body.customer_phone || ""));
@@ -307,38 +296,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!isInternalResend) {
-      const { data: duplicateAtSameTime } = await supabase
-        .from("bookings")
-        .select("id")
-        .eq("customer_phone", customerPhone)
-        .eq("booking_date", bookingDate)
-        .eq("booking_time", bookingTime)
-        .in("status", ["pending", "confirmed"])
-        .limit(1);
-
-      if (duplicateAtSameTime && duplicateAtSameTime.length > 0) {
-        return new Response(JSON.stringify({ error: "quick_booking_already_pending", message: quickBookingAlreadyPendingMessage }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const { data: activeBookings } = await supabase
-        .from("bookings")
-        .select("id")
-        .eq("customer_phone", customerPhone)
-        .in("status", ["pending", "confirmed"])
-        .limit(3);
-
-      if ((activeBookings?.length || 0) >= 3) {
-        return new Response(JSON.stringify({ error: "quick_booking_already_pending", message: quickBookingAlreadyPendingMessage }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
-
     const [{ data: stations }, { data: services }, settings, ownerInfoMap] = await Promise.all([
       supabase
         .from("stations")
@@ -355,6 +312,21 @@ Deno.serve(async (req) => {
     const serviceRows = (services || []) as ServiceRow[];
     const baseLat = customerLat;
     const baseLng = customerLng;
+    const { data: previousQuickRequests } = await supabase
+      .from("quick_booking_requests")
+      .select("quick_booking_targets(station_id)")
+      .eq("customer_phone", customerPhone)
+      .eq("status", "pending");
+    const previousStationIds = new Set<string>();
+    for (const request of previousQuickRequests || []) {
+      const targets = Array.isArray((request as any).quick_booking_targets)
+        ? (request as any).quick_booking_targets
+        : [];
+      for (const target of targets) {
+        const stationId = String(target?.station_id || "");
+        if (stationId) previousStationIds.add(stationId);
+      }
+    }
 
     const skippedStations: { station_id: string; station_name: string; reason: string }[] = [];
     const excludedStationIds = new Set<string>(
@@ -362,6 +334,9 @@ Deno.serve(async (req) => {
         ? body.exclude_station_ids.map((v: unknown) => String(v || "")).filter(Boolean)
         : [],
     );
+    for (const stationId of previousStationIds) {
+      excludedStationIds.add(stationId);
+    }
     const ranked = stationRows
       .map((station) => {
         if (excludedStationIds.has(station.id)) {
@@ -408,7 +383,7 @@ Deno.serve(async (req) => {
 
     if (matched.length === 0) {
       return new Response(JSON.stringify({ error: "no_station_found", message: msg.noStations }), {
-        status: 404,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -550,7 +525,7 @@ Deno.serve(async (req) => {
 
     if (bookingRows.length === 0) {
       return new Response(JSON.stringify({ error: "no_quota_available", message: msg.noStations, skipped: skippedStations }), {
-        status: 409,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -564,9 +539,14 @@ Deno.serve(async (req) => {
             ? "داواکارییەکەت بۆ 3 وێستگە نێردرا و چاوەڕێی وەڵام دەکەین. ئەگەر هیچ وێستگەیەک وەڵامی نەداوە، ئاگادارت دەکەین و داواکارییەکەت بۆ 3 وێستگەی تری ناو 15 کم دەنێرین."
             : "تم إرسال طلبك إلى 3 محطات وبانتظار الرد. سنعلمك في حالة لم يجب أحد المحطات ونرسل طلبك إلى 3 محطات أخرى ضمن نطاق 15 كلم.";
 
+    const customerWaitingMessage =
+      language === "ar"
+        ? `${waitingOwnerReply}\n\nفي حال تأخر الرد عليك بإمكانك الرجوع إلى الخريطة والتقديم مرة أخرى كحجز سريع، وسيذهب الطلب لمحطات أخرى مختلفة.`
+        : waitingOwnerReply;
+
     await sendWhatsAppInteractive(
       customerPhone,
-      waitingOwnerReply,
+      customerWaitingMessage,
       [
         { id: "quick_targets", title: "المحطات الحالية" },
         { id: "quick_cancel_all", title: "إلغاء الحجوزات" },

@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
 
     const now = Date.now();
 
-    // 1) Quick-booking timeout after 10 min: resend to the next stations within 15 km.
+    // 1) Quick-booking timeout after 10 min: ask the customer to submit again from the map.
     const { data: timedOutBookings } = await supabase
       .from("quick_booking_requests")
       .select("id, created_at, customer_name, customer_phone, service_kind, booking_date, booking_time, customer_lat, customer_lng, language, quick_booking_targets(station_id, booking_id, bookings(booking_number, status, created_at, stations(name)))")
@@ -78,8 +78,6 @@ Deno.serve(async (req) => {
         .filter(Boolean)
         .slice(0, 3)
         .join("، ");
-      const excludedStationIds = targets.map((target: any) => target?.station_id).filter(Boolean);
-      const bookingIds = targets.map((target: any) => target?.booking_id).filter(Boolean);
       const targetBookings = targets.map((target: any) => target?.bookings).filter(Boolean);
       const hasAnsweredBooking = targetBookings.some((booking: any) =>
         booking?.status && booking.status !== "pending"
@@ -97,49 +95,22 @@ Deno.serve(async (req) => {
       if (!Number.isFinite(firstSentAt) || baghdadElapsedMinutesSince(firstSentAt, now) < 10) {
         continue;
       }
+      await supabase.from("quick_booking_requests").update({ timeout_notified: true }).eq("id", request.id);
 
-      if (bookingIds.length > 0) {
-        await supabase.from("bookings").update({ status: "cancelled" }).in("id", bookingIds).eq("status", "pending");
-        await supabase.from("quick_booking_targets").update({ state: "timed_out" }).in("booking_id", bookingIds);
-      }
+      const text =
+        `⏰ انتهت 10 دقائق ولم يصل رد حتى الآن على طلبك${stationNames ? ` لدى ${stationNames}` : ""}.\n` +
+        "في حال تأخر الرد عليك بإمكانك الرجوع إلى الخريطة والتقديم مرة أخرى كحجز سريع، وسيذهب الطلب لمحطات أخرى مختلفة ضمن نطاقك الحالي.";
 
-      await supabase.from("quick_booking_requests").update({ status: "timed_out", timeout_notified: true }).eq("id", request.id);
-
-      const supabaseUrl = Deno.env.get("SUPABASE_URL");
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-      let targetCount = 0;
-      let resendOk = false;
-
-      if (supabaseUrl && serviceKey) {
-        const resendResponse = await fetch(`${supabaseUrl}/functions/v1/create-quick-booking`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${serviceKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            customer_name: request.customer_name,
-            customer_phone: request.customer_phone,
-            service_kind: request.service_kind,
-            booking_date: request.booking_date,
-            booking_time: request.booking_time,
-            customer_lat: request.customer_lat,
-            customer_lng: request.customer_lng,
-            language: request.language || "ar",
-            exclude_station_ids: excludedStationIds,
-            internal_resend: true,
-          }),
-        });
-        const resendData = await resendResponse.json().catch(() => ({}));
-        targetCount = Number(resendData?.target_count || 0);
-        resendOk = resendResponse.ok && targetCount > 0;
-      }
-
-      const text = resendOk
-        ? `⏰ لم يصل رد حتى الآن على طلبك${stationNames ? ` لدى ${stationNames}` : ""}.\nتمت إعادة إرسال الطلب إلى ${targetCount} محطة أخرى ضمن نطاق 15 كم، وبانتظار أسرع رد.`
-        : `⏰ لم يصل رد حتى الآن على طلبك${stationNames ? ` لدى ${stationNames}` : ""}.\nلا توجد محطات أخرى متاحة ضمن نطاق 15 كم حالياً. يمكنك المحاولة لاحقاً أو اختيار حجز عادي من الخريطة.`;
-
-      const sent = await sendText(request.customer_phone, text, settings);
+      const sent = await sendInteractive(
+        request.customer_phone,
+        text,
+        [
+          { id: "quick_map", title: "العودة للخريطة" },
+          { id: "quick_targets", title: "المحطات الحالية" },
+          { id: "quick_cancel_all", title: "إلغاء الحجوزات" },
+        ],
+        settings,
+      );
       if (sent) timeoutAlerts++;
     }
 
