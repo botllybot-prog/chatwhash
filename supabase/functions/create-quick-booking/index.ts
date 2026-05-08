@@ -270,6 +270,14 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const language = normalizeLanguage(body.language);
     const msg = localizedMessages[language];
+    const quickBookingAlreadyPendingMessage =
+      language === "en"
+        ? "You already have a quick booking waiting for a response. You cannot create another booking right now. Please wait 10 minutes; if the first 3 stations do not answer, we will send your request to 3 farther stations within your current area."
+        : language === "tr"
+          ? "Zaten yanıt bekleyen bir hızlı rezervasyonunuz var. Şu anda tekrar rezervasyon oluşturamazsınız. Lütfen 10 dakika bekleyin; ilk 3 istasyon yanıt vermezse talebinizi mevcut bölgeniz içindeki 3 daha uzak istasyona göndereceğiz."
+          : language === "ku"
+            ? "پێشتر حجزێکی خێرات هەیە و چاوەڕێی وەڵامە. ئێستا ناتوانیت حجزێکی تر بکەیت. تکایە 10 خولەک چاوەڕێ بکە؛ ئەگەر یەکەم 3 وێستگە وەڵامیان نەدا، داواکارییەکەت بۆ 3 وێستگەی دوورتر لە ناوچەی ئێستات دەنێرین."
+            : "لقد قمت بحجز سريع وبانتظار الرد. لا يمكنك إجراء حجز مرة أخرى، رجاءً انتظر 10 دقائق. في حالة لم تتم الإجابة من قبل أول 3 محطات سنرسل طلبك إلى 3 محطات أبعد ضمن نطاقك الحالي.";
 
     const customerName = String(body.customer_name || "").trim();
     const customerPhone = normalizePhone(String(body.customer_phone || ""));
@@ -306,8 +314,8 @@ Deno.serve(async (req) => {
       .limit(1);
 
     if (duplicateAtSameTime && duplicateAtSameTime.length > 0) {
-      return new Response(JSON.stringify({ error: "already_booked_same_time", message: msg.duplicateSameTime }), {
-        status: 409,
+      return new Response(JSON.stringify({ error: "quick_booking_already_pending", message: quickBookingAlreadyPendingMessage }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -320,8 +328,8 @@ Deno.serve(async (req) => {
       .limit(3);
 
     if ((activeBookings?.length || 0) >= 3) {
-      return new Response(JSON.stringify({ error: "active_bookings_limit", message: msg.activeLimit }), {
-        status: 409,
+      return new Response(JSON.stringify({ error: "quick_booking_already_pending", message: quickBookingAlreadyPendingMessage }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
