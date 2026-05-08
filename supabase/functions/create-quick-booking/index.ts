@@ -24,6 +24,7 @@ type ServiceRow = {
 
 type Language = "ar" | "en" | "ku" | "tr";
 type ServiceKind = "surface" | "jack";
+const QUICK_BOOKING_RADIUS_KM = 15;
 
 const localizedMessages: Record<
   Language,
@@ -288,6 +289,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (!Number.isFinite(customerLat) || !Number.isFinite(customerLng)) {
+      const message = language === "en"
+        ? "Please share your location first so we only search within 15 km."
+        : "يرجى تحديد موقعك أولاً حتى نبحث ضمن نطاق 15 كم فقط.";
+      return new Response(JSON.stringify({ error: "location_required", message }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: duplicateAtSameTime } = await supabase
       .from("bookings")
       .select("id")
@@ -332,10 +343,8 @@ Deno.serve(async (req) => {
 
     const stationRows = (stations || []) as StationRow[];
     const serviceRows = (services || []) as ServiceRow[];
-    const fallbackLat = 36.34;
-    const fallbackLng = 43.13;
-    const baseLat = Number.isFinite(customerLat) ? customerLat : fallbackLat;
-    const baseLng = Number.isFinite(customerLng) ? customerLng : fallbackLng;
+    const baseLat = customerLat;
+    const baseLng = customerLng;
 
     const skippedStations: { station_id: string; station_name: string; reason: string }[] = [];
     const excludedStationIds = new Set<string>(
@@ -343,8 +352,6 @@ Deno.serve(async (req) => {
         ? body.exclude_station_ids.map((v: unknown) => String(v || "")).filter(Boolean)
         : [],
     );
-    const searchMode = String(body.search_mode || "nearest");
-
     const ranked = stationRows
       .map((station) => {
         if (excludedStationIds.has(station.id)) {
@@ -372,11 +379,16 @@ Deno.serve(async (req) => {
           skippedStations.push({ station_id: station.id, station_name: station.name, reason: "missing_location" });
           return null;
         }
+        const distance = haversineDistance(baseLat, baseLng, station.latitude, station.longitude);
+        if (distance > QUICK_BOOKING_RADIUS_KM) {
+          skippedStations.push({ station_id: station.id, station_name: station.name, reason: "outside_15km_radius" });
+          return null;
+        }
         return {
           station,
           service: firstService,
           ownerPhone: ownerInfo.ownerPhone,
-          distance: haversineDistance(baseLat, baseLng, station.latitude, station.longitude),
+          distance,
         };
       })
       .filter(Boolean)
@@ -384,7 +396,7 @@ Deno.serve(async (req) => {
         station: StationRow; service: ServiceRow; distance: number; ownerPhone: string
       }[];
 
-    const matched = searchMode === "farther" ? ranked.slice(3) : ranked;
+    const matched = ranked;
 
     if (matched.length === 0) {
       return new Response(JSON.stringify({ error: "no_station_found", message: msg.noStations }), {

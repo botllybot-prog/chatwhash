@@ -182,7 +182,6 @@ async function resendQuickBookingToFartherStations(
       customer_lng: request.customer_lng,
       language: request.language || "ar",
       exclude_station_ids: excludedStationIds,
-      search_mode: "farther",
     }),
   });
 

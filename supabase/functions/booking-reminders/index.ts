@@ -55,11 +55,11 @@ Deno.serve(async (req) => {
 
     const now = Date.now();
 
-    // 1) Quick-booking timeout after 10 min: ask for resend to farther 3 stations.
+    // 1) Quick-booking timeout after 10 min: resend to the next stations within 15 km.
     const tenMinAgo = new Date(now - 10 * 60 * 1000).toISOString();
     const { data: timedOutBookings } = await supabase
       .from("quick_booking_requests")
-      .select("id, customer_phone, service_kind, booking_date, booking_time, language, quick_booking_targets(station_id, bookings(booking_number, stations(name)))")
+      .select("id, customer_name, customer_phone, service_kind, booking_date, booking_time, customer_lat, customer_lng, language, quick_booking_targets(station_id, booking_id, bookings(booking_number, stations(name)))")
       .eq("status", "pending")
       .eq("timeout_notified", false)
       .lt("created_at", tenMinAgo);
@@ -74,35 +74,51 @@ Deno.serve(async (req) => {
         .filter(Boolean)
         .slice(0, 3)
         .join("، ");
-      const text =
-        `⏰ لم يصل رد حتى الآن على طلب الحجز السريع${stationNames ? ` لدى ${stationNames}` : ""}.\n\n` +
-        "هل توافق على إعادة إرسال الطلب إلى 3 محطات أبعد؟";
+      const excludedStationIds = targets.map((target: any) => target?.station_id).filter(Boolean);
+      const bookingIds = targets.map((target: any) => target?.booking_id).filter(Boolean);
 
-      const waId = await sendInteractive(
-        request.customer_phone,
-        text,
-        [
-          { id: "timeout_wait", title: "⏳ الانتظار" },
-          { id: "timeout_resend_yes", title: "✅ نعم، أعد الإرسال" },
-          { id: "timeout_search", title: "❌ لا، إلغاء الطلب" },
-        ],
-        settings,
-      );
-
-      if (waId) {
-        await supabase.from("quick_booking_requests").update({ timeout_notified: true }).eq("id", request.id);
-        await supabase.from("bot_sessions").upsert(
-          {
-            customer_phone: request.customer_phone,
-            current_step: "timeout_alert",
-            timeout_request_id: request.id,
-            updated_at: new Date().toISOString(),
-            expires_at: new Date(now + 30 * 60 * 1000).toISOString(),
-          },
-          { onConflict: "customer_phone" },
-        );
-        timeoutAlerts++;
+      if (bookingIds.length > 0) {
+        await supabase.from("bookings").update({ status: "cancelled" }).in("id", bookingIds).eq("status", "pending");
+        await supabase.from("quick_booking_targets").update({ state: "timed_out" }).in("booking_id", bookingIds);
       }
+
+      await supabase.from("quick_booking_requests").update({ status: "timed_out", timeout_notified: true }).eq("id", request.id);
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      let targetCount = 0;
+      let resendOk = false;
+
+      if (supabaseUrl && serviceKey) {
+        const resendResponse = await fetch(`${supabaseUrl}/functions/v1/create-quick-booking`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            customer_name: request.customer_name,
+            customer_phone: request.customer_phone,
+            service_kind: request.service_kind,
+            booking_date: request.booking_date,
+            booking_time: request.booking_time,
+            customer_lat: request.customer_lat,
+            customer_lng: request.customer_lng,
+            language: request.language || "ar",
+            exclude_station_ids: excludedStationIds,
+          }),
+        });
+        const resendData = await resendResponse.json().catch(() => ({}));
+        targetCount = Number(resendData?.target_count || 0);
+        resendOk = resendResponse.ok && targetCount > 0;
+      }
+
+      const text = resendOk
+        ? `⏰ لم يصل رد حتى الآن على طلبك${stationNames ? ` لدى ${stationNames}` : ""}.\nتمت إعادة إرسال الطلب إلى ${targetCount} محطة أخرى ضمن نطاق 15 كم، وبانتظار أسرع رد.`
+        : `⏰ لم يصل رد حتى الآن على طلبك${stationNames ? ` لدى ${stationNames}` : ""}.\nلا توجد محطات أخرى متاحة ضمن نطاق 15 كم حالياً. يمكنك المحاولة لاحقاً أو اختيار حجز عادي من الخريطة.`;
+
+      const sent = await sendText(request.customer_phone, text, settings);
+      if (sent) timeoutAlerts++;
     }
 
     // 2) Send rating request one hour after booking time (for confirmed bookings).

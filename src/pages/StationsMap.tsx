@@ -537,6 +537,10 @@ function formatQuickTime12(hour24: number, minute: number): string {
   return `${String(hour12).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
+function toQuickTimeValue(hour24: number, minute: number): string {
+  return `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
 type Station = {
   id: string;
   name: string;
@@ -599,9 +603,9 @@ function getSpinSegments(language: Language) {
 
   return [
     { key: "discount_0", label: t.discount0Label, subtitle: t.discount0Subtitle, color: "#f8fafc", discountPercent: 0, size: 90, textColor: "#0f172a" },
-    { key: "discount_5", label: t.discount5Label, subtitle: t.discount5Subtitle, color: "#38bdf8", discountPercent: 5, size: 90, textColor: "#082f49" },
-    { key: "discount_10", label: t.discount10Label, subtitle: t.discount10Subtitle, color: "#2563eb", discountPercent: 10, size: 90, textColor: "#ffffff" },
-    { key: "discount_15", label: t.discount15Label, subtitle: t.discount15Subtitle, color: "#16a34a", discountPercent: 15, size: 90, textColor: "#ffffff" },
+    { key: "discount_5", label: t.discount5Label, subtitle: t.discount5Subtitle, color: "#22d3ee", discountPercent: 5, size: 90, textColor: "#083344" },
+    { key: "discount_10", label: t.discount10Label, subtitle: t.discount10Subtitle, color: "#6366f1", discountPercent: 10, size: 90, textColor: "#ffffff" },
+    { key: "discount_15", label: t.discount15Label, subtitle: t.discount15Subtitle, color: "#10b981", discountPercent: 15, size: 90, textColor: "#052e16" },
   ] as const;
 }
 
@@ -1285,18 +1289,18 @@ function StationCard({
             </CardContent>
           </Card>
 
-          <Card className="overflow-hidden border border-amber-200 bg-gradient-to-b from-amber-50 via-orange-50 to-rose-50 text-slate-900 shadow-lg">
+          <Card className="overflow-hidden border border-cyan-200 bg-[radial-gradient(circle_at_top,_#ecfeff,_#eef2ff_52%,_#f8fafc)] text-slate-900 shadow-lg">
             <CardContent className="space-y-5 pt-5">
               <StepHeader number="4" title={t.step4Title} description={t.step4Description} />
 
-              <div className="rounded-[24px] border-2 border-amber-200 bg-white p-4 shadow-sm">
+              <div className="rounded-[24px] border border-cyan-200 bg-white/90 p-4 shadow-sm backdrop-blur">
                 <div className="relative mx-auto h-[292px] w-[292px] max-w-full">
-                  {Array.from({ length: 12 }, (_, lightIndex) => {
-                    const angle = (360 / 12) * lightIndex;
+                  {Array.from({ length: 24 }, (_, lightIndex) => {
+                    const angle = (360 / 24) * lightIndex;
                     return (
                       <div
                         key={lightIndex}
-                        className="absolute left-1/2 top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.55)]"
+                        className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.55)] even:bg-indigo-400"
                         style={{
                           transform: `translate(-50%, -50%) rotate(${angle}deg) translateY(-146px)`,
                         }}
@@ -1305,15 +1309,15 @@ function StationCard({
                   })}
 
                   <div className="absolute left-1/2 top-2 z-20 -translate-x-1/2">
-                    <div className="rounded-full bg-gradient-to-b from-amber-400 to-orange-500 p-1.5 shadow-md">
-                      <div className="h-0 w-0 border-l-[16px] border-r-[16px] border-b-[28px] border-l-transparent border-r-transparent border-b-amber-500" />
+                    <div className="rounded-full bg-slate-950 p-1.5 shadow-lg shadow-cyan-500/20">
+                      <div className="h-0 w-0 border-l-[15px] border-r-[15px] border-b-[30px] border-l-transparent border-r-transparent border-b-cyan-400" />
                     </div>
                   </div>
 
-                  <div className="absolute inset-0 rounded-full border-[14px] border-amber-200 bg-amber-100 shadow-[0_0_0_2px_rgba(217,119,6,0.18),0_12px_25px_rgba(180,83,9,0.15)]" />
+                  <div className="absolute inset-0 rounded-full border-[12px] border-slate-900 bg-slate-950 shadow-[0_0_0_6px_rgba(34,211,238,0.14),0_18px_45px_rgba(15,23,42,0.24)]" />
 
                   <div
-                    className="absolute inset-[16px] rounded-full border-[6px] border-white shadow-[inset_0_2px_10px_rgba(255,255,255,0.4)]"
+                    className="absolute inset-[18px] rounded-full border-[6px] border-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.18),inset_0_8px_18px_rgba(255,255,255,0.2)]"
                     style={{
                       background: wheelBackground,
                       transform: `rotate(${spinRotation}deg)`,
@@ -1341,17 +1345,17 @@ function StationCard({
                       );
                     })}
 
-                    <div className="absolute inset-[34%] flex flex-col items-center justify-center rounded-full border-4 border-amber-100 bg-[radial-gradient(circle,_#fff7ed,_#fed7aa)] text-center shadow-[inset_0_2px_10px_rgba(255,255,255,0.6),0_8px_18px_rgba(217,119,6,0.2)]">
-                      <div className="text-[11px] font-extrabold tracking-[0.2em] text-amber-700">WASHLLY</div>
-                      <div className="mt-2 text-xs leading-5 text-slate-600">{t.wheelCurrentBookingDiscount}</div>
-                      <div className="mt-2 text-2xl font-black text-slate-900">
+                    <div className="absolute inset-[34%] flex flex-col items-center justify-center rounded-full border-4 border-white bg-[radial-gradient(circle,_#ffffff,_#e0f2fe)] text-center shadow-[0_10px_24px_rgba(15,23,42,0.24),inset_0_2px_12px_rgba(255,255,255,0.8)]">
+                      <div className="text-[11px] font-extrabold tracking-[0.18em] text-cyan-700">WASHLLY</div>
+                      <div className="mt-2 text-xs leading-5 text-slate-500">{t.wheelCurrentBookingDiscount}</div>
+                      <div className="mt-2 text-2xl font-black text-slate-950">
                         {spinResult ? `${spinResult.discountPercent}%` : needsRespin ? "↻" : "?"}
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-center text-sm leading-7 text-amber-900">
+                <div className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-center text-sm leading-7 text-cyan-950">
                   {spinHint}
                 </div>
 
@@ -1373,7 +1377,7 @@ function StationCard({
                 )}
 
                 <Button
-                  className="mt-5 h-12 w-full gap-2 bg-gradient-to-l from-amber-500 via-orange-500 to-rose-500 text-white hover:from-amber-600 hover:to-rose-600"
+                  className="mt-5 h-12 w-full gap-2 bg-gradient-to-l from-cyan-500 via-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20 hover:from-cyan-600 hover:to-indigo-700"
                   disabled={spinning || !!spinResult || !canSpin}
                   onClick={handleSpin}
                 >
@@ -1487,14 +1491,26 @@ const StationsMap = () => {
   const q = quickBookingTranslations[language];
   const quickTimeOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
-    for (let hour = 0; hour < 24; hour += 1) {
-      for (let minute = 0; minute < 60; minute += 10) {
-        const value = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-        options.push({ value, label: formatQuickTime12(hour, minute) });
-      }
+    const now = new Date();
+    const today = formatLocalDate(now);
+    const isToday = quickDate === today;
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const firstAllowedMinutes = isToday ? Math.ceil(currentMinutes / 30) * 30 : 0;
+
+    for (let totalMinutes = firstAllowedMinutes; totalMinutes < 24 * 60; totalMinutes += 30) {
+      const hour = Math.floor(totalMinutes / 60);
+      const minute = totalMinutes % 60;
+      const value = toQuickTimeValue(hour, minute);
+      options.push({ value, label: formatQuickTime12(hour, minute) });
     }
     return options;
-  }, []);
+  }, [quickDate]);
+
+  useEffect(() => {
+    if (quickTime && !quickTimeOptions.some((option) => option.value === quickTime)) {
+      setQuickTime(quickTimeOptions[0]?.value || "");
+    }
+  }, [quickTime, quickTimeOptions]);
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_MAPS_KEY,
@@ -1639,6 +1655,24 @@ const StationsMap = () => {
       return;
     }
 
+    if (!userLocation) {
+      toast({
+        title: t.locationErrorTitle,
+        description: language === "ar" ? "اضغط موقعي أولاً حتى نبحث ضمن نطاق 15 كم." : "Tap My location first so we only search within 15 km.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!quickTimeOptions.some((option) => option.value === quickTime)) {
+      toast({
+        title: t.chooseTimeTitle,
+        description: language === "ar" ? "اختر وقتاً متاحاً بعد الوقت الحالي." : "Choose an available time after the current time.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setQuickSubmitting(true);
     const { data, error } = await supabase.functions.invoke("create-quick-booking", {
       body: {
@@ -1760,7 +1794,7 @@ const StationsMap = () => {
                   <SelectTrigger>
                     <SelectValue placeholder={language === "ar" ? "اختر الوقت" : "Select time"} />
                   </SelectTrigger>
-                  <SelectContent className="max-h-72">
+                  <SelectContent side="top" align="start" avoidCollisions className="z-[2600] max-h-72">
                     {quickTimeOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
