@@ -56,13 +56,12 @@ Deno.serve(async (req) => {
     const now = Date.now();
 
     // 1) Quick-booking timeout after 10 min: resend to the next stations within 15 km.
-    const tenMinAgo = new Date(now - 10 * 60 * 1000).toISOString();
     const { data: timedOutBookings } = await supabase
       .from("quick_booking_requests")
-      .select("id, customer_name, customer_phone, service_kind, booking_date, booking_time, customer_lat, customer_lng, language, quick_booking_targets(station_id, booking_id, bookings(booking_number, stations(name)))")
+      .select("id, created_at, customer_name, customer_phone, service_kind, booking_date, booking_time, customer_lat, customer_lng, language, quick_booking_targets(station_id, booking_id, bookings(booking_number, status, created_at, stations(name)))")
       .eq("status", "pending")
       .eq("timeout_notified", false)
-      .lt("created_at", tenMinAgo);
+      .limit(100);
 
     let timeoutAlerts = 0;
     for (const request of timedOutBookings || []) {
@@ -76,6 +75,23 @@ Deno.serve(async (req) => {
         .join("، ");
       const excludedStationIds = targets.map((target: any) => target?.station_id).filter(Boolean);
       const bookingIds = targets.map((target: any) => target?.booking_id).filter(Boolean);
+      const targetBookings = targets.map((target: any) => target?.bookings).filter(Boolean);
+      const hasAnsweredBooking = targetBookings.some((booking: any) =>
+        booking?.status && booking.status !== "pending"
+      );
+      if (hasAnsweredBooking) {
+        await supabase.from("quick_booking_requests").update({ status: "completed", timeout_notified: true }).eq("id", request.id);
+        continue;
+      }
+
+      const firstSentAt = targetBookings
+        .map((booking: any) => new Date(booking?.created_at || 0).getTime())
+        .filter((value: number) => Number.isFinite(value) && value > 0)
+        .sort((a: number, b: number) => a - b)[0] || new Date((request as any).created_at || 0).getTime();
+
+      if (!Number.isFinite(firstSentAt) || firstSentAt > now - 10 * 60 * 1000) {
+        continue;
+      }
 
       if (bookingIds.length > 0) {
         await supabase.from("bookings").update({ status: "cancelled" }).in("id", bookingIds).eq("status", "pending");

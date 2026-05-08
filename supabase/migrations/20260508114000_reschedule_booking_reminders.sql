@@ -11,7 +11,7 @@ END $$;
 
 SELECT cron.schedule(
   'send-booking-reminders',
-  '*/5 * * * *',
+  '* * * * *',
   $$
   SELECT net.http_post(
     url := 'https://yhklvtzonvgzkodysawu.supabase.co/functions/v1/booking-reminders',
