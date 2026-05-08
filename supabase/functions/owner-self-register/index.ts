@@ -119,7 +119,25 @@ Deno.serve(async (req) => {
     const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers();
     const duplicateUser = existingUser.users.find((user) => user.email?.toLowerCase() === authEmail);
     if (duplicateUser) {
-      return json({ error: "An account with this WhatsApp number or email already exists" }, 409);
+      const { data: activeOwnerByUser } = await supabaseAdmin
+        .from("station_owners")
+        .select("id, station_id")
+        .eq("user_id", duplicateUser.id)
+        .maybeSingle();
+
+      const { data: activeOwnerByPhone } = await supabaseAdmin
+        .from("station_owners")
+        .select("id, station_id")
+        .eq("owner_phone", ownerPhone)
+        .maybeSingle();
+
+      if (activeOwnerByUser || activeOwnerByPhone) {
+        return json({ error: "An account with this WhatsApp number or email already exists" }, 409);
+      }
+
+      await supabaseAdmin.from("user_roles").delete().eq("user_id", duplicateUser.id);
+      await supabaseAdmin.from("notifications").delete().eq("user_id", duplicateUser.id);
+      await supabaseAdmin.auth.admin.deleteUser(duplicateUser.id);
     }
 
     const { data: newUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({

@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { WebView } from "react-native-webview";
 import { SectionTitle } from "../components/SectionTitle";
 import { useStations } from "../hooks/useStations";
 import { gradients, palette } from "../theme";
@@ -20,7 +21,6 @@ import {
   createQuickBooking,
   fetchBookedSlots,
   generateSlots,
-  getLocalTodayISODate,
   getNextDays,
   spinBookingDiscount,
 } from "../lib/bookingApi";
@@ -54,7 +54,7 @@ export function CustomerHomeScreen({
   onOpenMap: () => void;
   mode?: Mode;
 }) {
-  const { stations, loading, error, reload, mapRegion } = useStations();
+  const { stations, loading, error, reload } = useStations();
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(DATE_OPTIONS[0]);
@@ -345,12 +345,26 @@ export function CustomerHomeScreen({
       ) : null}
 
       <SectionTitle title="الخريطة والحجز السريع" subtitle="حدد موقعك ثم أرسل طلباً لأقرب 3 محطات ضمن نطاقك." />
-      <View style={styles.openMapCard}>
-        <Text style={styles.openMapTitle}>{mode === "map" ? "المحطات القريبة" : "فتح الخريطة"}</Text>
-        <Text style={styles.openMapText}>
-          تم تعطيل الخريطة الأصلية مؤقتاً داخل التطبيق لأنها تسبب خروجاً على بعض أجهزة أندرويد. يمكنك استخدام الحجز السريع والقائمة أدناه بدون خروج.
-        </Text>
-      </View>
+      {mode === "map" ? (
+        <View style={styles.webMapWrap}>
+          <WebView
+            source={{ uri: "https://www.washlly.com/map" }}
+            style={styles.webMap}
+            startInLoadingState
+            renderLoading={() => (
+              <View style={styles.webMapLoading}>
+                <ActivityIndicator color={palette.deepBlue} />
+                <Text style={styles.webMapLoadingText}>جاري تحميل الخريطة...</Text>
+              </View>
+            )}
+          />
+        </View>
+      ) : (
+        <Pressable style={styles.openMapCard} onPress={onOpenMap}>
+          <Text style={styles.openMapTitle}>فتح الخريطة</Text>
+          <Text style={styles.openMapText}>اضغط هنا لفتح خريطة Washlly داخل التطبيق.</Text>
+        </Pressable>
+      )}
 
       <View style={styles.card}>
         <Field label="اسم الزبون" value={customerName} onChangeText={setCustomerName} placeholder="مصطفى" />
@@ -600,6 +614,28 @@ const styles = StyleSheet.create({
   },
   mapOverlayTitle: { color: palette.white, textAlign: "right", fontWeight: "800", marginBottom: 4 },
   mapOverlayText: { color: "rgba(255,255,255,0.84)", textAlign: "right", fontSize: 12, lineHeight: 18 },
+  webMapWrap: {
+    height: 560,
+    borderRadius: 20,
+    overflow: "hidden",
+    borderColor: palette.line,
+    borderWidth: 1,
+    marginBottom: 12,
+    backgroundColor: "#eef7ff",
+  },
+  webMap: { flex: 1, backgroundColor: "#eef7ff" },
+  webMapLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#eef7ff",
+  },
+  webMapLoadingText: {
+    color: palette.deepBlue,
+    fontWeight: "800",
+    marginTop: 10,
+    textAlign: "center",
+  },
   openMapCard: {
     backgroundColor: "#eaf3fb",
     borderColor: palette.line,
