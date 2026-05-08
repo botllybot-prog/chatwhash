@@ -23,7 +23,7 @@ type ServiceRow = {
 };
 
 type Language = "ar" | "en" | "ku" | "tr";
-type ServiceKind = "surface" | "jack";
+type ServiceKind = "surface" | "jack" | "quick";
 const QUICK_BOOKING_RADIUS_KM = 15;
 
 const localizedMessages: Record<
@@ -44,7 +44,7 @@ const localizedMessages: Record<
     approve: string;
     reject: string;
     changeTime: string;
-    services: Record<ServiceKind, string>;
+    services: Record<string, string>;
   }
 > = {
   ar: {
@@ -134,6 +134,9 @@ function normalizeLanguage(value: unknown): Language {
 
 function normalizeServiceKind(value: string): ServiceKind {
   const normalized = value.toLowerCase();
+  if (normalized === "quick" || normalized.includes("fast")) {
+    return "quick";
+  }
   if (
     normalized === "jack" ||
     normalized.includes("جك") ||
@@ -145,10 +148,8 @@ function normalizeServiceKind(value: string): ServiceKind {
   return "surface";
 }
 
-function serviceMatches(name: string, kind: ServiceKind): boolean {
-  const normalized = name.toLowerCase();
-  if (kind === "jack") return normalized.includes("جك") || normalized.includes("jack") || normalized.includes("kriko");
-  return normalized.includes("سطحي") || normalized.includes("surface") || normalized.includes("yüzey");
+function serviceMatches(_name: string, _kind: ServiceKind): boolean {
+  return true;
 }
 
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -508,7 +509,7 @@ Deno.serve(async (req) => {
           `📢 ${msg.ownerTitle}\n\n` +
           `👤 ${msg.customer}: ${customerName}\n` +
           `📱 ${msg.phone}: ${customerPhone}\n` +
-          `🔧 ${msg.service}: ${msg.services[serviceKind]}\n` +
+          `🔧 ${msg.service}: ${item.service.name}\n` +
           `📅 ${msg.date}: ${bookingDate}\n` +
           `🕐 ${msg.time}: ${bookingTime}\n` +
           `🏷️ ${msg.bookingNo}: #${booking.booking_number ?? "---"}\n\n` +
