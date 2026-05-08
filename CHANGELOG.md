@@ -5,6 +5,10 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-05-09] - Mobile Owner Portal & Quick Booking
+
+- Updated the Expo mobile app with persistent owner login, station photo upload, editable station info, owner-side booking actions, 24-hour booking stats, compact quota summaries, and package renewal requests to admin notifications/WhatsApp.
+- Added customer-side mobile quick booking with location support, map-first flow, removed governorate filtering, and refreshed the discount wheel display.
 ## [2026-05-08] — Quick Booking Distance Match & WhatsApp Actions
 
 - Quick booking now matches nearby stations by distance only and no longer rejects stations because their active service name differs from the selected quick-booking label.
