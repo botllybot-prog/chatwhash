@@ -319,30 +319,37 @@ export function CustomerHomeScreen({
       ) : null}
 
       <SectionTitle title="الخريطة والحجز السريع" subtitle="حدد موقعك ثم أرسل طلباً لأقرب 3 محطات ضمن نطاقك." />
-      <View style={styles.mapWrap}>
-        <MapView style={StyleSheet.absoluteFill} initialRegion={mapRegion} region={activeRegion}>
-          {stations.map((station) => (
-            <Marker
-              key={station.id}
-              coordinate={{ latitude: station.latitude, longitude: station.longitude }}
-              title={station.name}
-              description={`${station.area} • ${station.open ? "مفتوح" : "مغلق"}`}
-              onPress={() => setSelectedStationId(station.id)}
-            />
-          ))}
-          {customerRegion ? (
-            <Marker
-              coordinate={{ latitude: customerRegion.latitude, longitude: customerRegion.longitude }}
-              title="موقعي"
-              pinColor="#1d4ed8"
-            />
-          ) : null}
-        </MapView>
-        <View style={styles.mapOverlay}>
-          <Text style={styles.mapOverlayTitle}>الخريطة جاهزة للحجز السريع</Text>
-          <Text style={styles.mapOverlayText}>وقت الحجز السريع الحالي: {selectedDate} - {quickTime}</Text>
+      {mode === "map" ? (
+        <View style={styles.mapWrap}>
+          <MapView style={StyleSheet.absoluteFill} initialRegion={mapRegion} region={activeRegion}>
+            {stations.map((station) => (
+              <Marker
+                key={station.id}
+                coordinate={{ latitude: station.latitude, longitude: station.longitude }}
+                title={station.name}
+                description={`${station.area} • ${station.open ? "مفتوح" : "مغلق"}`}
+                onPress={() => setSelectedStationId(station.id)}
+              />
+            ))}
+            {customerRegion ? (
+              <Marker
+                coordinate={{ latitude: customerRegion.latitude, longitude: customerRegion.longitude }}
+                title="موقعي"
+                pinColor="#1d4ed8"
+              />
+            ) : null}
+          </MapView>
+          <View style={styles.mapOverlay}>
+            <Text style={styles.mapOverlayTitle}>الخريطة جاهزة للحجز السريع</Text>
+            <Text style={styles.mapOverlayText}>وقت الحجز السريع الحالي: {selectedDate} - {quickTime}</Text>
+          </View>
         </View>
-      </View>
+      ) : (
+        <Pressable style={styles.openMapCard} onPress={onOpenMap}>
+          <Text style={styles.openMapTitle}>فتح الخريطة</Text>
+          <Text style={styles.openMapText}>الخريطة تعمل داخل تبويب الخريطة لتقليل مشاكل إغلاق التطبيق عند التشغيل.</Text>
+        </Pressable>
+      )}
 
       <View style={styles.card}>
         <Field label="اسم الزبون" value={customerName} onChangeText={setCustomerName} placeholder="مصطفى" />
@@ -585,6 +592,16 @@ const styles = StyleSheet.create({
   },
   mapOverlayTitle: { color: palette.white, textAlign: "right", fontWeight: "800", marginBottom: 4 },
   mapOverlayText: { color: "rgba(255,255,255,0.84)", textAlign: "right", fontSize: 12, lineHeight: 18 },
+  openMapCard: {
+    backgroundColor: "#eaf3fb",
+    borderColor: palette.line,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+  },
+  openMapTitle: { textAlign: "right", color: palette.deepBlue, fontWeight: "900", fontSize: 18 },
+  openMapText: { textAlign: "right", color: palette.muted, lineHeight: 20, marginTop: 4 },
   horizontalList: { gap: 8, paddingBottom: 8 },
   stationChip: {
     width: 200,
