@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { consumeStationRequestQuota } from "../_shared/request-packages.ts";
 import { sendWhatsAppInteractiveReliable, sendWhatsAppTextReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
@@ -383,7 +384,7 @@ Deno.serve(async (req) => {
         station: StationRow; service: ServiceRow; distance: number; ownerPhone: string
       }[];
 
-    const matched = (searchMode === "farther" ? ranked.slice(3) : ranked).slice(0, 3);
+    const matched = searchMode === "farther" ? ranked.slice(3) : ranked;
 
     if (matched.length === 0) {
       return new Response(JSON.stringify({ error: "no_station_found", message: msg.noStations }), {
@@ -426,6 +427,23 @@ Deno.serve(async (req) => {
     const bookingRows: { station_id: string; booking_id: string; station_name: string }[] = [];
 
     for (const item of matched) {
+      if (bookingRows.length >= 3) break;
+
+      const quotaResult = await consumeStationRequestQuota({
+        supabase,
+        settings,
+        stationId: item.station.id,
+      });
+
+      if (!quotaResult.allowed) {
+        skippedStations.push({
+          station_id: item.station.id,
+          station_name: item.station.name,
+          reason: quotaResult.reason,
+        });
+        continue;
+      }
+
       const bookingPayload = {
         customer_name: customerName,
         customer_phone: customerPhone,
@@ -508,6 +526,13 @@ Deno.serve(async (req) => {
           { onConflict: "customer_phone" },
         );
       }
+    }
+
+    if (bookingRows.length === 0) {
+      return new Response(JSON.stringify({ error: "no_quota_available", message: msg.noStations, skipped: skippedStations }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const waitingOwnerReply =

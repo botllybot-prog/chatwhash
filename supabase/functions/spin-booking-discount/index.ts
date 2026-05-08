@@ -6,11 +6,10 @@ const corsHeaders = {
 };
 
 const DISCOUNT_SEGMENTS = [
-  { key: "discount_5", discountPercent: 5, label: "خصم 5%", weight: 80 },
-  { key: "discount_10", discountPercent: 10, label: "خصم 10%", weight: 80 },
-  { key: "discount_15", discountPercent: 15, label: "خصم 15%", weight: 80 },
-  { key: "retry", discountPercent: 0, label: "حاول مرة أخرى", weight: 84 },
-  { key: "discount_0", discountPercent: 0, label: "0%", weight: 36 },
+  { key: "discount_0", discountPercent: 0, label: "0%", weight: 1 },
+  { key: "discount_5", discountPercent: 5, label: "5%", weight: 1 },
+  { key: "discount_10", discountPercent: 10, label: "10%", weight: 1 },
+  { key: "discount_15", discountPercent: 15, label: "15%", weight: 1 },
 ] as const;
 
 type DiscountSegment = (typeof DISCOUNT_SEGMENTS)[number];
@@ -124,23 +123,6 @@ Deno.serve(async (req) => {
     }
 
     const segment = pickDiscountSegment();
-
-    if (segment.key === "retry") {
-      return new Response(
-        JSON.stringify({
-          success: true,
-          segmentKey: segment.key,
-          discountPercent: 0,
-          label: segment.label,
-          requiresRespin: true,
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
     const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!secret) {
       return new Response(JSON.stringify({ error: "تعذر إنشاء توقيع الخصم." }), {

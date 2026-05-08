@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
 
     const { data: allOwners } = await supabase
       .from("station_owners")
-      .select("station_id, owner_name, owner_phone, free_requests_quota");
+      .select("station_id, owner_name, owner_phone, free_requests_quota, free_requests_used");
 
     const { data: activeSubsForVisibility } = await supabase
       .from("subscriptions")
@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
 
     for (const station of allStations || []) {
       const owner = ownerByStation.get(station.id);
-      const hasFreeQuota = Number(owner?.free_requests_quota || 0) > 0;
+      const hasFreeQuota = Number(owner?.free_requests_quota || 0) > Number(owner?.free_requests_used || 0);
       const hasActivePackage = activeStationIds.has(station.id);
       const hiddenByQuota = station.suspension_reason === "free_quota_exhausted";
       const manuallyHidden = station.suspension_reason === "manual";

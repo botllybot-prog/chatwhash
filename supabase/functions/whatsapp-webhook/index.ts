@@ -134,6 +134,66 @@ function updateSession(supabase: any, phone: string, updates: Record<string, any
   }).eq("customer_phone", phone).then(() => {}).catch((e: any) => console.error("updateSession error:", e));
 }
 
+async function resendQuickBookingToFartherStations(
+  supabase: any,
+  requestId: string,
+  settings: Record<string, string>,
+) {
+  const { data: request, error } = await supabase
+    .from("quick_booking_requests")
+    .select("id, customer_name, customer_phone, service_kind, booking_date, booking_time, customer_lat, customer_lng, language, quick_booking_targets(station_id, booking_id)")
+    .eq("id", requestId)
+    .maybeSingle();
+
+  if (error || !request) {
+    return { ok: false, message: "تعذر العثور على طلب الحجز السريع." };
+  }
+
+  const targets = Array.isArray(request.quick_booking_targets) ? request.quick_booking_targets : [];
+  const excludedStationIds = targets.map((target: any) => target.station_id).filter(Boolean);
+  const targetBookingIds = targets.map((target: any) => target.booking_id).filter(Boolean);
+
+  if (targetBookingIds.length > 0) {
+    await supabase.from("bookings").update({ status: "cancelled" }).in("id", targetBookingIds).eq("status", "pending");
+    await supabase.from("quick_booking_targets").update({ state: "timed_out" }).in("booking_id", targetBookingIds);
+  }
+
+  await supabase.from("quick_booking_requests").update({ status: "timed_out" }).eq("id", request.id);
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) {
+    return { ok: false, message: "إعدادات Supabase غير مكتملة." };
+  }
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/create-quick-booking`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      customer_name: request.customer_name,
+      customer_phone: request.customer_phone,
+      service_kind: request.service_kind,
+      booking_date: request.booking_date,
+      booking_time: request.booking_time,
+      customer_lat: request.customer_lat,
+      customer_lng: request.customer_lng,
+      language: request.language || "ar",
+      exclude_station_ids: excludedStationIds,
+      search_mode: "farther",
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return { ok: false, message: data?.message || data?.error || "تعذر إعادة إرسال الطلب." };
+  }
+
+  return { ok: true, message: "تمت إعادة إرسال طلبك إلى 3 محطات أبعد، وبانتظار أسرع رد." };
+}
+
 // ==================== UTILITIES ====================
 
 function generateTimeSlots(start: string, end: string, durationMin: number): string[] {
@@ -1289,10 +1349,10 @@ async function handleCustomerLogic(
 
   // ── Timeout alert: owner didn't respond in 10 min ──
   if (step === "timeout_alert") {
-    const bookingId = session.timeout_booking_id;
+    const requestId = session.timeout_request_id;
     if (input === "timeout_wait") {
       // Customer chose to keep waiting
-      updateSession(supabase, phone, { current_step: "awaiting_owner_response", timeout_booking_id: null });
+      updateSession(supabase, phone, { current_step: "awaiting_owner_response", timeout_booking_id: null, timeout_request_id: null });
       const waId = await sendWhatsAppInteractive(phone,
         "⏳ حسناً، سنستمر في الانتظار.\nسنبلغك فور رد صاحب المغسلة.",
         [{ id: "btn_bookings", title: "📋 حجوزاتي" }, { id: "btn_menu", title: "🏠 القائمة" }],
@@ -1300,33 +1360,81 @@ async function handleCustomerLogic(
       saveBotMessage(supabase, convId, "استمرار الانتظار", waId);
       return true;
     }
+    if (input === "timeout_resend_yes") {
+      if (!requestId) {
+        updateSession(supabase, phone, { current_step: "idle", timeout_booking_id: null, timeout_request_id: null });
+        const waId = await sendWhatsAppInteractive(phone,
+          "تعذر العثور على طلب الحجز السريع. يمكنك بدء طلب جديد من القائمة.",
+          [{ id: "btn_menu", title: "القائمة" }],
+          settings);
+        saveBotMessage(supabase, convId, "تعذر إعادة إرسال الطلب", waId);
+        return true;
+      }
+
+      const result = await resendQuickBookingToFartherStations(supabase, requestId, settings);
+      updateSession(supabase, phone, { current_step: result.ok ? "awaiting_owner_response" : "idle", timeout_booking_id: null, timeout_request_id: null });
+      const waId = await sendWhatsAppInteractive(phone,
+        result.message,
+        result.ok
+          ? [{ id: "btn_bookings", title: "حجوزاتي" }, { id: "btn_menu", title: "القائمة" }]
+          : [{ id: "btn_menu", title: "القائمة" }],
+        settings);
+      saveBotMessage(supabase, convId, result.ok ? "تمت إعادة إرسال الطلب" : "فشل إعادة إرسال الطلب", waId);
+      return true;
+    }
     if (input === "timeout_search") {
       // Cancel timed-out booking and go to nearby stations
-      if (bookingId) {
-        const { data: tb } = await supabase.from("bookings")
-          .select("station_id, service_id")
-          .eq("id", bookingId).single();
-        await supabase.from("bookings").update({ status: "cancelled" }).eq("id", bookingId);
-        // Restore service selection in session so nearby list skips re-selection
-        updateSession(supabase, phone, {
-          current_step: "idle",
-          timeout_booking_id: null,
-          selected_service_id: tb?.service_id || null,
-        });
+      if (requestId) {
+        const { data: targets } = await supabase
+          .from("quick_booking_targets")
+          .select("booking_id")
+          .eq("request_id", requestId);
+        const bookingIds = (targets || []).map((target: any) => target.booking_id).filter(Boolean);
+        if (bookingIds.length > 0) {
+          await supabase.from("bookings").update({ status: "cancelled" }).in("id", bookingIds).eq("status", "pending");
+          await supabase.from("quick_booking_targets").update({ state: "cancelled" }).in("booking_id", bookingIds);
+        }
+        await supabase.from("quick_booking_requests").update({ status: "cancelled" }).eq("id", requestId);
+        updateSession(supabase, phone, { current_step: "idle", timeout_booking_id: null, timeout_request_id: null });
       } else {
-        updateSession(supabase, phone, { current_step: "idle", timeout_booking_id: null });
+        updateSession(supabase, phone, { current_step: "idle", timeout_booking_id: null, timeout_request_id: null });
       }
       return await showCustomerWelcome(supabase, phone, convId, settings, contactName);
     }
     // Fallback: resend buttons
-    const { data: tb2 } = await supabase.from("bookings")
-      .select("stations(name)").eq("id", bookingId).single();
-    const tStName = (tb2?.stations as any)?.name || "المغسلة";
+    const tStName = "الطلب";
     const fbWaId = await sendWhatsAppInteractive(phone,
-      `مغسلة ${tStName} تأخرت في الرد. هل تود الاستمرار في الانتظار أم البحث عن مغسلة أخرى؟`,
-      [{ id: "timeout_wait", title: "⏳ الانتظار" }, { id: "timeout_search", title: "🔍 البحث عن مغسلة" }],
+      `${tStName} تأخر في الرد. هل تود الاستمرار في الانتظار أم إعادة إرسال الطلب إلى محطات أبعد؟`,
+      [
+        { id: "timeout_wait", title: "الانتظار" },
+        { id: "timeout_resend_yes", title: "إعادة الإرسال" },
+        { id: "timeout_search", title: "إلغاء الطلب" },
+      ],
       settings);
     saveBotMessage(supabase, convId, "تنبيه انتهاء المهلة", fbWaId);
+    return true;
+  }
+
+  if (step === "awaiting_rating") {
+    const match = String(input || "").match(/(?:rate_)?([1-5])(?:_.*)?/);
+    if (match && session.rating_booking_id) {
+      const rating = Number(match[1]);
+      await supabase
+        .from("bookings")
+        .update({ customer_rating: rating, rated_at: new Date().toISOString() })
+        .eq("id", session.rating_booking_id)
+        .eq("customer_phone", phone);
+      updateSession(supabase, phone, { current_step: "idle", rating_booking_id: null });
+      const waId = await sendWhatsAppInteractive(phone,
+        "شكراً لتقييمك. رأيك يساعدنا نحسن الخدمة.",
+        [{ id: "btn_menu", title: "القائمة" }],
+        settings);
+      saveBotMessage(supabase, convId, "تم استلام التقييم", waId);
+      return true;
+    }
+
+    const waId = await sendWhatsAppMessage(phone, "يرجى إرسال رقم من 1 إلى 5 لتقييم الخدمة.", settings);
+    saveBotMessage(supabase, convId, "طلب تقييم صحيح", waId);
     return true;
   }
 

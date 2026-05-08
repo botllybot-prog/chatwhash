@@ -80,9 +80,9 @@ const translations = {
     phonePlaceholder: "رقم الهاتف",
     importantNotice: "تنبيه مهم",
     bookingLimitNotice: "يمكنك الاحتفاظ بحجزين نشطين فقط على نفس الرقم. إذا أردت إنشاء حجز جديد بعد ذلك، يجب أولاً إلغاء أحد الحجوزات القديمة.",
-    wheelHintDefault: "لف العجلة مرة واحدة قبل تأكيد الحجز. إذا ظهرت لك محاولة إضافية يمكنك الدوران مرة أخرى لنفس الطلب فقط.",
+    wheelHintDefault: "لف العجلة مرة واحدة قبل تأكيد الحجز. الخصم المعتمد يكون 0% أو 5% أو 10% أو 15%.",
     wheelHintSpinning: "جاري تدوير عجلة الخصم الآن...",
-    wheelHintRetry: "ظهرت لك محاولة إضافية. اضغط مرة أخرى لتدوير العجلة لنفس الحجز.",
+    wheelHintRetry: "لف العجلة مرة واحدة فقط لهذا الحجز.",
     wheelHintSaved: "تم تثبيت الخصم لهذا الحجز",
     wheelCurrentBookingDiscount: "خصم الحجز الحالي",
     wheelButton: "اضغط للف العجلة",
@@ -130,8 +130,8 @@ const translations = {
       discount10Subtitle: "خصم فوري",
       discount15Label: "15%",
       discount15Subtitle: "خصم فوري",
-      retryLabel: "أعد",
-      retrySubtitle: "المحاولة",
+      retryLabel: "",
+      retrySubtitle: "",
     },
   },
   en: {
@@ -176,9 +176,9 @@ const translations = {
     phonePlaceholder: "Phone number",
     importantNotice: "Important notice",
     bookingLimitNotice: "You can keep only 2 active reservations per phone number. To make another one, cancel one of your older bookings first.",
-    wheelHintDefault: "Spin the wheel once before confirming. If you get an extra try, you can spin again for the same booking only.",
+    wheelHintDefault: "Spin once before confirming. The saved discount is 0%, 5%, 10%, or 15%.",
     wheelHintSpinning: "Spinning the discount wheel now...",
-    wheelHintRetry: "You got an extra try. Press again to spin the wheel for the same booking.",
+    wheelHintRetry: "The wheel can be spun once for this booking.",
     wheelHintSaved: "Discount saved for this booking",
     wheelCurrentBookingDiscount: "Current booking discount",
     wheelButton: "Spin the wheel",
@@ -226,8 +226,8 @@ const translations = {
       discount10Subtitle: "Instant off",
       discount15Label: "15%",
       discount15Subtitle: "Instant off",
-      retryLabel: "Try",
-      retrySubtitle: "again",
+      retryLabel: "",
+      retrySubtitle: "",
     },
   },
   ku: {
@@ -272,9 +272,9 @@ const translations = {
     phonePlaceholder: "ژمارەی تەلەفۆن",
     importantNotice: "ئاگاداری گرنگ",
     bookingLimitNotice: "تەنها دەتوانیت دوو حجزی چالاکت هەبێت بۆ هەمان ژمارە. بۆ دروستکردنی حجزێکی نوێ، یەکێک لە حجزەکانی پێشوو هەڵبوەشێنەوە.",
-    wheelHintDefault: "پێش پشتڕاستکردنەوە یەکجار گەردەکە بگێڕە. ئەگەر هەوڵێکی زیادە دەرکەوت، تەنها بۆ هەمان داواکاری دەتوانیت دووبارە بگێڕیت.",
+    wheelHintDefault: "پێش پشتڕاستکردنەوە یەکجار گەردەکە بگێڕە. داشکاندن 0%، 5%، 10%، یان 15% دەبێت.",
     wheelHintSpinning: "گەردی داشکاندن ئێستا دەسووڕێت...",
-    wheelHintRetry: "هەوڵێکی زیادەت بەدەست هێنا. دووبارە داگرە بۆ سووڕاندنی گەردەکە بۆ هەمان حجز.",
+    wheelHintRetry: "گەردەکە تەنها یەکجار بۆ ئەم حجزە دەسووڕێت.",
     wheelHintSaved: "داشکاندن بۆ ئەم حجزە پاشەکەوت کرا",
     wheelCurrentBookingDiscount: "داشکاندنی حجزی ئێستا",
     wheelButton: "گەردەکە بگێڕە",
@@ -322,8 +322,8 @@ const translations = {
       discount10Subtitle: "داشکاندنی خێرا",
       discount15Label: "15%",
       discount15Subtitle: "داشکاندنی خێرا",
-      retryLabel: "دووبارە",
-      retrySubtitle: "هەوڵ بدە",
+      retryLabel: "",
+      retrySubtitle: "",
     },
   },
   tr: {
@@ -368,9 +368,9 @@ const translations = {
     phonePlaceholder: "Telefon numarası",
     importantNotice: "Önemli not",
     bookingLimitNotice: "Aynı numara ile en fazla 2 aktif rezervasyon tutabilirsiniz. Yeni rezervasyon için önce eski rezervasyonlardan birini iptal edin.",
-    wheelHintDefault: "Onaylamadan önce çarkı bir kez çevirin. Ek deneme çıkarsa sadece aynı rezervasyon için tekrar çevirebilirsiniz.",
+    wheelHintDefault: "Onaylamadan önce çarkı bir kez çevirin. İndirim 0%, 5%, 10% veya 15% olur.",
     wheelHintSpinning: "İndirim çarkı dönüyor...",
-    wheelHintRetry: "Ek deneme kazandınız. Aynı rezervasyon için tekrar çevirebilirsiniz.",
+    wheelHintRetry: "Çark bu rezervasyon için yalnızca bir kez çevrilir.",
     wheelHintSaved: "Bu rezervasyon için indirim kaydedildi",
     wheelCurrentBookingDiscount: "Mevcut rezervasyon indirimi",
     wheelButton: "Çarkı çevir",
@@ -418,8 +418,8 @@ const translations = {
       discount10Subtitle: "Anında indirim",
       discount15Label: "15%",
       discount15Subtitle: "Anında indirim",
-      retryLabel: "Tekrar",
-      retrySubtitle: "dene",
+      retryLabel: "",
+      retrySubtitle: "",
     },
   },
 } as const;
@@ -531,6 +531,12 @@ const quickBookingTranslations = {
   },
 } as const;
 
+function formatQuickTime12(hour24: number, minute: number): string {
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${String(hour12).padStart(2, "0")}:${String(minute).padStart(2, "0")} ${period}`;
+}
+
 type Station = {
   id: string;
   name: string;
@@ -592,11 +598,10 @@ function getSpinSegments(language: Language) {
   const t = translations[language].spinSegments;
 
   return [
-    { key: "discount_0", label: t.discount0Label, subtitle: t.discount0Subtitle, color: "#f6f7fb", discountPercent: 0, size: 24, textColor: "#111827" },
-    { key: "discount_5", label: t.discount5Label, subtitle: t.discount5Subtitle, color: "#47b2ff", discountPercent: 5, size: 84, textColor: "#ffffff" },
-    { key: "discount_10", label: t.discount10Label, subtitle: t.discount10Subtitle, color: "#2b7fff", discountPercent: 10, size: 84, textColor: "#ffffff" },
-    { key: "discount_15", label: t.discount15Label, subtitle: t.discount15Subtitle, color: "#185fdb", discountPercent: 15, size: 84, textColor: "#ffffff" },
-    { key: "retry", label: t.retryLabel, subtitle: t.retrySubtitle, color: "#0f49b8", discountPercent: 0, size: 84, textColor: "#ffffff" },
+    { key: "discount_0", label: t.discount0Label, subtitle: t.discount0Subtitle, color: "#f8fafc", discountPercent: 0, size: 90, textColor: "#0f172a" },
+    { key: "discount_5", label: t.discount5Label, subtitle: t.discount5Subtitle, color: "#38bdf8", discountPercent: 5, size: 90, textColor: "#082f49" },
+    { key: "discount_10", label: t.discount10Label, subtitle: t.discount10Subtitle, color: "#2563eb", discountPercent: 10, size: 90, textColor: "#ffffff" },
+    { key: "discount_15", label: t.discount15Label, subtitle: t.discount15Subtitle, color: "#16a34a", discountPercent: 15, size: 90, textColor: "#ffffff" },
   ] as const;
 }
 
@@ -943,7 +948,7 @@ function StationCard({
       return;
     }
 
-    if (spinResult && !needsRespin) return;
+    if (spinResult) return;
 
     setSpinning(true);
     setSpinHint(t.wheelHintSpinning);
@@ -978,13 +983,6 @@ function StationCard({
 
     window.setTimeout(() => {
       setSpinning(false);
-
-      if (data.requiresRespin) {
-        setSpinResult(null);
-        setNeedsRespin(true);
-        setSpinHint(t.wheelHintRetry);
-        return;
-      }
 
       const resolvedResult = {
         segmentKey: data.segmentKey!,
@@ -1323,10 +1321,10 @@ function StationCard({
                     }}
                   >
                     {spinSegmentArcs.map((segment) => {
-                      const radius = segment.key === "discount_0" ? -72 : segment.key === "retry" ? -92 : -100;
-                      const labelSize = segment.key === "discount_0" ? "text-[16px]" : segment.key === "retry" ? "text-[18px]" : "text-[28px]";
-                      const subtitleSize = segment.key === "discount_0" ? "text-[10px]" : "text-sm";
-                      const labelWidth = segment.key === "retry" ? "w-28" : "w-24";
+                      const radius = -96;
+                      const labelSize = "text-[30px]";
+                      const subtitleSize = "text-xs";
+                      const labelWidth = "w-24";
 
                       return (
                         <div
@@ -1487,6 +1485,16 @@ const StationsMap = () => {
 
   const t = translations[language];
   const q = quickBookingTranslations[language];
+  const quickTimeOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    for (let hour = 0; hour < 24; hour += 1) {
+      for (let minute = 0; minute < 60; minute += 10) {
+        const value = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+        options.push({ value, label: formatQuickTime12(hour, minute) });
+      }
+    }
+    return options;
+  }, []);
 
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: GOOGLE_MAPS_KEY,
@@ -1748,7 +1756,18 @@ const StationsMap = () => {
               />
               <div className="grid grid-cols-2 gap-2">
                 <Input type="date" value={quickDate} onChange={(event) => setQuickDate(event.target.value)} />
-                <Input type="time" value={quickTime} onChange={(event) => setQuickTime(event.target.value)} />
+                <Select value={quickTime} onValueChange={setQuickTime}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={language === "ar" ? "اختر الوقت" : "Select time"} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {quickTimeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <Button className="w-full" disabled={quickSubmitting} onClick={handleQuickBooking}>
                 {quickSubmitting ? q.submitting : q.submit}

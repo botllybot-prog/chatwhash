@@ -43,6 +43,8 @@ export const PACKAGE_DEFINITIONS = {
   },
 } as const;
 
+const ADMIN_CONTACT_PHONE = "07836635435";
+
 type SupabaseClient = ReturnType<typeof createClient>;
 
 function normalizePhone(phone: string | null | undefined) {
@@ -122,16 +124,12 @@ export async function consumeStationRequestQuota({
       .maybeSingle(),
     supabase
       .from("station_owners")
-      .select(
-        "id, owner_name, owner_phone, free_requests_quota, free_requests_used, station_id",
-      )
+      .select("id, owner_name, owner_phone, free_requests_quota, free_requests_used, station_id")
       .eq("station_id", stationId)
       .maybeSingle(),
     supabase
       .from("subscriptions")
-      .select(
-        "id, package_code, request_limit, requests_used, status, warning_sent_at, exhausted_notified_at, end_date",
-      )
+      .select("id, package_code, request_limit, requests_used, status, warning_sent_at, exhausted_notified_at, end_date")
       .eq("station_id", stationId)
       .in("status", ["active", "trial"])
       .gte("end_date", today)
@@ -142,6 +140,7 @@ export async function consumeStationRequestQuota({
 
   const stationName = station?.name || "المحطة";
   const ownerPhone = owner?.owner_phone || null;
+  const contactAdminLine = `\n\nللاستمرار بالظهور على الخريطة واستقبال الزبائن، تواصل مع الإدارة على واتساب: ${ADMIN_CONTACT_PHONE}`;
 
   const warnOwner = async (body: string) => {
     await sendWhatsAppText(ownerPhone, body, settings);
@@ -174,14 +173,14 @@ export async function consumeStationRequestQuota({
 
     if (remaining === 5) {
       await warnOwner(
-        `مرحباً، باقتك المجانية في محطة ${stationName} شارفت على الانتهاء، والمتبقي 5 طلبات فقط.\nيمكنك تحديث باقتك للوصول إلى عدد أكبر من الزبائن والحفاظ على ظهور محطتك على الخريطة.`,
+        `مرحباً، باقة الطلبات المجانية في محطة ${stationName} شارفت على الانتهاء، والمتبقي 5 طلبات فقط.${contactAdminLine}`,
       );
     }
 
     if (remaining === 0 && !activeSubscription) {
       await hideStation("free_quota_exhausted");
       await warnOwner(
-        `مرحباً، انتهت الطلبات المجانية الخاصة بمحطة ${stationName}.\nتم إيقاف ظهور المحطة مؤقتاً إلى حين التجديد.\nقم بتحديث باقتك الآن للوصول إلى عدد أكبر من الزبائن والاستمرار في استقبال الحجوزات الجديدة.`,
+        `مرحباً، انتهت الطلبات المجانية الخاصة بمحطة ${stationName}.\nتم إيقاف ظهور المحطة مؤقتاً إلى حين تفعيل طلبات جديدة.${contactAdminLine}`,
       );
     }
 
@@ -231,7 +230,7 @@ export async function consumeStationRequestQuota({
           .eq("id", activeSubscription.id);
 
         await warnOwner(
-          `مرحباً، انتهت باقة الطلبات الخاصة بمحطة ${stationName} وتم إيقاف ظهورها على الخريطة مؤقتاً.\nقم بتحديث باقتك الآن للوصول إلى عدد أكبر من الزبائن واستمرار الحجوزات الجديدة.`,
+          `مرحباً، انتهت باقة الطلبات الخاصة بمحطة ${stationName} وتم إيقاف ظهورها على الخريطة مؤقتاً.${contactAdminLine}`,
         );
       }
 
@@ -262,14 +261,14 @@ export async function consumeStationRequestQuota({
 
     if (remaining === 5 && !activeSubscription.warning_sent_at) {
       await warnOwner(
-        `مرحباً، باقتك الحالية في محطة ${stationName} شارفت على الانتهاء، والمتبقي 5 طلبات فقط.\nيمكنك تحديث باقتك مبكراً للوصول إلى عدد أكبر من الزبائن والحفاظ على ظهور محطتك على الخريطة.`,
+        `مرحباً، باقتك الحالية في محطة ${stationName} شارفت على الانتهاء، والمتبقي 5 طلبات فقط.${contactAdminLine}`,
       );
     }
 
     if (remaining <= 0) {
       await hideStation("package_exhausted");
       await warnOwner(
-        `مرحباً، انتهت باقتك الحالية في محطة ${stationName} بعد استهلاك جميع الطلبات.\nتم إيقاف ظهور المحطة مؤقتاً إلى حين التجديد.\nقم بتحديث باقتك الآن للوصول إلى عدد أكبر من الزبائن والاستمرار في استقبال الحجوزات.`,
+        `مرحباً، انتهت باقتك الحالية في محطة ${stationName} بعد استهلاك جميع الطلبات.\nتم إيقاف ظهور المحطة مؤقتاً إلى حين التجديد.${contactAdminLine}`,
       );
     }
 
@@ -283,7 +282,7 @@ export async function consumeStationRequestQuota({
 
   await hideStation("free_quota_exhausted");
   await warnOwner(
-    `مرحباً، لا توجد طلبات مجانية متبقية لمحطة ${stationName} ولا توجد باقة فعّالة حالياً.\nتم إيقاف ظهور المحطة مؤقتاً إلى حين التحديث.\nقم بتحديث باقتك الآن للوصول إلى عدد أكبر من الزبائن والاستمرار في استقبال الحجوزات.`,
+    `مرحباً، لا توجد طلبات مجانية متبقية لمحطة ${stationName} ولا توجد باقة فعالة حالياً.\nتم إيقاف ظهور المحطة مؤقتاً إلى حين التحديث.${contactAdminLine}`,
   );
 
   return {

@@ -173,12 +173,15 @@ Deno.serve(async (req) => {
 
     createdStationId = stationRecord.id;
 
+    const defaultFreeQuota = createdBy ? Math.max(0, Number(payload.free_requests_quota ?? 20) || 20) : 20;
+
     const ownerPayload: Record<string, unknown> = {
       user_id: createdUserId,
       station_id: createdStationId,
       owner_name: ownerName,
       owner_phone: ownerPhone,
-      free_requests_quota: Math.max(0, Number(payload.free_requests_quota ?? 0) || 0),
+      free_requests_quota: defaultFreeQuota,
+      free_requests_used: 0,
     };
 
     if (createdBy) {
