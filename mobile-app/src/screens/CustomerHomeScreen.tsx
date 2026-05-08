@@ -10,7 +10,6 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import * as Location from "expo-location";
 import MapView, { Marker, type Region } from "react-native-maps";
 import { SectionTitle } from "../components/SectionTitle";
 import { useStations } from "../hooks/useStations";
@@ -164,6 +163,7 @@ export function CustomerHomeScreen({
   };
 
   const locateCustomer = async () => {
+    const Location = await import("expo-location");
     const permission = await Location.requestForegroundPermissionsAsync();
     if (permission.status !== "granted") {
       throw new Error("فعّل إذن الموقع حتى يعمل الحجز السريع والخريطة بدقة.");

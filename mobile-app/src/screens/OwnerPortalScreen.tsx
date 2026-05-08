@@ -12,7 +12,6 @@ import {
   Vibration,
   View,
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
 import { SectionTitle } from "../components/SectionTitle";
 import { palette } from "../theme";
 import type { OwnerContext, PaymentRow, SubscriptionSummary } from "../types";
@@ -201,6 +200,7 @@ export function OwnerPortalScreen({ ownerUserId, onLogout }: { ownerUserId: stri
 
   const pickStationImage = async () => {
     if (!ownerContext) return;
+    const ImagePicker = await import("expo-image-picker");
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert("الصورة", "فعّل إذن الصور حتى تقدر تضيف صورة للمحطة.");
