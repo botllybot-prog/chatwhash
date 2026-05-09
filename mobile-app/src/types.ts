@@ -81,6 +81,7 @@ export type QuickBookingResult = {
     station_id: string;
     station_name?: string;
     booking_id?: string;
+    distance_km?: number;
   }>;
   message?: string;
 };
@@ -89,6 +90,19 @@ export type BookingCancelResult = {
   success: true;
   bookingNumber?: number;
   alreadyCancelled?: boolean;
+};
+
+export type CustomerBookingStatus = {
+  id: string;
+  bookingNumber: number;
+  status: string;
+  bookingDate: string | null;
+  bookingTime: string | null;
+  stationName: string;
+  stationAddress: string | null;
+  stationLatitude: number | null;
+  stationLongitude: number | null;
+  serviceName: string | null;
 };
 
 export type OwnerContext = {

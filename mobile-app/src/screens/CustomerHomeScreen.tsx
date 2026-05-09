@@ -1,7 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +14,6 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { WebView } from "react-native-webview";
-import { SectionTitle } from "../components/SectionTitle";
 import { useStations } from "../hooks/useStations";
 import { gradients, palette } from "../theme";
 import {
@@ -20,13 +22,15 @@ import {
   createMapBooking,
   createQuickBooking,
   fetchBookedSlots,
+  fetchCustomerBookings,
   generateSlots,
   getNextDays,
   spinBookingDiscount,
 } from "../lib/bookingApi";
-import type { BookingCreateResult, SpinResult } from "../types";
+import type { BookingCreateResult, CustomerBookingStatus, MobileStation, SpinResult } from "../types";
 
 type Mode = "home" | "map" | "stations";
+type BookingMode = "quick" | "regular";
 
 const DATE_OPTIONS = getNextDays(7);
 const SPIN_SEGMENTS = [0, 5, 10, 15];
@@ -45,6 +49,32 @@ function getNextHalfHourTime() {
   return `${hour}:${minute}`;
 }
 
+function distanceKm(from: { latitude: number; longitude: number } | null, station: MobileStation) {
+  if (!from || !station.latitude || !station.longitude) return null;
+  const radius = 6371;
+  const dLat = ((station.latitude - from.latitude) * Math.PI) / 180;
+  const dLng = ((station.longitude - from.longitude) * Math.PI) / 180;
+  const lat1 = (from.latitude * Math.PI) / 180;
+  const lat2 = (station.latitude * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "المسافة تظهر بعد تحديد موقعك";
+  return value >= 1 ? `${value.toFixed(1)} كم` : `${Math.round(value * 1000)} م`;
+}
+
+function statusLabel(status: string) {
+  if (status === "confirmed") return "تمت الموافقة";
+  if (status === "rejected") return "مرفوض";
+  if (status === "proposed_time") return "وقت بديل";
+  if (status === "cancelled") return "ملغي";
+  return "بانتظار الرد";
+}
+
 export function CustomerHomeScreen({
   onOpenOwner,
   onOpenMap,
@@ -55,6 +85,7 @@ export function CustomerHomeScreen({
   mode?: Mode;
 }) {
   const { stations, loading, error, reload } = useStations();
+  const [bookingMode, setBookingMode] = useState<BookingMode>(mode === "stations" ? "regular" : "quick");
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(DATE_OPTIONS[0]);
@@ -73,19 +104,34 @@ export function CustomerHomeScreen({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackType, setFeedbackType] = useState<"success" | "error" | "info">("info");
   const [customerRegion, setCustomerRegion] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [quickTargets, setQuickTargets] = useState<Array<{ name: string; distance?: number | null }>>([]);
+  const [customerBookings, setCustomerBookings] = useState<CustomerBookingStatus[]>([]);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  const rankedStations = useMemo(
+    () =>
+      [...stations]
+        .map((station) => ({ station, distance: distanceKm(customerRegion, station) }))
+        .sort((a, b) => (a.distance ?? 99999) - (b.distance ?? 99999)),
+    [customerRegion, stations],
+  );
 
   const selectedStation = useMemo(
-    () => stations.find((station) => station.id === selectedStationId) || null,
-    [stations, selectedStationId],
+    () => stations.find((station) => station.id === selectedStationId) || rankedStations[0]?.station || null,
+    [rankedStations, selectedStationId, stations],
   );
+
   const selectedService = useMemo(
-    () => selectedStation?.services.find((service) => service.id === selectedServiceId) || null,
-    [selectedStation, selectedServiceId],
+    () => selectedStation?.services.find((service) => service.id === selectedServiceId) || selectedStation?.services[0] || null,
+    [selectedServiceId, selectedStation],
   );
+
   const quickTime = selectedSlot || getNextHalfHourTime();
   const discountAmount =
     selectedService && spinResult ? (selectedService.price * spinResult.discountPercent) / 100 : 0;
   const finalPrice = selectedService ? selectedService.price - discountAmount : 0;
+  const selectedStationDistance = selectedStation ? distanceKm(customerRegion, selectedStation) : null;
 
   useEffect(() => {
     if (stations.length === 0) {
@@ -94,9 +140,9 @@ export function CustomerHomeScreen({
       return;
     }
     if (!selectedStationId || !stations.some((station) => station.id === selectedStationId)) {
-      setSelectedStationId(stations[0].id);
+      setSelectedStationId(rankedStations[0]?.station.id || stations[0].id);
     }
-  }, [selectedStationId, stations]);
+  }, [rankedStations, selectedStationId, stations]);
 
   useEffect(() => {
     if (!selectedStation) return;
@@ -141,11 +187,33 @@ export function CustomerHomeScreen({
     setBookingResult(null);
   }, [selectedStation?.id, selectedService?.id, selectedDate, selectedSlot, customerPhone.trim()]);
 
-  const titleByMode: Record<Mode, string> = {
-    home: "احجز من الخريطة بخطوات بسيطة",
-    map: "الخريطة المباشرة للمحطات المتاحة",
-    stations: "المحطات والخدمات المتاحة الآن",
-  };
+  useEffect(() => {
+    if (!customerPhone.trim()) {
+      setCustomerBookings([]);
+      return;
+    }
+
+    let mounted = true;
+    const loadStatuses = async (silent = false) => {
+      if (!silent) setStatusLoading(true);
+      try {
+        const rows = await fetchCustomerBookings(customerPhone);
+        if (!mounted) return;
+        setCustomerBookings(rows);
+      } catch {
+        if (!mounted) return;
+      } finally {
+        if (mounted && !silent) setStatusLoading(false);
+      }
+    };
+
+    loadStatuses();
+    const timer = setInterval(() => loadStatuses(true), 15000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, [customerPhone]);
 
   const canSpin =
     !!selectedStation &&
@@ -165,7 +233,7 @@ export function CustomerHomeScreen({
     const Location = await import("expo-location");
     const permission = await Location.requestForegroundPermissionsAsync();
     if (permission.status !== "granted") {
-      throw new Error("فعّل إذن الموقع حتى يعمل الحجز السريع والخريطة بدقة.");
+      throw new Error("فعل إذن الموقع حتى تظهر المحطات حسب القرب ويعمل الحجز السريع بدقة.");
     }
 
     const location = await Location.getCurrentPositionAsync({
@@ -196,14 +264,29 @@ export function CustomerHomeScreen({
         customerLatitude: location.latitude,
         customerLongitude: location.longitude,
       });
-      const count = result.target_count || result.targets?.length || 0;
-      showNotice(`تم إرسال الحجز السريع إلى ${count} محطة ضمن نطاقك. سنبلغك عند رد المحطات.`, "success");
+      const targets =
+        result.targets?.map((target) => {
+          const station = stations.find((item) => item.id === target.station_id);
+          return {
+            name: target.station_name || station?.name || "محطة",
+            distance: target.distance_km ?? (station ? distanceKm(location, station) : null),
+          };
+        }) || [];
+      setQuickTargets(targets);
+      const names = targets.map((target) => `${target.name} (${formatDistance(target.distance)})`).join("، ");
+      showNotice(
+        names
+          ? `تم إرسال الطلب إلى: ${names}. سنبلغك داخل التطبيق عند موافقة أي محطة.`
+          : "تم إرسال الحجز السريع إلى أقرب المحطات ضمن نطاقك. سنبلغك عند رد المحطات.",
+        "success",
+      );
       await reload();
+      await fetchCustomerBookings(customerPhone).then(setCustomerBookings).catch(() => undefined);
     } catch (quickError) {
       const rawMessage = quickError instanceof Error ? quickError.message : "";
       const friendlyMessage =
         rawMessage.includes("non-2xx") || rawMessage.includes("duplicate") || rawMessage.includes("pending")
-          ? "أنت قمت بإرسال حجز سريع إلى 3 محطات. يمكنك الانتظار لحين الرد، أو لديك محاولة أخيرة لإرسال الطلب إلى 3 محطات أبعد ضمن نطاقك. وإذا تريد البدء من جديد اضغط زر إلغاء كل الحجوزات."
+          ? "لديك حجز سريع قيد الانتظار. يمكنك الانتظار لحين الرد، أو إرسال محاولة أخيرة لمحطات أخرى مختلفة إذا كانت متاحة، أو إلغاء الحجوزات من الزر الموجود هنا."
           : rawMessage || "تعذر إرسال الحجز السريع.";
       showNotice(friendlyMessage, "info");
     } finally {
@@ -223,11 +306,13 @@ export function CustomerHomeScreen({
       setBookingResult(null);
       setSpinResult(null);
       setNeedsRespin(false);
+      setQuickTargets([]);
       const message = result.alreadyEmpty
         ? "لا توجد حجوزات فعالة على هذا الرقم."
         : `تم إلغاء ${result.cancelledCount} حجز وإبلاغ المحطات.`;
       showNotice(message, "success");
       await reload();
+      await fetchCustomerBookings(customerPhone).then(setCustomerBookings).catch(() => undefined);
     } catch (cancelError) {
       showNotice(cancelError instanceof Error ? cancelError.message : "تعذر إلغاء الحجوزات.", "error");
     } finally {
@@ -241,6 +326,14 @@ export function CustomerHomeScreen({
       showNotice("أكمل بيانات الحجز أولاً: الخدمة، الوقت، الاسم، والهاتف.", "info");
       return;
     }
+
+    spinAnim.setValue(0);
+    Animated.timing(spinAnim, {
+      toValue: 1,
+      duration: 1400,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
 
     setSpinLoading(true);
     try {
@@ -295,7 +388,8 @@ export function CustomerHomeScreen({
       });
 
       setBookingResult(result);
-      showNotice(`تم إرسال طلب الحجز بنجاح (#${result.bookingNumber}).`, "success");
+      showNotice(`تم إرسال طلب الحجز بنجاح (#${result.bookingNumber}). ستظهر الموافقة داخل التطبيق.`, "success");
+      await fetchCustomerBookings(customerPhone).then(setCustomerBookings).catch(() => undefined);
     } catch (bookingError) {
       showNotice(bookingError instanceof Error ? bookingError.message : "تعذر تأكيد الحجز.", "error");
     } finally {
@@ -313,6 +407,7 @@ export function CustomerHomeScreen({
       setNeedsRespin(false);
       showNotice("تم إلغاء الحجز بنجاح.", "success");
       await reload();
+      await fetchCustomerBookings(customerPhone).then(setCustomerBookings).catch(() => undefined);
     } catch (cancelError) {
       showNotice(cancelError instanceof Error ? cancelError.message : "تعذر إلغاء الحجز.", "error");
     } finally {
@@ -320,17 +415,44 @@ export function CustomerHomeScreen({
     }
   };
 
+  const openRoute = (booking: CustomerBookingStatus) => {
+    if (!booking.stationLatitude || !booking.stationLongitude) {
+      Alert.alert("المسار", "لا توجد إحداثيات لهذه المحطة.");
+      return;
+    }
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${booking.stationLatitude},${booking.stationLongitude}`);
+  };
+
+  const rotation = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", `${1080 + (spinResult?.discountPercent || 15) * 12}deg`],
+  });
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <LinearGradient colors={gradients.hero} style={styles.heroCard}>
+        <View style={styles.logoCircle}>
+          <Text style={styles.logoText}>W</Text>
+        </View>
         <Text style={styles.heroBadge}>Washlly Mobile</Text>
-        <Text style={styles.heroTitle}>{titleByMode[mode]}</Text>
+        <Text style={styles.heroTitle}>احجز غسيل سيارتك بدون تعقيد</Text>
+        <Text style={styles.heroText}>اختر حجز سريع لأقرب المحطات، أو حجز اعتيادي من قائمة مرتبة حسب القرب.</Text>
         <View style={styles.heroActions}>
-          <Pressable style={styles.primaryButton} onPress={onOpenMap}>
-            <Text style={styles.primaryButtonText}>إظهار الخريطة</Text>
+          <Pressable
+            style={[styles.modeButton, bookingMode === "quick" && styles.modeButtonActive]}
+            onPress={() => setBookingMode("quick")}
+          >
+            <Text style={[styles.modeButtonText, bookingMode === "quick" && styles.modeButtonTextActive]}>
+              حجز سريع
+            </Text>
           </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={onOpenOwner}>
-            <Text style={styles.secondaryButtonText}>دخول المحطة</Text>
+          <Pressable
+            style={[styles.modeButton, bookingMode === "regular" && styles.modeButtonActive]}
+            onPress={() => setBookingMode("regular")}
+          >
+            <Text style={[styles.modeButtonText, bookingMode === "regular" && styles.modeButtonTextActive]}>
+              حجز اعتيادي
+            </Text>
           </Pressable>
         </View>
       </LinearGradient>
@@ -344,171 +466,251 @@ export function CustomerHomeScreen({
         />
       ) : null}
 
-      <SectionTitle title="الخريطة والحجز السريع" subtitle="حدد موقعك ثم أرسل طلباً لأقرب 3 محطات ضمن نطاقك." />
-      {mode === "map" ? (
-        <View style={styles.webMapWrap}>
-          <WebView
-            source={{ uri: "https://www.washlly.com/map" }}
-            style={styles.webMap}
-            startInLoadingState
-            renderLoading={() => (
-              <View style={styles.webMapLoading}>
-                <ActivityIndicator color={palette.deepBlue} />
-                <Text style={styles.webMapLoadingText}>جاري تحميل الخريطة...</Text>
-              </View>
-            )}
-          />
-        </View>
-      ) : (
-        <Pressable style={styles.openMapCard} onPress={onOpenMap}>
-          <Text style={styles.openMapTitle}>فتح الخريطة</Text>
-          <Text style={styles.openMapText}>اضغط هنا لفتح خريطة Washlly داخل التطبيق.</Text>
-        </Pressable>
-      )}
-
-      <View style={styles.card}>
+      <View style={styles.panel}>
+        <Text style={styles.panelTitle}>بيانات الزبون والموقع</Text>
         <Field label="اسم الزبون" value={customerName} onChangeText={setCustomerName} placeholder="مصطفى" />
         <Field label="رقم الهاتف" value={customerPhone} onChangeText={setCustomerPhone} placeholder="0773XXXXXXX" />
         <View style={styles.actionsRow}>
           <Pressable style={styles.locateButton} onPress={() => locateCustomer().catch((err) => Alert.alert("الموقع", err.message))}>
-            <Text style={styles.locateButtonText}>تحديد موقعي</Text>
+            <Text style={styles.locateButtonText}>{customerRegion ? "تم تحديد الموقع" : "تحديد موقعي"}</Text>
           </Pressable>
           <Pressable
-            style={[styles.quickButton, quickLoading && styles.disabledButton]}
+            style={[styles.cancelAllButton, cancelLoading && styles.disabledButton]}
+            onPress={handleCancelAllBookings}
+            disabled={cancelLoading}
+          >
+            {cancelLoading ? <ActivityIndicator color={palette.deepBlue} /> : <Text style={styles.cancelAllButtonText}>إلغاء كل الحجوزات</Text>}
+          </Pressable>
+        </View>
+      </View>
+
+      {bookingMode === "quick" ? (
+        <View style={styles.quickPanel}>
+          <View style={styles.quickHeader}>
+            <Text style={styles.quickTitle}>الحجز السريع</Text>
+            <Text style={styles.quickBadge}>أقرب 3 محطات</Text>
+          </View>
+          <Text style={styles.quickText}>
+            سنرسل طلبك لأقرب محطات ضمن نطاقك، وبعد موافقة أي محطة ستظهر لك داخل التطبيق مع زر المسار.
+          </Text>
+          <View style={styles.quickPreview}>
+            {rankedStations.slice(0, 3).map(({ station, distance }, index) => (
+              <View key={station.id} style={styles.quickPreviewRow}>
+                <Text style={styles.quickPreviewIndex}>{index + 1}</Text>
+                <View style={styles.quickPreviewInfo}>
+                  <Text style={styles.quickPreviewName}>{station.name}</Text>
+                  <Text style={styles.quickPreviewMeta}>{formatDistance(distance)}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+          <Pressable
+            style={[styles.quickSubmit, quickLoading && styles.disabledButton]}
             onPress={handleQuickBooking}
             disabled={quickLoading}
           >
-            {quickLoading ? <ActivityIndicator color={palette.white} /> : <Text style={styles.quickButtonText}>حجز سريع لأقرب 3 محطات</Text>}
+            {quickLoading ? <ActivityIndicator color={palette.white} /> : <Text style={styles.quickSubmitText}>إرسال الحجز السريع</Text>}
           </Pressable>
+          {quickTargets.length > 0 ? (
+            <View style={styles.sentBox}>
+              <Text style={styles.sentTitle}>تم الإرسال إلى</Text>
+              {quickTargets.map((target) => (
+                <Text key={`${target.name}-${target.distance}`} style={styles.sentLine}>
+                  {target.name} • {formatDistance(target.distance)}
+                </Text>
+              ))}
+            </View>
+          ) : null}
         </View>
-        <Pressable
-          style={[styles.cancelAllButton, cancelLoading && styles.disabledButton]}
-          onPress={handleCancelAllBookings}
-          disabled={cancelLoading}
-        >
-          {cancelLoading ? <ActivityIndicator color={palette.deepBlue} /> : <Text style={styles.cancelAllButtonText}>إلغاء كل الحجوزات</Text>}
-        </Pressable>
-      </View>
+      ) : (
+        <View>
+          <Text style={styles.sectionTitle}>الحجز الاعتيادي</Text>
+          <Text style={styles.sectionSub}>اختر محطة حسب القرب، ثم اختر الخدمة والوقت ولف عجلة الخصم.</Text>
 
-      <SectionTitle title="1) اختر المحطة" subtitle="اختيار محطة محددة يستخدم للحجز الاعتيادي من الخريطة." />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
-        {stations.map((station) => {
-          const active = station.id === selectedStation?.id;
-          return (
-            <Pressable key={station.id} onPress={() => setSelectedStationId(station.id)} style={[styles.stationChip, active && styles.stationChipActive]}>
-              <Text style={[styles.stationChipName, active && styles.stationChipNameActive]}>{station.name}</Text>
-              <Text style={[styles.stationChipMeta, active && styles.stationChipMetaActive]}>
-                {station.area} • {station.open ? "مفتوح" : "مغلق"}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {selectedStation ? (
-        <>
-          <SectionTitle title="2) اختر الخدمة" subtitle="اختر خدمة واحدة لتثبيت السعر والخصم." />
-          <View style={styles.cardsColumn}>
-            {selectedStation.services.map((service) => {
-              const active = service.id === selectedService?.id;
-              return (
-                <Pressable key={service.id} style={[styles.serviceCard, active && styles.serviceCardActive]} onPress={() => setSelectedServiceId(service.id)}>
-                  <Text style={[styles.serviceName, active && styles.serviceNameActive]}>{service.name}</Text>
-                  <Text style={[styles.serviceMeta, active && styles.serviceMetaActive]}>
-                    {formatCurrency(service.price)} • {service.durationMinutes} دقيقة
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <SectionTitle title="3) اختر اليوم والوقت" subtitle="اليوم الحالي يعرض الأوقات اللاحقة فقط." />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
-            {DATE_OPTIONS.map((date) => {
-              const active = date === selectedDate;
+            {rankedStations.map(({ station, distance }) => {
+              const active = station.id === selectedStation?.id;
               return (
-                <Pressable key={date} style={[styles.dateChip, active && styles.dateChipActive]} onPress={() => setSelectedDate(date)}>
-                  <Text style={[styles.dateChipText, active && styles.dateChipTextActive]}>{date}</Text>
+                <Pressable
+                  key={station.id}
+                  onPress={() => setSelectedStationId(station.id)}
+                  style={[styles.stationChip, active && styles.stationChipActive]}
+                >
+                  <Text style={[styles.stationChipName, active && styles.stationChipNameActive]}>{station.name}</Text>
+                  <Text style={[styles.stationChipMeta, active && styles.stationChipMetaActive]}>
+                    {formatDistance(distance)} • {station.open ? "مفتوح" : "مغلق"}
+                  </Text>
                 </Pressable>
               );
             })}
           </ScrollView>
 
-          {selectedStation.schedulingType === "slots" ? (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>الأوقات المتاحة</Text>
-              {slotsLoading ? (
-                <ActivityIndicator color={palette.deepBlue} />
-              ) : availableSlots.length > 0 ? (
-                <View style={styles.slotWrap}>
-                  {availableSlots.map((slot) => {
-                    const active = slot === selectedSlot;
-                    return (
-                      <Pressable key={slot} style={[styles.slotChip, active && styles.slotChipActive]} onPress={() => setSelectedSlot(slot)}>
-                        <Text style={[styles.slotText, active && styles.slotTextActive]}>{slot}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : (
-                <Text style={styles.cardSubText}>لا توجد أوقات متاحة في هذا اليوم.</Text>
-              )}
-            </View>
-          ) : null}
+          {selectedStation ? (
+            <>
+              <View style={styles.selectedStationCard}>
+                <Text style={styles.selectedStationName}>{selectedStation.name}</Text>
+                <Text style={styles.selectedStationMeta}>
+                  {selectedStation.area} • {formatDistance(selectedStationDistance)}
+                </Text>
+              </View>
 
-          <SectionTitle title="4) عجلة الخصم" subtitle="الخصومات المتاحة: 0%، 5%، 10%، 15%." />
-          <View style={styles.spinCard}>
-            <View style={styles.wheelWrap}>
-              <View style={styles.pointer} />
-              <View style={styles.wheel}>
-                {SPIN_SEGMENTS.map((segment, index) => (
-                  <View key={segment} style={[styles.wheelSegment, index % 2 === 0 ? styles.wheelSegmentA : styles.wheelSegmentB]}>
-                    <Text style={styles.wheelSegmentText}>{segment}%</Text>
-                  </View>
-                ))}
-                <View style={styles.wheelCenter}>
-                  <Text style={styles.wheelCenterText}>{spinResult ? `${spinResult.discountPercent}%` : "خصم"}</Text>
+              <Text style={styles.stepTitle}>الخدمة</Text>
+              <View style={styles.cardsColumn}>
+                {selectedStation.services.map((service) => {
+                  const active = service.id === selectedService?.id;
+                  return (
+                    <Pressable
+                      key={service.id}
+                      style={[styles.serviceCard, active && styles.serviceCardActive]}
+                      onPress={() => setSelectedServiceId(service.id)}
+                    >
+                      <Text style={[styles.serviceName, active && styles.serviceNameActive]}>{service.name}</Text>
+                      <Text style={[styles.serviceMeta, active && styles.serviceMetaActive]}>
+                        {formatCurrency(service.price)} • {service.durationMinutes} دقيقة
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.stepTitle}>اليوم والوقت</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+                {DATE_OPTIONS.map((date) => {
+                  const active = date === selectedDate;
+                  return (
+                    <Pressable key={date} style={[styles.dateChip, active && styles.dateChipActive]} onPress={() => setSelectedDate(date)}>
+                      <Text style={[styles.dateChipText, active && styles.dateChipTextActive]}>{date}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              {selectedStation.schedulingType === "slots" ? (
+                <View style={styles.panel}>
+                  {slotsLoading ? (
+                    <ActivityIndicator color={palette.deepBlue} />
+                  ) : availableSlots.length > 0 ? (
+                    <View style={styles.slotWrap}>
+                      {availableSlots.map((slot) => {
+                        const active = slot === selectedSlot;
+                        return (
+                          <Pressable key={slot} style={[styles.slotChip, active && styles.slotChipActive]} onPress={() => setSelectedSlot(slot)}>
+                            <Text style={[styles.slotText, active && styles.slotTextActive]}>{slot}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={styles.panelText}>لا توجد أوقات متاحة في هذا اليوم.</Text>
+                  )}
+                </View>
+              ) : null}
+
+              <View style={styles.spinCard}>
+                <View style={styles.wheelWrap}>
+                  <View style={styles.pointer} />
+                  <Animated.View style={[styles.wheel, { transform: [{ rotate: rotation }] }]}>
+                    {SPIN_SEGMENTS.map((segment, index) => (
+                      <View key={segment} style={[styles.wheelSegment, index % 2 === 0 ? styles.wheelSegmentA : styles.wheelSegmentB]}>
+                        <Text style={styles.wheelSegmentText}>{segment}%</Text>
+                      </View>
+                    ))}
+                    <View style={styles.wheelCenter}>
+                      <Text style={styles.wheelCenterText}>{spinResult ? `${spinResult.discountPercent}%` : "خصم"}</Text>
+                    </View>
+                  </Animated.View>
+                </View>
+                <View style={styles.spinPriceBox}>
+                  <Text style={styles.spinResultLabel}>السعر النهائي</Text>
+                  <Text style={styles.spinResultValue}>{selectedService ? formatCurrency(finalPrice) : "--"}</Text>
+                  {selectedService ? <Text style={styles.spinSubText}>قبل الخصم: {formatCurrency(selectedService.price)}</Text> : null}
+                </View>
+                <Pressable style={[styles.spinButton, (!canSpin || spinLoading) && styles.disabledButton]} onPress={handleSpin} disabled={!canSpin || spinLoading}>
+                  {spinLoading ? <ActivityIndicator color={palette.white} /> : <Text style={styles.spinButtonText}>{needsRespin ? "أعد تدوير العجلة" : "لف عجلة الخصم"}</Text>}
+                </Pressable>
+              </View>
+
+              <View style={styles.panel}>
+                {bookingResult ? (
+                  <Text style={styles.bookingInfo}>رقم الحجز الحالي: #{bookingResult.bookingNumber}</Text>
+                ) : (
+                  <Text style={styles.panelText}>بعد تثبيت الخصم اضغط تأكيد لإرسال الحجز إلى المحطة.</Text>
+                )}
+                <View style={styles.actionsRow}>
+                  <Pressable
+                    style={[styles.confirmButton, (!canConfirm || bookingLoading || !!bookingResult) && styles.disabledButton]}
+                    onPress={handleConfirmBooking}
+                    disabled={!canConfirm || bookingLoading || !!bookingResult}
+                  >
+                    {bookingLoading ? <ActivityIndicator color={palette.white} /> : <Text style={styles.confirmButtonText}>تأكيد الحجز</Text>}
+                  </Pressable>
+                  <Pressable
+                    style={[styles.cancelButton, (!bookingResult || cancelLoading) && styles.disabledButton]}
+                    onPress={handleCancelBooking}
+                    disabled={!bookingResult || cancelLoading}
+                  >
+                    {cancelLoading ? <ActivityIndicator color={palette.deepBlue} /> : <Text style={styles.cancelButtonText}>إلغاء الحجز</Text>}
+                  </Pressable>
                 </View>
               </View>
-            </View>
-            <View style={styles.spinPriceBox}>
-              <Text style={styles.spinResultLabel}>السعر النهائي</Text>
-              <Text style={styles.spinResultValue}>{selectedService ? formatCurrency(finalPrice) : "--"}</Text>
-              {selectedService ? <Text style={styles.spinSubText}>قبل الخصم: {formatCurrency(selectedService.price)}</Text> : null}
-            </View>
-            <Pressable style={[styles.spinButton, (!canSpin || spinLoading) && styles.disabledButton]} onPress={handleSpin} disabled={!canSpin || spinLoading}>
-              {spinLoading ? <ActivityIndicator color={palette.white} /> : <Text style={styles.spinButtonText}>{needsRespin ? "أعد تدوير العجلة" : "لف عجلة الخصم"}</Text>}
-            </Pressable>
-          </View>
+            </>
+          ) : loading ? (
+            <ActivityIndicator color={palette.deepBlue} />
+          ) : null}
+        </View>
+      )}
 
-          <SectionTitle title="5) تأكيد أو إلغاء" subtitle="بعد التدوير يمكنك إرسال الحجز الاعتيادي للمحطة المحددة." />
-          <View style={styles.card}>
-            {bookingResult ? (
-              <Text style={styles.bookingInfo}>رقم الحجز الحالي: #{bookingResult.bookingNumber}</Text>
-            ) : (
-              <Text style={styles.cardSubText}>أكمل الخطوات السابقة ثم اضغط تأكيد الحجز.</Text>
-            )}
-            <View style={styles.actionsRow}>
-              <Pressable
-                style={[styles.confirmButton, (!canConfirm || bookingLoading || !!bookingResult) && styles.disabledButton]}
-                onPress={handleConfirmBooking}
-                disabled={!canConfirm || bookingLoading || !!bookingResult}
-              >
-                {bookingLoading ? <ActivityIndicator color={palette.white} /> : <Text style={styles.confirmButtonText}>تأكيد الحجز</Text>}
-              </Pressable>
-              <Pressable
-                style={[styles.cancelButton, (!bookingResult || cancelLoading) && styles.disabledButton]}
-                onPress={handleCancelBooking}
-                disabled={!bookingResult || cancelLoading}
-              >
-                {cancelLoading ? <ActivityIndicator color={palette.deepBlue} /> : <Text style={styles.cancelButtonText}>إلغاء الحجز</Text>}
-              </Pressable>
+      <View style={styles.statusPanel}>
+        <View style={styles.statusHeader}>
+          <Text style={styles.statusTitle}>إشعارات الحجز داخل التطبيق</Text>
+          {statusLoading ? <ActivityIndicator color={palette.deepBlue} /> : null}
+        </View>
+        {customerBookings.length === 0 ? (
+          <Text style={styles.panelText}>أدخل رقم الهاتف لتظهر آخر الحجوزات وحالة رد المحطات.</Text>
+        ) : (
+          customerBookings.map((booking) => (
+            <View key={booking.id} style={styles.bookingStatusCard}>
+              <Text style={styles.bookingStatusTitle}>#{booking.bookingNumber} • {booking.stationName}</Text>
+              <Text style={styles.bookingStatusMeta}>
+                {statusLabel(booking.status)} • {booking.bookingDate || "--"} {booking.bookingTime?.slice(0, 5) || ""}
+              </Text>
+              {booking.status === "confirmed" ? (
+                <Pressable style={styles.routeButton} onPress={() => openRoute(booking)}>
+                  <Text style={styles.routeButtonText}>فتح المسار إلى المحطة</Text>
+                </Pressable>
+              ) : null}
             </View>
+          ))
+        )}
+      </View>
+
+      <View style={styles.mapTail}>
+        <Text style={styles.mapTailTitle}>الخريطة</Text>
+        <Text style={styles.mapTailText}>الخريطة اختيارية فقط إذا أردت مشاهدة موقعك والمحطات على الخريطة.</Text>
+        {mode === "map" ? (
+          <View style={styles.webMapWrap}>
+            <WebView
+              source={{ uri: "https://www.washlly.com/map" }}
+              style={styles.webMap}
+              startInLoadingState
+              renderLoading={() => (
+                <View style={styles.webMapLoading}>
+                  <ActivityIndicator color={palette.deepBlue} />
+                  <Text style={styles.webMapLoadingText}>جاري تحميل الخريطة...</Text>
+                </View>
+              )}
+            />
           </View>
-        </>
-      ) : loading ? (
-        <ActivityIndicator color={palette.deepBlue} />
-      ) : null}
+        ) : (
+          <Pressable style={styles.mapButton} onPress={onOpenMap}>
+            <Text style={styles.mapButtonText}>عرض الخريطة</Text>
+          </Pressable>
+        )}
+      </View>
+
+      <Pressable style={styles.ownerLink} onPress={onOpenOwner}>
+        <Text style={styles.ownerLinkText}>دخول بوابة المحطة</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -557,9 +759,19 @@ function Field({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.sand },
-  content: { padding: 18, paddingBottom: 36 },
-  heroCard: { borderRadius: 24, padding: 20, marginBottom: 16 },
+  screen: { flex: 1, backgroundColor: "#f4f9fd" },
+  content: { padding: 18, paddingBottom: 38 },
+  heroCard: { borderRadius: 28, padding: 20, marginBottom: 16, overflow: "hidden" },
+  logoCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  logoText: { color: palette.white, fontWeight: "900", fontSize: 28 },
   heroBadge: {
     alignSelf: "flex-start",
     backgroundColor: "rgba(255,255,255,0.18)",
@@ -568,59 +780,282 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     overflow: "hidden",
-    fontWeight: "700",
+    fontWeight: "800",
     marginBottom: 8,
   },
-  heroTitle: { fontSize: 28, lineHeight: 34, color: palette.white, fontWeight: "900", textAlign: "right" },
-  heroActions: { flexDirection: "row-reverse", marginTop: 14, gap: 8 },
-  primaryButton: {
+  heroTitle: { fontSize: 29, lineHeight: 38, color: palette.white, fontWeight: "900", textAlign: "right" },
+  heroText: { color: "rgba(255,255,255,0.82)", textAlign: "right", lineHeight: 22, marginTop: 8 },
+  heroActions: { flexDirection: "row-reverse", marginTop: 16, gap: 8 },
+  modeButton: {
     flex: 1,
-    backgroundColor: palette.white,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-  },
-  primaryButtonText: { color: palette.deepBlue, fontWeight: "800" },
-  secondaryButton: {
-    flex: 1,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
     borderColor: "rgba(255,255,255,0.3)",
-    borderWidth: 1,
+    paddingVertical: 13,
+    alignItems: "center",
   },
-  secondaryButtonText: { color: palette.white, fontWeight: "700" },
-  noticeBox: { borderRadius: 16, borderWidth: 1, padding: 12, marginBottom: 14 },
-  noticeTitle: { textAlign: "right", fontWeight: "800", marginBottom: 6 },
+  modeButtonActive: { backgroundColor: palette.white, borderColor: palette.white },
+  modeButtonText: { color: palette.white, fontWeight: "900" },
+  modeButtonTextActive: { color: palette.deepBlue },
+  noticeBox: { borderRadius: 18, borderWidth: 1, padding: 13, marginBottom: 14 },
+  noticeTitle: { textAlign: "right", fontWeight: "900", marginBottom: 6 },
   noticeText: { textAlign: "right", lineHeight: 20 },
-  mapWrap: {
-    height: 300,
-    borderRadius: 20,
-    overflow: "hidden",
+  panel: {
+    backgroundColor: palette.white,
     borderColor: palette.line,
     borderWidth: 1,
-    marginBottom: 12,
+    borderRadius: 20,
+    padding: 14,
+    marginBottom: 14,
+    shadowColor: "#0b1b2b",
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    elevation: 2,
   },
-  mapOverlay: {
-    position: "absolute",
-    right: 10,
-    left: 10,
-    bottom: 10,
+  panelTitle: { textAlign: "right", color: palette.text, fontSize: 18, fontWeight: "900", marginBottom: 10 },
+  panelText: { textAlign: "right", color: palette.muted, lineHeight: 21 },
+  fieldWrap: { marginBottom: 10 },
+  fieldLabel: { textAlign: "right", color: palette.text, fontWeight: "800", marginBottom: 6 },
+  input: {
+    borderColor: palette.line,
+    borderWidth: 1,
     borderRadius: 14,
-    backgroundColor: "rgba(10,22,38,0.84)",
-    padding: 12,
+    backgroundColor: "#f8fbfe",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    color: palette.text,
   },
-  mapOverlayTitle: { color: palette.white, textAlign: "right", fontWeight: "800", marginBottom: 4 },
-  mapOverlayText: { color: "rgba(255,255,255,0.84)", textAlign: "right", fontSize: 12, lineHeight: 18 },
-  webMapWrap: {
-    height: 560,
+  actionsRow: { flexDirection: "row-reverse", gap: 8, marginTop: 8 },
+  locateButton: {
+    flex: 1,
+    backgroundColor: "#e8f3fb",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderColor: "#cfe4f4",
+    borderWidth: 1,
+  },
+  locateButtonText: { color: palette.deepBlue, fontWeight: "900" },
+  cancelAllButton: {
+    flex: 1,
+    backgroundColor: "#fff6e4",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderColor: "#f2d9a3",
+    borderWidth: 1,
+  },
+  cancelAllButtonText: { color: "#7a4a00", fontWeight: "900" },
+  quickPanel: {
+    backgroundColor: "#0d335f",
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 16,
+  },
+  quickHeader: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" },
+  quickTitle: { color: palette.white, fontWeight: "900", fontSize: 24 },
+  quickBadge: {
+    color: palette.white,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: "hidden",
+    fontWeight: "800",
+  },
+  quickText: { textAlign: "right", color: "rgba(255,255,255,0.82)", lineHeight: 22, marginTop: 10 },
+  quickPreview: { marginTop: 14, gap: 8 },
+  quickPreviewRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    padding: 10,
+    gap: 10,
+  },
+  quickPreviewIndex: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    textAlign: "center",
+    textAlignVertical: "center",
+    color: palette.deepBlue,
+    backgroundColor: palette.white,
+    fontWeight: "900",
+  },
+  quickPreviewInfo: { flex: 1 },
+  quickPreviewName: { color: palette.white, textAlign: "right", fontWeight: "900" },
+  quickPreviewMeta: { color: "rgba(255,255,255,0.75)", textAlign: "right", marginTop: 3 },
+  quickSubmit: { backgroundColor: "#19a7ce", borderRadius: 16, paddingVertical: 14, alignItems: "center", marginTop: 14 },
+  quickSubmitText: { color: palette.white, fontWeight: "900", fontSize: 16 },
+  sentBox: { marginTop: 12, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.1)", padding: 12 },
+  sentTitle: { color: palette.white, textAlign: "right", fontWeight: "900", marginBottom: 6 },
+  sentLine: { color: "rgba(255,255,255,0.82)", textAlign: "right", lineHeight: 22 },
+  sectionTitle: { textAlign: "right", color: palette.text, fontWeight: "900", fontSize: 24, marginTop: 4 },
+  sectionSub: { textAlign: "right", color: palette.muted, lineHeight: 21, marginTop: 4, marginBottom: 12 },
+  horizontalList: { gap: 8, paddingBottom: 10 },
+  stationChip: {
+    width: 214,
+    borderRadius: 18,
+    borderColor: palette.line,
+    borderWidth: 1,
+    backgroundColor: palette.white,
+    padding: 13,
+  },
+  stationChipActive: { borderColor: "#19a7ce", backgroundColor: "#e9f8fc" },
+  stationChipName: { textAlign: "right", color: palette.text, fontWeight: "900", marginBottom: 5 },
+  stationChipNameActive: { color: palette.deepBlue },
+  stationChipMeta: { textAlign: "right", color: palette.muted, fontSize: 12 },
+  stationChipMetaActive: { color: palette.deepBlue },
+  selectedStationCard: {
     borderRadius: 20,
+    padding: 14,
+    backgroundColor: "#eaf5ff",
+    borderColor: "#cde6fa",
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  selectedStationName: { textAlign: "right", color: palette.deepBlue, fontWeight: "900", fontSize: 20 },
+  selectedStationMeta: { textAlign: "right", color: palette.muted, marginTop: 5 },
+  stepTitle: { textAlign: "right", color: palette.text, fontWeight: "900", fontSize: 18, marginBottom: 8 },
+  cardsColumn: { marginBottom: 14 },
+  serviceCard: {
+    backgroundColor: palette.white,
+    borderColor: palette.line,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 13,
+    marginBottom: 8,
+  },
+  serviceCardActive: { borderColor: "#19a7ce", backgroundColor: "#e9f8fc" },
+  serviceName: { textAlign: "right", color: palette.text, fontWeight: "900" },
+  serviceNameActive: { color: palette.deepBlue },
+  serviceMeta: { textAlign: "right", color: palette.muted, marginTop: 4 },
+  serviceMetaActive: { color: palette.deepBlue },
+  dateChip: {
+    borderRadius: 999,
+    borderColor: palette.line,
+    borderWidth: 1,
+    backgroundColor: palette.white,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  dateChipActive: { backgroundColor: palette.deepBlue, borderColor: palette.deepBlue },
+  dateChipText: { color: palette.text, fontWeight: "800" },
+  dateChipTextActive: { color: palette.white },
+  slotWrap: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 8 },
+  slotChip: {
+    borderRadius: 999,
+    borderColor: palette.line,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#f9fbff",
+  },
+  slotChipActive: { backgroundColor: palette.deepBlue, borderColor: palette.deepBlue },
+  slotText: { color: palette.text, fontWeight: "800" },
+  slotTextActive: { color: palette.white },
+  spinCard: { backgroundColor: "#10233f", borderRadius: 22, padding: 15, marginBottom: 14 },
+  wheelWrap: { alignItems: "center", marginBottom: 12 },
+  pointer: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 11,
+    borderRightWidth: 11,
+    borderTopWidth: 20,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#f7c948",
+    marginBottom: -2,
+    zIndex: 2,
+  },
+  wheel: {
+    width: 196,
+    height: 196,
+    borderRadius: 98,
+    borderWidth: 8,
+    borderColor: palette.white,
+    overflow: "hidden",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    backgroundColor: palette.deepBlue,
+  },
+  wheelSegment: { width: "50%", height: "50%", alignItems: "center", justifyContent: "center" },
+  wheelSegmentA: { backgroundColor: "#19a7ce" },
+  wheelSegmentB: { backgroundColor: "#16a085" },
+  wheelSegmentText: { color: palette.white, fontWeight: "900", fontSize: 20 },
+  wheelCenter: {
+    position: "absolute",
+    top: 61,
+    left: 61,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: palette.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  wheelCenterText: { color: palette.deepBlue, fontWeight: "900" },
+  spinPriceBox: { borderRadius: 16, backgroundColor: "rgba(255,255,255,0.1)", padding: 11, marginBottom: 10 },
+  spinResultLabel: { textAlign: "right", color: "rgba(255,255,255,0.78)", fontSize: 12 },
+  spinResultValue: { textAlign: "right", color: palette.white, fontWeight: "900", fontSize: 22, marginTop: 4 },
+  spinSubText: { textAlign: "right", color: "rgba(255,255,255,0.72)", marginTop: 4, fontSize: 12 },
+  spinButton: { backgroundColor: "#f7c948", borderRadius: 16, alignItems: "center", justifyContent: "center", paddingVertical: 13 },
+  spinButtonText: { color: "#273445", fontWeight: "900" },
+  confirmButton: { flex: 1, backgroundColor: palette.deepBlue, borderRadius: 14, paddingVertical: 12, alignItems: "center" },
+  confirmButtonText: { color: palette.white, fontWeight: "900" },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: "#eef4f8",
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderColor: palette.line,
+    borderWidth: 1,
+  },
+  cancelButtonText: { color: palette.deepBlue, fontWeight: "900" },
+  bookingInfo: { textAlign: "right", color: palette.deepBlue, fontWeight: "900", marginBottom: 8 },
+  statusPanel: {
+    backgroundColor: palette.white,
+    borderRadius: 22,
+    padding: 14,
+    borderColor: palette.line,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  statusHeader: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  statusTitle: { textAlign: "right", color: palette.text, fontWeight: "900", fontSize: 18 },
+  bookingStatusCard: {
+    borderRadius: 16,
+    backgroundColor: "#f7fbff",
+    borderColor: palette.line,
+    borderWidth: 1,
+    padding: 11,
+    marginTop: 8,
+  },
+  bookingStatusTitle: { textAlign: "right", color: palette.text, fontWeight: "900" },
+  bookingStatusMeta: { textAlign: "right", color: palette.muted, marginTop: 4 },
+  routeButton: { backgroundColor: "#e8f6ee", borderRadius: 12, alignItems: "center", paddingVertical: 10, marginTop: 9 },
+  routeButtonText: { color: palette.success, fontWeight: "900" },
+  mapTail: {
+    backgroundColor: "#edf7fd",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#cfe4f4",
+    padding: 14,
+    marginBottom: 12,
+  },
+  mapTailTitle: { textAlign: "right", color: palette.deepBlue, fontWeight: "900", fontSize: 18 },
+  mapTailText: { textAlign: "right", color: palette.muted, marginTop: 5, lineHeight: 20 },
+  mapButton: { backgroundColor: palette.white, borderRadius: 14, paddingVertical: 12, alignItems: "center", marginTop: 10 },
+  mapButtonText: { color: palette.deepBlue, fontWeight: "900" },
+  webMapWrap: {
+    height: 520,
+    borderRadius: 18,
     overflow: "hidden",
     borderColor: palette.line,
     borderWidth: 1,
-    marginBottom: 12,
+    marginTop: 12,
     backgroundColor: "#eef7ff",
   },
   webMap: { flex: 1, backgroundColor: "#eef7ff" },
@@ -632,174 +1067,11 @@ const styles = StyleSheet.create({
   },
   webMapLoadingText: {
     color: palette.deepBlue,
-    fontWeight: "800",
+    fontWeight: "900",
     marginTop: 10,
     textAlign: "center",
   },
-  openMapCard: {
-    backgroundColor: "#eaf3fb",
-    borderColor: palette.line,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-  },
-  openMapTitle: { textAlign: "right", color: palette.deepBlue, fontWeight: "900", fontSize: 18 },
-  openMapText: { textAlign: "right", color: palette.muted, lineHeight: 20, marginTop: 4 },
-  horizontalList: { gap: 8, paddingBottom: 8 },
-  stationChip: {
-    width: 200,
-    borderRadius: 14,
-    borderColor: palette.line,
-    borderWidth: 1,
-    backgroundColor: palette.white,
-    padding: 12,
-  },
-  stationChipActive: { borderColor: palette.brightBlue, backgroundColor: "#eaf3fb" },
-  stationChipName: { textAlign: "right", color: palette.text, fontWeight: "800", marginBottom: 5 },
-  stationChipNameActive: { color: palette.deepBlue },
-  stationChipMeta: { textAlign: "right", color: palette.muted, fontSize: 12 },
-  stationChipMetaActive: { color: palette.deepBlue },
-  cardsColumn: { marginBottom: 14 },
-  serviceCard: {
-    backgroundColor: palette.white,
-    borderColor: palette.line,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 8,
-  },
-  serviceCardActive: { borderColor: palette.brightBlue, backgroundColor: "#eaf3fb" },
-  serviceName: { textAlign: "right", color: palette.text, fontWeight: "800" },
-  serviceNameActive: { color: palette.deepBlue },
-  serviceMeta: { textAlign: "right", color: palette.muted, marginTop: 4 },
-  serviceMetaActive: { color: palette.deepBlue },
-  dateChip: {
-    borderRadius: 999,
-    borderColor: palette.line,
-    borderWidth: 1,
-    backgroundColor: palette.white,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  dateChipActive: { backgroundColor: palette.deepBlue, borderColor: palette.deepBlue },
-  dateChipText: { color: palette.text, fontWeight: "700" },
-  dateChipTextActive: { color: palette.white },
-  card: {
-    backgroundColor: palette.white,
-    borderColor: palette.line,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 14,
-  },
-  cardTitle: { textAlign: "right", color: palette.text, fontWeight: "800", marginBottom: 8 },
-  cardSubText: { textAlign: "right", color: palette.muted, lineHeight: 20 },
-  slotWrap: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 8 },
-  slotChip: {
-    borderRadius: 999,
-    borderColor: palette.line,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: "#f9fbff",
-  },
-  slotChipActive: { backgroundColor: palette.deepBlue, borderColor: palette.deepBlue },
-  slotText: { color: palette.text, fontWeight: "700" },
-  slotTextActive: { color: palette.white },
-  fieldWrap: { marginBottom: 10 },
-  fieldLabel: { textAlign: "right", color: palette.text, fontWeight: "700", marginBottom: 6 },
-  input: {
-    borderColor: palette.line,
-    borderWidth: 1,
-    borderRadius: 12,
-    backgroundColor: "#f8fbfe",
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: palette.text,
-  },
-  spinCard: { backgroundColor: "#10233f", borderRadius: 18, padding: 14, marginBottom: 14 },
-  wheelWrap: { alignItems: "center", marginBottom: 12 },
-  pointer: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 10,
-    borderRightWidth: 10,
-    borderTopWidth: 18,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderTopColor: palette.gold,
-    marginBottom: -2,
-    zIndex: 2,
-  },
-  wheel: {
-    width: 190,
-    height: 190,
-    borderRadius: 95,
-    borderWidth: 8,
-    borderColor: palette.white,
-    overflow: "hidden",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    backgroundColor: palette.deepBlue,
-  },
-  wheelSegment: { width: "50%", height: "50%", alignItems: "center", justifyContent: "center" },
-  wheelSegmentA: { backgroundColor: "#1f9f8f" },
-  wheelSegmentB: { backgroundColor: "#f59e0b" },
-  wheelSegmentText: { color: palette.white, fontWeight: "900", fontSize: 20 },
-  wheelCenter: {
-    position: "absolute",
-    top: 58,
-    left: 58,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: palette.white,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  wheelCenterText: { color: palette.deepBlue, fontWeight: "900" },
-  spinPriceBox: { borderRadius: 14, backgroundColor: "rgba(255,255,255,0.08)", padding: 10, marginBottom: 10 },
-  spinResultLabel: { textAlign: "right", color: "rgba(255,255,255,0.78)", fontSize: 12 },
-  spinResultValue: { textAlign: "right", color: palette.white, fontWeight: "900", fontSize: 22, marginTop: 4 },
-  spinSubText: { textAlign: "right", color: "rgba(255,255,255,0.72)", marginTop: 4, fontSize: 12 },
-  spinButton: { backgroundColor: palette.gold, borderRadius: 14, alignItems: "center", justifyContent: "center", paddingVertical: 12 },
-  spinButtonText: { color: "#2f2a17", fontWeight: "900" },
-  actionsRow: { flexDirection: "row-reverse", gap: 8, marginTop: 10 },
-  quickButton: { flex: 1.2, backgroundColor: palette.deepBlue, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
-  quickButtonText: { color: palette.white, fontWeight: "800", textAlign: "center" },
-  locateButton: {
-    flex: 0.8,
-    backgroundColor: "#f0f4f8",
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderColor: palette.line,
-    borderWidth: 1,
-  },
-  locateButtonText: { color: palette.deepBlue, fontWeight: "800" },
-  cancelAllButton: {
-    marginTop: 8,
-    backgroundColor: "#f0f4f8",
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderColor: palette.line,
-    borderWidth: 1,
-  },
-  cancelAllButtonText: { color: palette.deepBlue, fontWeight: "900" },
-  confirmButton: { flex: 1, backgroundColor: palette.deepBlue, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
-  confirmButtonText: { color: palette.white, fontWeight: "800" },
-  cancelButton: {
-    flex: 1,
-    backgroundColor: "#f0f4f8",
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderColor: palette.line,
-    borderWidth: 1,
-  },
-  cancelButtonText: { color: palette.deepBlue, fontWeight: "800" },
-  bookingInfo: { textAlign: "right", color: palette.deepBlue, fontWeight: "800" },
+  ownerLink: { alignItems: "center", paddingVertical: 8 },
+  ownerLinkText: { color: palette.deepBlue, fontWeight: "900" },
   disabledButton: { opacity: 0.45 },
 });

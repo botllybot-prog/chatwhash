@@ -11,13 +11,21 @@ const labels: Record<TabKey, string> = {
   owner: 'بوابة المحطة',
 };
 
+const marks: Record<TabKey, string> = {
+  home: '01',
+  map: '04',
+  stations: '02',
+  owner: '03',
+};
+
 export function BottomTabs({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) => void }) {
   return (
     <View style={styles.wrap}>
-      {(['home', 'map', 'stations', 'owner'] as TabKey[]).map((tab) => {
+      {(['home', 'stations', 'owner', 'map'] as TabKey[]).map((tab) => {
         const selected = active === tab;
         return (
           <Pressable key={tab} style={[styles.item, selected && styles.activeItem]} onPress={() => onChange(tab)}>
+            <Text style={[styles.mark, selected && styles.activeMark]}>{marks[tab]}</Text>
             <Text style={[styles.label, selected && styles.activeLabel]}>{labels[tab]}</Text>
           </Pressable>
         );
@@ -38,19 +46,31 @@ const styles = StyleSheet.create({
   },
   item: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 14,
+    minHeight: 58,
+    paddingVertical: 8,
+    borderRadius: 18,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   activeItem: {
-    backgroundColor: '#e8f2fb',
+    backgroundColor: '#0c447c',
+  },
+  mark: {
+    fontSize: 10,
+    color: '#9db0c4',
+    fontWeight: '900',
+    marginBottom: 2,
+  },
+  activeMark: {
+    color: 'rgba(255,255,255,0.7)',
   },
   label: {
     fontSize: 12,
     color: palette.muted,
-    fontWeight: '600',
+    fontWeight: '800',
+    textAlign: 'center',
   },
   activeLabel: {
-    color: palette.deepBlue,
+    color: palette.white,
   },
 });

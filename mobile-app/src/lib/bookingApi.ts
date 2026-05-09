@@ -3,6 +3,7 @@ import type {
   BookingCancelResult,
   BookingCreatePayload,
   BookingCreateResult,
+  CustomerBookingStatus,
   MobileStation,
   QuickBookingResult,
   SpinResult,
@@ -24,6 +25,23 @@ type ApiErrorResponse = {
 
 type BookedTimeRow = {
   booking_time: string | null;
+};
+
+type CustomerBookingRow = {
+  id: string;
+  booking_number: number;
+  status: string;
+  booking_date: string | null;
+  booking_time: string | null;
+  stations:
+    | {
+        name?: string | null;
+        address?: string | null;
+        latitude?: number | string | null;
+        longitude?: number | string | null;
+      }
+    | null;
+  services: { name?: string | null } | null;
 };
 
 function normalizePhone(phone: string): string {
@@ -234,6 +252,38 @@ export async function createQuickBooking(payload: {
   }
 
   return data;
+}
+
+export async function fetchCustomerBookings(customerPhone: string): Promise<CustomerBookingStatus[]> {
+  const phone = normalizePhone(customerPhone);
+  if (!phone) return [];
+
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("id,booking_number,status,booking_date,booking_time,stations(name,address,latitude,longitude),services(name)")
+    .eq("customer_phone", phone)
+    .in("status", ["pending", "confirmed", "rejected", "proposed_time", "cancelled"])
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data || []) as CustomerBookingRow[]).map((row) => ({
+    id: row.id,
+    bookingNumber: row.booking_number,
+    status: row.status,
+    bookingDate: row.booking_date,
+    bookingTime: row.booking_time,
+    stationName: row.stations?.name || "المحطة",
+    stationAddress: row.stations?.address || null,
+    stationLatitude:
+      row.stations?.latitude === null || row.stations?.latitude === undefined ? null : Number(row.stations.latitude),
+    stationLongitude:
+      row.stations?.longitude === null || row.stations?.longitude === undefined ? null : Number(row.stations.longitude),
+    serviceName: row.services?.name || null,
+  }));
 }
 
 export async function cancelAllMapBookings(customerPhone: string): Promise<{ success: true; cancelledCount: number; alreadyEmpty?: boolean }> {

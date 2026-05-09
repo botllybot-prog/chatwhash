@@ -419,7 +419,7 @@ Deno.serve(async (req) => {
       requestRow = requestInsert.data || null;
     }
 
-    const bookingRows: { station_id: string; booking_id: string; station_name: string }[] = [];
+    const bookingRows: { station_id: string; booking_id: string; station_name: string; distance_km: number }[] = [];
 
     for (const item of matched) {
       if (bookingRows.length >= 3) break;
@@ -475,6 +475,7 @@ Deno.serve(async (req) => {
         station_id: item.station.id,
         booking_id: booking.id,
         station_name: item.station.name,
+        distance_km: Number(item.distance.toFixed(2)),
       });
 
       await supabase.from("quick_booking_targets").insert({

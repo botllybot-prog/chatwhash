@@ -105,7 +105,13 @@ export default function App() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={palette.sand} />
       <View style={styles.header}>
-        <Text style={styles.brand}>Washlly Mobile</Text>
+        <View style={styles.brandMark}>
+          <Text style={styles.brandMarkText}>W</Text>
+        </View>
+        <View>
+          <Text style={styles.brand}>Washlly</Text>
+          <Text style={styles.brandSub}>Mobile car wash booking</Text>
+        </View>
       </View>
       <View style={styles.body}>
         {restoringSession ? <ActivityIndicator color={palette.deepBlue} style={styles.loader} /> : renderScreen()}
@@ -118,6 +124,9 @@ export default function App() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.sand },
   header: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 10,
     paddingHorizontal: 18,
     paddingTop: 16,
     paddingBottom: 12,
@@ -125,7 +134,17 @@ const styles = StyleSheet.create({
     borderColor: palette.line,
     backgroundColor: "#f8fbfe",
   },
+  brandMark: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: palette.deepBlue,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  brandMarkText: { color: palette.white, fontSize: 22, fontWeight: "900" },
   brand: { textAlign: "right", fontSize: 24, color: palette.deepBlue, fontWeight: "900" },
+  brandSub: { textAlign: "right", color: palette.muted, fontSize: 11, marginTop: -2 },
   body: { flex: 1 },
   loader: { marginTop: 40 },
 });
