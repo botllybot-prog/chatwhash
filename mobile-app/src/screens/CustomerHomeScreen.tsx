@@ -107,6 +107,7 @@ export function CustomerHomeScreen({
   const [quickTargets, setQuickTargets] = useState<Array<{ name: string; distance?: number | null }>>([]);
   const [customerBookings, setCustomerBookings] = useState<CustomerBookingStatus[]>([]);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [showCompactMap, setShowCompactMap] = useState(mode === "map");
   const spinAnim = useRef(new Animated.Value(0)).current;
 
   const rankedStations = useMemo(
@@ -686,12 +687,21 @@ export function CustomerHomeScreen({
 
       <View style={styles.mapTail}>
         <Text style={styles.mapTailTitle}>الخريطة</Text>
-        <Text style={styles.mapTailText}>الخريطة اختيارية فقط إذا أردت مشاهدة موقعك والمحطات على الخريطة.</Text>
-        {mode === "map" ? (
+        <Text style={styles.mapTailText}>الخريطة اختيارية ومصغرة للموقع فقط، بدون أزرار الحجز والتثبيت الموجودة في الويب.</Text>
+        <View style={styles.mapActions}>
+          <Pressable style={[styles.mapButton, showCompactMap && styles.mapButtonActive]} onPress={() => setShowCompactMap(true)}>
+            <Text style={[styles.mapButtonText, showCompactMap && styles.mapButtonTextActive]}>إظهار الخريطة</Text>
+          </Pressable>
+          <Pressable style={[styles.mapButton, !showCompactMap && styles.mapButtonActive]} onPress={() => setShowCompactMap(false)}>
+            <Text style={[styles.mapButtonText, !showCompactMap && styles.mapButtonTextActive]}>إخفاء الخريطة</Text>
+          </Pressable>
+        </View>
+        {showCompactMap ? (
           <View style={styles.webMapWrap}>
             <WebView
-              source={{ uri: "https://www.washlly.com/map" }}
+              source={{ uri: "https://www.washlly.com/mobile-map" }}
               style={styles.webMap}
+              geolocationEnabled
               startInLoadingState
               renderLoading={() => (
                 <View style={styles.webMapLoading}>
@@ -701,11 +711,7 @@ export function CustomerHomeScreen({
               )}
             />
           </View>
-        ) : (
-          <Pressable style={styles.mapButton} onPress={onOpenMap}>
-            <Text style={styles.mapButtonText}>عرض الخريطة</Text>
-          </Pressable>
-        )}
+        ) : null}
       </View>
 
       <Pressable style={styles.ownerLink} onPress={onOpenOwner}>
@@ -1047,10 +1053,21 @@ const styles = StyleSheet.create({
   },
   mapTailTitle: { textAlign: "right", color: palette.deepBlue, fontWeight: "900", fontSize: 18 },
   mapTailText: { textAlign: "right", color: palette.muted, marginTop: 5, lineHeight: 20 },
-  mapButton: { backgroundColor: palette.white, borderRadius: 14, paddingVertical: 12, alignItems: "center", marginTop: 10 },
+  mapActions: { flexDirection: "row-reverse", gap: 8, marginTop: 10 },
+  mapButton: {
+    flex: 1,
+    backgroundColor: palette.white,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#cfe4f4",
+  },
+  mapButtonActive: { backgroundColor: palette.deepBlue, borderColor: palette.deepBlue },
   mapButtonText: { color: palette.deepBlue, fontWeight: "900" },
+  mapButtonTextActive: { color: palette.white },
   webMapWrap: {
-    height: 520,
+    height: 260,
     borderRadius: 18,
     overflow: "hidden",
     borderColor: palette.line,

@@ -13,6 +13,7 @@ import StationsList from "./pages/StationsList";
 import Conversations from "./pages/Conversations";
 import StationPortal from "./pages/StationPortal";
 import StationsMap from "./pages/StationsMap";
+import MobileAppMap from "./pages/MobileAppMap";
 import Login from "./pages/Login";
 import OwnerAccess from "./pages/OwnerAccess";
 import NotFound from "./pages/NotFound";
@@ -70,7 +71,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <LanguageSwitcher />
+          {window.location.pathname !== "/mobile-map" ? <LanguageSwitcher /> : null}
           <Routes>
             {/* Public pages with mobile bottom nav */}
             <Route element={<MobileLayout />}>
@@ -78,6 +79,7 @@ const App = () => (
               <Route path="/stations-list" element={<StationsList />} />
               <Route path="/map" element={<StationsMap />} />
             </Route>
+            <Route path="/mobile-map" element={<MobileAppMap />} />
             <Route path="/login" element={<Login />} />
             <Route path="/owner" element={<OwnerAccess />} />
             <Route path="/app/*" element={<ProtectedRoutes />} />

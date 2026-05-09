@@ -12,6 +12,7 @@ import {
   Vibration,
   View,
 } from "react-native";
+import * as Notifications from "expo-notifications";
 import { SectionTitle } from "../components/SectionTitle";
 import { palette } from "../theme";
 import type { OwnerContext, PaymentRow, SubscriptionSummary } from "../types";
@@ -183,6 +184,14 @@ export function OwnerPortalScreen({ ownerUserId, onLogout }: { ownerUserId: stri
       const newPending = pendingIds.filter((id) => !knownPendingBookingIds.current.has(id));
       if (!firstBookingPoll.current && newPending.length > 0) {
         Vibration.vibrate([0, 450, 150, 450]);
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: "حجز جديد",
+            body: "وصل حجز جديد للمحطة داخل التطبيق. افتح الحجوزات للقبول أو الرفض.",
+            sound: "default",
+          },
+          trigger: { channelId: "owner-bookings", seconds: 1 },
+        }).catch(() => undefined);
         Alert.alert("حجز جديد", "وصل حجز جديد للمحطة داخل التطبيق. افتح الحجوزات للقبول أو الرفض.");
       }
       firstBookingPoll.current = false;
@@ -203,6 +212,13 @@ export function OwnerPortalScreen({ ownerUserId, onLogout }: { ownerUserId: stri
   useEffect(() => {
     firstBookingPoll.current = true;
     knownPendingBookingIds.current = new Set();
+    Notifications.requestPermissionsAsync().catch(() => undefined);
+    Notifications.setNotificationChannelAsync("owner-bookings", {
+      name: "Owner booking alerts",
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: "default",
+      vibrationPattern: [0, 450, 150, 450],
+    }).catch(() => undefined);
     refresh();
     const pollId = setInterval(() => refresh(true), 15000);
     return () => clearInterval(pollId);
