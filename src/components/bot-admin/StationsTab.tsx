@@ -12,11 +12,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Upload, MapPin, LocateFixed } from "lucide-react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { DEFAULT_STATION_CATEGORY, STATION_CATEGORY_OPTIONS, getStationCategoryLabel, sanitizeStationCategory, type StationCategory } from "@/lib/stationCategories";
 
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 
 interface StationForm {
   name: string;
+  category: StationCategory;
   address: string;
   detailed_address: string;
   working_hours_start: string;
@@ -31,6 +33,7 @@ interface StationForm {
 
 const defaultForm: StationForm = {
   name: "",
+  category: DEFAULT_STATION_CATEGORY,
   address: "",
   detailed_address: "",
   working_hours_start: "08:00",
@@ -106,6 +109,7 @@ const StationsTab = () => {
     if (!form.name.trim()) { toast({ title: "الاسم مطلوب", variant: "destructive" }); return; }
     const payload = {
       name: form.name,
+      category: sanitizeStationCategory(form.category),
       address: form.address,
       detailed_address: form.detailed_address,
       working_hours_start: form.working_hours_start,
@@ -142,6 +146,7 @@ const StationsTab = () => {
     setEditing(s);
     setForm({
       name: s.name,
+      category: sanitizeStationCategory(s.category),
       address: s.address || "",
       detailed_address: s.detailed_address || "",
       working_hours_start: s.working_hours_start,
@@ -178,6 +183,16 @@ const StationsTab = () => {
             <ScrollArea className="max-h-[75vh] pr-4">
               <div className="space-y-4 pb-2">
                 <div><Label>اسم المحطة</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="محطة أربيل - عينكاوا" /></div>
+                <div><Label>تصنيف النشاط</Label>
+                  <Select value={form.category} onValueChange={(v: StationCategory) => setForm({ ...form, category: v })}>
+                    <SelectTrigger><SelectValue placeholder="اختر التصنيف" /></SelectTrigger>
+                    <SelectContent>
+                      {STATION_CATEGORY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div><Label>العنوان المختصر</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="عينكاوا، أربيل" /></div>
                 <div>
                   <Label>العنوان المفصّل</Label>
@@ -290,6 +305,7 @@ const StationsTab = () => {
           <TableRow>
             <TableHead>الصورة</TableHead>
             <TableHead>المحطة</TableHead>
+            <TableHead>التصنيف</TableHead>
             <TableHead>العنوان</TableHead>
             <TableHead>ساعات العمل</TableHead>
             <TableHead>نوع المواعيد</TableHead>
@@ -310,6 +326,7 @@ const StationsTab = () => {
                 )}
               </TableCell>
               <TableCell className="font-medium">{s.name}</TableCell>
+              <TableCell><Badge variant="outline">{getStationCategoryLabel(s.category)}</Badge></TableCell>
               <TableCell>
                 <div className="max-w-48">
                   <span>{s.address || "-"}</span>
@@ -327,7 +344,7 @@ const StationsTab = () => {
               </TableCell>
             </TableRow>
           ))}
-          {stations.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">لا توجد محطات بعد</TableCell></TableRow>}
+          {stations.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">لا توجد محطات بعد</TableCell></TableRow>}
         </TableBody>
       </Table>
     </div>

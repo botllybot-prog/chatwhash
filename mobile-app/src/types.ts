@@ -39,6 +39,7 @@ export type OwnerSignupPayload = {
   email?: string;
   password: string;
   stationName: string;
+  stationCategory?: string;
   shortAddress: string;
   detailedAddress: string;
   openTime: string;

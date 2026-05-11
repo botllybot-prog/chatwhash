@@ -57,6 +57,7 @@ export async function signUpOwner(payload: OwnerSignupPayload): Promise<OwnerLog
       password: payload.password,
       station: {
         name: payload.stationName,
+        category: payload.stationCategory || 'car_wash',
         address: payload.shortAddress,
         detailed_address: payload.detailedAddress,
         working_hours_start: payload.openTime || '08:00',

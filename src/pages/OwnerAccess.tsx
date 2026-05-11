@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { normalizeOwnerPhone } from "@/lib/ownerAuth";
 import { useAppLanguage } from "@/lib/language";
+import { DEFAULT_STATION_CATEGORY, getVisibleStationCategories, sanitizeStationCategory, type StationCategory } from "@/lib/stationCategories";
 import InstallAppButton from "@/components/InstallAppButton";
 import {
   ArrowRight,
@@ -443,6 +444,7 @@ const OwnerAccess = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [stationName, setStationName] = useState("");
+  const [stationCategory, setStationCategory] = useState<StationCategory>(DEFAULT_STATION_CATEGORY);
   const [stationAddress, setStationAddress] = useState("");
   const [detailedAddress, setDetailedAddress] = useState("");
   const [workingHoursStart, setWorkingHoursStart] = useState("08:00");
@@ -451,6 +453,21 @@ const OwnerAccess = () => {
   const [slotDuration, setSlotDuration] = useState("30");
   const [location, setLocation] = useState(DEFAULT_CENTER);
   const [services, setServices] = useState<ServiceDraft[]>([emptyService()]);
+  const [categorySettings, setCategorySettings] = useState<Record<string, string>>({});
+  const visibleStationCategories = getVisibleStationCategories(categorySettings);
+
+  useEffect(() => {
+    const loadCategorySettings = async () => {
+      const { data } = await (supabase as any)
+        .from("app_settings")
+        .select("key, value")
+        .like("key", "STATION_CATEGORY_%");
+      const map: Record<string, string> = {};
+      for (const row of data || []) map[row.key] = row.value;
+      setCategorySettings(map);
+    };
+    loadCategorySettings();
+  }, []);
 
   const getUserRole = async (userId: string) => {
     const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).limit(1).maybeSingle();
@@ -591,6 +608,7 @@ const OwnerAccess = () => {
       password,
       station: {
         name: stationName.trim(),
+        category: sanitizeStationCategory(stationCategory),
         address: stationAddress.trim(),
         detailed_address: detailedAddress.trim(),
         working_hours_start: workingHoursStart,
@@ -800,6 +818,19 @@ const OwnerAccess = () => {
                     <div className="space-y-2">
                       <Label>{t.stationName}</Label>
                       <Input value={stationName} onChange={(e) => setStationName(e.target.value)} placeholder={t.placeholders.stationName} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>تصنيف النشاط</Label>
+                      <Select value={stationCategory} onValueChange={(value: StationCategory) => setStationCategory(value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="اختر التصنيف" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {visibleStationCategories.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label>{t.shortAddress}</Label>

@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 type SchedulingType = "slots" | "instant" | "daily";
+type StationCategory = "car_wash" | "delivery_wash" | "car_care_center" | "maintenance_center";
 
 type RegisterPayload = {
   owner_name?: string;
@@ -15,6 +16,7 @@ type RegisterPayload = {
   free_requests_quota?: number;
   station?: {
     name?: string;
+    category?: StationCategory;
     address?: string;
     detailed_address?: string;
     working_hours_start?: string;
@@ -167,6 +169,7 @@ Deno.serve(async (req) => {
 
     const stationPayload = {
       name: stationName,
+      category: payload.station?.category || "car_wash",
       address: payload.station?.address?.trim() || null,
       detailed_address: payload.station?.detailed_address?.trim() || null,
       working_hours_start: payload.station?.working_hours_start || "08:00",

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { Bot, Bell, MessageSquare, Link2, Eye, EyeOff, Save, ShieldCheck, Wallet } from "lucide-react";
+import { STATION_CATEGORY_OPTIONS, STATION_CATEGORY_SETTING_KEYS } from "@/lib/stationCategories";
 
 const ALL_KEYS = [
   "BOT_ENABLED",
@@ -36,6 +37,7 @@ const ALL_KEYS = [
   "PAYMENT_CARD_URL",
   "PUBLIC_CONTACT_WHATSAPP",
   "PUBLIC_CONTACT_EMAIL",
+  ...STATION_CATEGORY_SETTING_KEYS,
 ];
 
 const DEFAULTS: Record<string, string> = {
@@ -57,6 +59,9 @@ const DEFAULTS: Record<string, string> = {
   PUBLIC_CONTACT_WHATSAPP: "+9647736939153",
   PUBLIC_CONTACT_EMAIL: "info@washlly.com",
   PAYMENT_CARD_URL: "",
+  STATION_CATEGORY_DELIVERY_WASH_ENABLED: "false",
+  STATION_CATEGORY_CAR_CARE_ENABLED: "false",
+  STATION_CATEGORY_MAINTENANCE_ENABLED: "false",
 };
 
 const t = {
@@ -162,6 +167,30 @@ const AdminSettings = () => {
   return (
     <div className="max-w-3xl space-y-6">
       <h2 className="text-xl font-bold text-foreground">{t.pageTitle}</h2>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>تصنيفات تسجيل المحطات</CardTitle>
+          <CardDescription>
+            غسل سيارات هو التصنيف الافتراضي ويظهر دائماً. باقي التصنيفات تظهر أو تختفي في صفحة تسجيل صاحب الخدمة حسب تفعيلك هنا.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {STATION_CATEGORY_OPTIONS.map((option) => (
+            <div key={option.value} className="flex items-center justify-between rounded-lg border border-border p-3">
+              <div className="text-right">
+                <Label>{option.label}</Label>
+                {option.alwaysVisible ? <p className="text-xs text-muted-foreground">افتراضي وظاهر دائماً</p> : null}
+              </div>
+              <Switch
+                checked={option.alwaysVisible || values[option.settingKey || ""] === "true"}
+                disabled={option.alwaysVisible}
+                onCheckedChange={() => option.settingKey && toggle(option.settingKey)}
+              />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -24,6 +24,7 @@ export function OwnerAuthScreen({
     password: '',
     confirmPassword: '',
     stationName: '',
+    stationCategory: 'car_wash',
     shortAddress: '',
     detailedAddress: '',
     openTime: '08:00',
@@ -107,6 +108,20 @@ export function OwnerAuthScreen({
           <SectionTitle title="بيانات المحطة" subtitle="أدخل الاسم، المنطقة، وساعات العمل حتى تكون المحطة جاهزة للظهور." />
           <View style={styles.card}>
             <Field label="اسم المحطة" value={signup.stationName} onChangeText={(value) => setSignup((prev) => ({ ...prev, stationName: value }))} placeholder="Washlly Express" />
+            <Text style={styles.label}>تصنيف النشاط</Text>
+            <View style={styles.categoryRow}>
+              {[
+                { value: 'car_wash', label: 'غسل سيارات' },
+              ].map((option) => (
+                <Pressable
+                  key={option.value}
+                  style={[styles.categoryChip, signup.stationCategory === option.value && styles.categoryChipActive]}
+                  onPress={() => setSignup((prev) => ({ ...prev, stationCategory: option.value }))}
+                >
+                  <Text style={[styles.categoryText, signup.stationCategory === option.value && styles.categoryTextActive]}>{option.label}</Text>
+                </Pressable>
+              ))}
+            </View>
             <Field label="العنوان المختصر" value={signup.shortAddress} onChangeText={(value) => setSignup((prev) => ({ ...prev, shortAddress: value }))} placeholder="المنصور - شارع الأميرات" />
             <Field label="العنوان التفصيلي" value={signup.detailedAddress} onChangeText={(value) => setSignup((prev) => ({ ...prev, detailedAddress: value }))} placeholder="أقرب معلم، نقطة الوصول، تفاصيل إضافية" multiline />
             <View style={styles.rowFields}>
@@ -174,6 +189,18 @@ const styles = StyleSheet.create({
   label: { textAlign: 'right', color: palette.text, fontWeight: '700', fontSize: 14 },
   input: { backgroundColor: '#f8fbfe', borderWidth: 1, borderColor: palette.line, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 14, color: palette.text },
   textArea: { minHeight: 96, textAlignVertical: 'top' },
+  categoryRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  categoryChip: {
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 999,
+    backgroundColor: '#f8fbfe',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  categoryChipActive: { backgroundColor: palette.deepBlue, borderColor: palette.deepBlue },
+  categoryText: { color: palette.text, fontWeight: '800' },
+  categoryTextActive: { color: palette.white },
   rowFields: { flexDirection: 'row-reverse', gap: 10 },
   rowField: { flex: 1 },
   primaryAction: { backgroundColor: palette.deepBlue, borderRadius: 18, paddingVertical: 16, alignItems: 'center' },
