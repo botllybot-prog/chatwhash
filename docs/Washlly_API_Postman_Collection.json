@@ -1,0 +1,250 @@
+{
+  "info": {
+    "_postman_id": "f1f76df9-4c6f-4b5e-9af5-d3fd8de8d889",
+    "name": "Washlly Website + Mobile API",
+    "description": "Postman collection for Washlly Supabase Edge Functions and key REST endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "supabaseUrl", "value": "https://yhklvtzonvgzkodysawu.supabase.co" },
+    { "key": "functionsBase", "value": "{{supabaseUrl}}/functions/v1" },
+    { "key": "restBase", "value": "{{supabaseUrl}}/rest/v1" },
+    { "key": "anonKey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inloa2x2dHpvbnZnemtvZHlzYXd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0OTgyMzYsImV4cCI6MjA5MTA3NDIzNn0.K0sxdzG1C1ytFU7Zb-ZCY2tCyEG2ryVUE-7SNdmo7xc" },
+    { "key": "authToken", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inloa2x2dHpvbnZnemtvZHlzYXd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0OTgyMzYsImV4cCI6MjA5MTA3NDIzNn0.K0sxdzG1C1ytFU7Zb-ZCY2tCyEG2ryVUE-7SNdmo7xc" },
+    { "key": "stationId", "value": "PASTE_STATION_UUID" },
+    { "key": "serviceId", "value": "PASTE_SERVICE_UUID" },
+    { "key": "bookingId", "value": "PASTE_BOOKING_UUID" },
+    { "key": "customerPhone", "value": "07736635435" },
+    { "key": "customerName", "value": "Mustafa" },
+    { "key": "customerLat", "value": "36.1911" },
+    { "key": "customerLng", "value": "44.0092" }
+  ],
+  "item": [
+    {
+      "name": "Edge Functions - Owner/Auth",
+      "item": [
+        {
+          "name": "owner-self-register",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"owner_name\": \"Mustafa\",\n  \"owner_phone\": \"{{customerPhone}}\",\n  \"email\": \"optional@example.com\",\n  \"password\": \"123456\",\n  \"free_requests_quota\": 20,\n  \"station\": {\n    \"name\": \"Washlly\",\n    \"address\": \"Erbil\",\n    \"detailed_address\": \"Near main street\",\n    \"working_hours_start\": \"08:00\",\n    \"working_hours_end\": \"22:00\",\n    \"scheduling_type\": \"slots\",\n    \"slot_duration_minutes\": 30,\n    \"latitude\": 36.1911,\n    \"longitude\": 44.0092,\n    \"image_url\": null\n  },\n  \"services\": [\n    {\n      \"name\": \"غسل عام\",\n      \"price\": 8000,\n      \"duration_minutes\": 30,\n      \"customer_discount\": null,\n      \"sort_order\": 0\n    }\n  ]\n}"
+            },
+            "url": "{{functionsBase}}/owner-self-register"
+          }
+        },
+        {
+          "name": "owner-login-lookup",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"identifier\": \"{{customerPhone}}\"\n}" },
+            "url": "{{functionsBase}}/owner-login-lookup"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Edge Functions - Booking",
+      "item": [
+        {
+          "name": "spin-booking-discount",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"station_id\": \"{{stationId}}\",\n  \"service_id\": \"{{serviceId}}\",\n  \"booking_date\": \"2026-05-12\",\n  \"booking_time\": \"18:30\",\n  \"customer_phone\": \"{{customerPhone}}\"\n}"
+            },
+            "url": "{{functionsBase}}/spin-booking-discount"
+          }
+        },
+        {
+          "name": "create-map-booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"station_id\": \"{{stationId}}\",\n  \"service_id\": \"{{serviceId}}\",\n  \"customer_name\": \"{{customerName}}\",\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"booking_date\": \"2026-05-12\",\n  \"booking_time\": \"18:30\",\n  \"spin_discount_percent\": 10,\n  \"spin_token\": \"PASTE_SPIN_TOKEN\",\n  \"language\": \"ar\"\n}"
+            },
+            "url": "{{functionsBase}}/create-map-booking"
+          }
+        },
+        {
+          "name": "create-quick-booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"{{customerName}}\",\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"booking_date\": \"2026-05-12\",\n  \"booking_time\": \"18:30\",\n  \"service_kind\": \"quick\",\n  \"language\": \"ar\",\n  \"customer_lat\": {{customerLat}},\n  \"customer_lng\": {{customerLng}},\n  \"exclude_station_ids\": []\n}"
+            },
+            "url": "{{functionsBase}}/create-quick-booking"
+          }
+        },
+        {
+          "name": "cancel-map-booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"booking_id\": \"{{bookingId}}\",\n  \"customer_phone\": \"{{customerPhone}}\"\n}"
+            },
+            "url": "{{functionsBase}}/cancel-map-booking"
+          }
+        },
+        {
+          "name": "cancel-all-map-bookings",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"language\": \"ar\"\n}"
+            },
+            "url": "{{functionsBase}}/cancel-all-map-bookings"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Edge Functions - Messaging/Scheduled",
+      "item": [
+        {
+          "name": "whatsapp-send",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9647736635435\",\n  \"message\": \"Hello\",\n  \"conversation_id\": \"optional-uuid\"\n}"
+            },
+            "url": "{{functionsBase}}/whatsapp-send"
+          }
+        },
+        {
+          "name": "booking-reminders (manual trigger)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{functionsBase}}/booking-reminders"
+          }
+        },
+        {
+          "name": "check-subscriptions (manual trigger)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{functionsBase}}/check-subscriptions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "REST - Public Data",
+      "item": [
+        {
+          "name": "stations (active)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{restBase}}/stations?is_active=eq.true&select=*"
+          }
+        },
+        {
+          "name": "services by station",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{restBase}}/services?station_id=eq.{{stationId}}&is_active=eq.true&select=*"
+          }
+        },
+        {
+          "name": "customer bookings",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": "{{restBase}}/bookings?customer_phone=eq.{{customerPhone}}&select=*,services(name,price),stations(name)&order=created_at.desc"
+          }
+        }
+      ]
+    },
+    {
+      "name": "REST - Booking Update",
+      "item": [
+        {
+          "name": "update booking status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{anonKey}}" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\"\n}"
+            },
+            "url": "{{restBase}}/bookings?id=eq.{{bookingId}}"
+          }
+        }
+      ]
+    }
+  ]
+}
