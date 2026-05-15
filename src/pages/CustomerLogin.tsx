@@ -24,12 +24,39 @@ const normalizeCode = (value: string) =>
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<"send" | "verify">("send");
+  const [step, setStep] = useState<"entry" | "send" | "verify">("entry");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
+
+  const startLogin = async () => {
+    if (!phone.trim()) {
+      toast({ title: "أدخل رقم الواتساب", variant: "destructive" });
+      return;
+    }
+    const normalized = normalizePhone(phone);
+    const { data, error } = await supabase.functions.invoke("customer-login-by-phone", {
+      body: { customer_phone: normalized },
+    });
+    if (error || (data as any)?.error) {
+      toast({ title: "تعذر تسجيل الدخول", description: (data as any)?.error || error?.message, variant: "destructive" });
+      return;
+    }
+    if ((data as any)?.success && !(data as any)?.requires_verification) {
+      setCustomerSession({
+        customerName: (data as any).customer_name,
+        customerPhone: (data as any).customer_phone,
+        sessionToken: (data as any).session_token,
+        expiresAt: (data as any).expires_at,
+      });
+      navigate("/map", { replace: true });
+      return;
+    }
+    setStep("send");
+    toast({ title: "أول تسجيل لهذا الرقم", description: "أدخل الاسم ثم نرسل رمز تحقق مرة واحدة." });
+  };
 
   const sendCode = async () => {
     if (!name.trim() || !phone.trim()) {
@@ -81,18 +108,22 @@ export default function CustomerLogin() {
           <CardTitle>دخول الزبون</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Input placeholder="الاسم" value={name} onChange={(e) => setName(e.target.value)} disabled={step === "verify"} />
+          {(step === "send" || step === "verify") && (
+            <Input placeholder="الاسم" value={name} onChange={(e) => setName(e.target.value)} disabled={step === "verify"} />
+          )}
           <Input placeholder="رقم الواتساب" value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" disabled={step === "verify"} />
           {step === "verify" && (
             <Input placeholder="رمز التحقق" value={code} onChange={(e) => setCode(e.target.value)} dir="ltr" />
           )}
-          {step === "send" ? (
+          {step === "entry" ? (
+            <Button className="w-full" onClick={startLogin}>دخول برقم الواتساب</Button>
+          ) : step === "send" ? (
             <Button className="w-full" onClick={sendCode} disabled={sending}>
               {sending ? "جاري الإرسال..." : "إرسال رمز التحقق"}
             </Button>
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" onClick={() => setStep("send")} disabled={verifying}>تغيير الرقم</Button>
+              <Button variant="outline" onClick={() => setStep("entry")} disabled={verifying}>تغيير الرقم</Button>
               <Button onClick={verifyCode} disabled={verifying}>{verifying ? "جاري التحقق..." : "تفعيل الدخول"}</Button>
             </div>
           )}
