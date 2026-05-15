@@ -16,9 +16,8 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import { useAppLanguage } from "@/lib/language";
 import InstallAppButton from "@/components/InstallAppButton";
-import { clearCustomerSession, getCustomerSession, setCustomerSession } from "@/lib/customerSession";
+import { clearCustomerSession, getCustomerSession } from "@/lib/customerSession";
 import {
-  Bell,
   CalendarCheck,
   CheckCircle2,
   Clock,
@@ -1504,9 +1503,7 @@ const StationsMap = () => {
   const [trackedPhone, setTrackedPhone] = useState("");
   const [customerBookings, setCustomerBookings] = useState<any[]>([]);
   const [customerInbox, setCustomerInbox] = useState<any[]>([]);
-  const [profileName, setProfileName] = useState("");
-  const [savingProfile, setSavingProfile] = useState(false);
-  const lastUnreadInboxCountRef = useRef(0);
+  const inboxCountRef = useRef(0);
   const { language, isRtl } = useAppLanguage();
 
   const t = translations[language];
@@ -1524,7 +1521,6 @@ const StationsMap = () => {
     if (session) {
       setQuickCustomerName(session.customerName || "");
       setQuickCustomerPhone(session.customerPhone || "");
-      setProfileName(session.customerName || "");
       setTrackedPhone(session.customerPhone || "");
     }
   }, []);
@@ -1570,81 +1566,6 @@ const StationsMap = () => {
       localStorage.setItem(TRACK_PHONE_KEY, trackedPhone);
     }
   }, [trackedPhone]);
-
-  const playBell = () => {
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      oscillator.type = "triangle";
-      oscillator.frequency.value = 740;
-      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.08, audioCtx.currentTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.28);
-      oscillator.connect(gain);
-      gain.connect(audioCtx.destination);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.28);
-    } catch {
-      // ignore audio errors
-    }
-  };
-
-  useEffect(() => {
-    const loadInbox = async () => {
-      const session = getCustomerSession();
-      if (!session) {
-        setCustomerInbox([]);
-        return;
-      }
-      const { data } = await supabase.functions.invoke("customer-get-inbox", {
-        body: {
-          customer_phone: session.customerPhone,
-          session_token: session.sessionToken,
-        },
-      });
-      const rows = Array.isArray((data as any)?.notifications) ? (data as any).notifications : [];
-      setCustomerInbox(rows);
-    };
-
-    void loadInbox();
-    const timer = window.setInterval(() => void loadInbox(), 12000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const unreadCount = customerInbox.filter((item) => item && item.is_read === false).length;
-    if (unreadCount > lastUnreadInboxCountRef.current) {
-      playBell();
-    }
-    lastUnreadInboxCountRef.current = unreadCount;
-  }, [customerInbox]);
-
-  const saveCustomerName = async () => {
-    const session = getCustomerSession();
-    if (!session || !profileName.trim()) return;
-    setSavingProfile(true);
-    const { data, error } = await supabase.functions.invoke("customer-update-profile", {
-      body: {
-        customer_name: profileName.trim(),
-        customer_phone: session.customerPhone,
-        session_token: session.sessionToken,
-      },
-    });
-    setSavingProfile(false);
-    if (error || (data as any)?.error) {
-      toast({ title: "???? ??? ?????", description: (data as any)?.error || error?.message, variant: "destructive" });
-      return;
-    }
-    setCustomerSession({
-      customerName: profileName.trim(),
-      customerPhone: session.customerPhone,
-      sessionToken: session.sessionToken,
-      expiresAt: session.expiresAt,
-    });
-    setQuickCustomerName(profileName.trim());
-    toast({ title: "?? ??? ?????" });
-  };
   const quickTimeOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
     const now = new Date();
@@ -1995,57 +1916,39 @@ const StationsMap = () => {
   }, [trackedBookings, trackedPhone, trackedStatuses]);
 
   return (
-    <div className="relative h-[100vh] w-full" dir={isRtl ? "rtl" : "ltr"}>
-      <div className="absolute left-4 right-4 top-4 z-[900] mx-auto max-w-xl">
-        <div className="mt-3 flex justify-end">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                clearCustomerSession();
-                window.location.href = "/customer-login";
-              }}
-            >
-              ???? ??????
-            </Button>
-            <InstallAppButton />
-            <Button
-              size="sm"
-              className="gap-2 bg-blue-600 text-white hover:bg-blue-700"
-              onClick={handleLocateMe}
-            >
-              <LocateFixed className="h-4 w-4" />
-              {t.myLocation}
-            </Button>
-            <Button
-              variant={showQuickBooking ? "default" : "outline"}
-              size="sm"
-              className="gap-2 shadow"
-              onClick={() => setShowQuickBooking((prev) => !prev)}
-            >
-              <CalendarCheck className="h-4 w-4" />
-              {q.cta}
-            </Button>
-          </div>
-        </div>
-
-        <Card className="mt-3 border-0 bg-background/95 shadow-xl backdrop-blur">
-          <CardContent className="space-y-3 p-3">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold">??? ??????</div>
-              <Button variant="outline" size="sm" onClick={() => {
-                clearCustomerSession();
-                window.location.href = "/customer-login";
-              }}>
-                ????? ????? (OTP)
-              </Button>
+    <div className="min-h-screen w-full bg-slate-50" dir={isRtl ? "rtl" : "ltr"}>
+      <div className="mx-auto w-full max-w-7xl space-y-4 p-4">
+        <Card className="border-blue-100 shadow-sm">
+          <CardContent className="space-y-4 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-foreground">????? ??????</h2>
+                <p className="text-sm text-muted-foreground">????? ?????? ?????? ?????? ?? ????? ?????.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <InstallAppButton />
+                <Button variant="outline" size="sm" onClick={() => { clearCustomerSession(); window.location.href = "/customer-login"; }}>
+                  ???? ??????
+                </Button>
+              </div>
             </div>
-            <Input value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="?????" />
-            <Input value={quickCustomerPhone} disabled dir="ltr" />
-            <div className="grid grid-cols-2 gap-2">
-              <Button size="sm" onClick={saveCustomerName} disabled={savingProfile}>{savingProfile ? "???? ?????..." : "??? ?????"}</Button>
-              <Button size="sm" variant="outline" onClick={handleCancelAllBookings} disabled={quickCancelSubmitting}>
+
+            <div className="grid gap-3 md:grid-cols-4">
+              <Input value={quickCustomerName} readOnly className="md:col-span-2" />
+              <Input value={quickCustomerPhone} readOnly dir="ltr" className="md:col-span-2" />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" className="gap-2 bg-blue-600 text-white hover:bg-blue-700" onClick={handleLocateMe}>
+                <LocateFixed className="h-4 w-4" />
+                {t.myLocation}
+              </Button>
+              <Button variant={showQuickBooking ? "default" : "outline"} size="sm" className="gap-2" onClick={() => setShowQuickBooking((prev) => !prev)}>
+                <CalendarCheck className="h-4 w-4" />
+                {q.cta}
+              </Button>
+              <Button variant="destructive" size="sm" className="gap-2" onClick={handleCancelAllBookings} disabled={quickCancelSubmitting}>
+                {quickCancelSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                 {quickCancelSubmitting ? q.cancelAllSubmitting : q.cancelAllCta}
               </Button>
             </div>
@@ -2053,12 +1956,12 @@ const StationsMap = () => {
         </Card>
 
         {showQuickBooking && (
-          <Card className="mt-3 border-0 bg-background/95 shadow-xl backdrop-blur">
-            <CardContent className="space-y-3 p-3">
+          <Card className="border-blue-100 shadow-sm">
+            <CardContent className="space-y-3 p-4">
               <div className="text-sm font-semibold">{q.cardTitle}</div>
               <div className="text-xs text-muted-foreground">{q.cardHint}</div>
-              <Input placeholder={q.customerName} value={quickCustomerName} disabled />
-              <Input placeholder={q.customerPhone} value={quickCustomerPhone} disabled />
+              <Input placeholder={q.customerName} value={quickCustomerName} readOnly />
+              <Input placeholder={q.customerPhone} value={quickCustomerPhone} readOnly />
               <div className="grid grid-cols-2 gap-2">
                 <Input type="date" value={quickDate} onChange={(event) => setQuickDate(event.target.value)} />
                 <Select value={quickTime} onValueChange={setQuickTime}>
@@ -2067,83 +1970,70 @@ const StationsMap = () => {
                   </SelectTrigger>
                   <SelectContent side="top" align="start" avoidCollisions className="z-[2600] max-h-72">
                     {quickTimeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <Button className="w-full" disabled={quickSubmitting} onClick={handleQuickBooking}>
-                {quickSubmitting ? q.submitting : q.submit}
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowQuickBooking(false)}
-              >
-                ????
-              </Button>
+              <Button className="w-full" disabled={quickSubmitting} onClick={handleQuickBooking}>{quickSubmitting ? q.submitting : q.submit}</Button>
             </CardContent>
           </Card>
         )}
-        {customerBookings.length > 0 && (
-          <Card className="mt-3 border-0 bg-background/95 shadow-xl backdrop-blur">
-            <CardContent className="space-y-2 p-3">
-              <div className="flex items-center gap-2 text-sm font-semibold"><Bell className="h-4 w-4" /> ????? ?????? ?????????</div>
-              {customerInbox.slice(0, 5).map((item) => (
-                <div key={item.id} className={`rounded-xl border p-2 text-xs ${item.is_read ? "" : "border-primary bg-primary/5"}`}>
-                  <div className="font-semibold">{item.title}</div>
-                  <div className="text-muted-foreground">{item.body}</div>
-                </div>
-              ))}
-              {customerBookings.slice(0, 6).map((b) => (
-                <div key={b.id} className="rounded-xl border p-2 text-xs">
-                  <div className="font-semibold">#{b.booking_number} - {(b as any).stations?.name || "????"}</div>
-                  <div className="text-muted-foreground">{(b as any).services?.name || "-"} | {b.booking_date} {String(b.booking_time || "").slice(0, 5)}</div>
-                  <div className="mt-1">??????: {b.status}</div>
-                  {(b.status === "pending" || b.status === "pending_owner_approval" || b.status === "pending_customer_approval" || b.status === "confirmed") && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Button size="sm" variant="destructive" onClick={() => handleCustomerBookingAction(b.id, "cancel")}>?????</Button>
-                      <Button size="sm" variant="outline" onClick={() => handleCustomerBookingAction(b.id, "postpone", b.booking_date, String(b.booking_time || "08:00").slice(0, 5))}>?????</Button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-      </div>
 
-      {isLoaded ? (
-        <GoogleMap
-          onLoad={(instance) => setMap(instance)}
-          mapContainerStyle={{ width: "100%", height: "100%" }}
-          center={userLocation || DEFAULT_CENTER}
-          zoom={userLocation ? 12 : 7}
-          options={{
-            fullscreenControl: false,
-            mapTypeControl: false,
-            streetViewControl: false,
-          }}
-        >
-          {userLocation && <Marker position={userLocation} />}
-          {filteredStations.map((station) => (
-            <Marker
-              key={station.id}
-              position={{ lat: station.latitude!, lng: station.longitude! }}
-              onClick={() => handleMarkerClick(station)}
-            />
-          ))}
-        </GoogleMap>
-      ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            {t.loadingMap}
-          </div>
-        </div>
-      )}
+        <Card className="border-blue-100 shadow-sm">
+          <CardContent className="space-y-2 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold"><Bell className="h-4 w-4" /> ????? ??????</div>
+            {customerInbox.slice(0, 6).map((item) => (
+              <div key={item.id} className={`rounded-xl border p-2 text-xs ${item.is_read ? "bg-white" : "border-primary bg-primary/5"}`}>
+                <div className="font-semibold">{item.title}</div>
+                <div className="text-muted-foreground">{item.body}</div>
+              </div>
+            ))}
+            {customerBookings.slice(0, 8).map((b) => (
+              <div key={b.id} className="rounded-xl border bg-white p-2 text-xs">
+                <div className="font-semibold">#{b.booking_number} - {(b as any).stations?.name || "????"}</div>
+                <div className="text-muted-foreground">{(b as any).services?.name || "-"} | {b.booking_date} {String(b.booking_time || "").slice(0, 5)}</div>
+                <div className="mt-1">??????: {b.status}</div>
+                {(b.status === "pending" || b.status === "pending_owner_approval" || b.status === "pending_customer_approval" || b.status === "confirmed") && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button size="sm" variant="destructive" onClick={() => handleCustomerBookingAction(b.id, "cancel")}>?????</Button>
+                    <Button size="sm" variant="outline" onClick={() => handleCustomerBookingAction(b.id, "postpone", b.booking_date, String(b.booking_time || "08:00").slice(0, 5))}>?????</Button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {customerBookings.length === 0 && customerInbox.length === 0 && <p className="text-xs text-muted-foreground">?? ???? ??????? ?? ?????? ?????.</p>}
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden border-blue-100 shadow-sm">
+          <CardContent className="p-0">
+            <div className="h-[65vh] min-h-[420px] w-full">
+              {isLoaded ? (
+                <GoogleMap
+                  onLoad={(instance) => setMap(instance)}
+                  mapContainerStyle={{ width: "100%", height: "100%" }}
+                  center={userLocation || DEFAULT_CENTER}
+                  zoom={userLocation ? 12 : 7}
+                  options={{ fullscreenControl: false, mapTypeControl: false, streetViewControl: false }}
+                >
+                  {userLocation && <Marker position={userLocation} />}
+                  {filteredStations.map((station) => (
+                    <Marker key={station.id} position={{ lat: station.latitude!, lng: station.longitude! }} onClick={() => handleMarkerClick(station)} />
+                  ))}
+                </GoogleMap>
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t.loadingMap}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {selectedStation && (
         <StationCard
@@ -2165,5 +2055,7 @@ const StationsMap = () => {
 };
 
 export default StationsMap;
+
+
 
 
