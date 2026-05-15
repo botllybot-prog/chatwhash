@@ -587,9 +587,7 @@ const StatsDashboard = ({ stationId, t, locale, isRtl }: { stationId: string; t:
 
 const StationInfoTab = ({ stationId, t }: { stationId: string; t: PortalTexts }) => {
   const [station, setStation] = useState<any>(null);
-  const [editField, setEditField] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("stations").select("*").eq("id", stationId).single();
@@ -598,89 +596,288 @@ const StationInfoTab = ({ stationId, t }: { stationId: string; t: PortalTexts })
 
   useEffect(() => { load(); }, [load]);
 
-  const fieldLabels: Record<string, string> = {
-    name: t.stationName,
-    address: t.address,
-    detailed_address: t.detailedAddress,
-    working_hours_start: t.workStart,
-    working_hours_end: t.workEnd,
-    scheduling_type: t.schedulingType,
-    image_url: t.stationImage,
-  };
-
-  const requestEdit = async () => {
-    if (!editField || !editValue.trim()) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from("edit_requests").insert({ station_id: stationId, requested_by: user.id, field_name: editField, old_value: station?.[editField] || "", new_value: editValue });
-    toast({ title: t.editRequestSent, description: t.editRequestReview });
-    setDialogOpen(false);
-    setEditField(null);
-    setEditValue("");
-  };
-
-  const openEditDialog = (field: string) => {
-    setEditField(field);
-    setEditValue(station?.[field] || "");
-    setDialogOpen(true);
-  };
-
   if (!station) return <p className="text-muted-foreground">{t.loading}</p>;
 
-  const schedulingLabels: Record<string, string> = { slots: t.slots, instant: t.instant, daily: t.daily };
-  const fields = [
-    { key: "name", value: station.name, icon: <Store className="h-4 w-4" /> },
-    { key: "address", value: station.address || "-", icon: <MapPin className="h-4 w-4" /> },
-    { key: "detailed_address", value: station.detailed_address || "-", icon: <MapPin className="h-4 w-4" /> },
-    { key: "working_hours_start", value: station.working_hours_start?.substring(0, 5), icon: <Clock className="h-4 w-4" /> },
-    { key: "working_hours_end", value: station.working_hours_end?.substring(0, 5), icon: <Clock className="h-4 w-4" /> },
-    { key: "scheduling_type", value: schedulingLabels[station.scheduling_type] || station.scheduling_type, icon: <CalendarCheck className="h-4 w-4" /> },
-    { key: "image_url", value: station.image_url ? t.imageExists : t.imageMissing, icon: <Image className="h-4 w-4" /> },
-  ];
+  const updateStation = async () => {
+    setSaving(true);
+    const payload = {
+      name: station.name || "",
+      address: station.address || "",
+      detailed_address: station.detailed_address || "",
+      working_hours_start: (station.working_hours_start || "08:00").slice(0, 5),
+      working_hours_end: (station.working_hours_end || "22:00").slice(0, 5),
+      scheduling_type: station.scheduling_type || "slots",
+      image_url: station.image_url || null,
+    };
+    const { error } = await supabase.from("stations").update(payload as any).eq("id", stationId);
+    setSaving(false);
+    if (error) {
+      toast({ title: "تعذر حفظ بيانات المحطة", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "تم حفظ بيانات المحطة" });
+    await load();
+  };
 
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-foreground">{t.stationInfo}</h3>
-      {station.image_url && <div className="w-full max-w-md rounded-lg overflow-hidden border border-border"><img src={station.image_url} alt={station.name} className="w-full h-48 object-cover" /></div>}
       <Card>
-        <CardContent className="pt-6 space-y-3">
-          {fields.map((f) => <div key={f.key} className="flex items-center justify-between py-2 border-b border-border last:border-0"><div className="flex items-center gap-2">{f.icon}<span className="text-muted-foreground text-sm">{fieldLabels[f.key]}</span></div><div className="flex items-center gap-2"><span className="font-medium text-foreground">{f.value}</span><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(f.key)}><Pencil className="h-3 w-3" /></Button></div></div>)}
+        <CardContent className="pt-6 space-y-4">
+          {station.image_url && <div className="w-full max-w-md rounded-lg overflow-hidden border border-border"><img src={station.image_url} alt={station.name} className="w-full h-48 object-cover" /></div>}
+          <div>
+            <Label>{t.stationName}</Label>
+            <Input value={station.name || ""} onChange={(e) => setStation((prev: any) => ({ ...prev, name: e.target.value }))} />
+          </div>
+          <div>
+            <Label>{t.address}</Label>
+            <Input value={station.address || ""} onChange={(e) => setStation((prev: any) => ({ ...prev, address: e.target.value }))} />
+          </div>
+          <div>
+            <Label>{t.detailedAddress}</Label>
+            <Input value={station.detailed_address || ""} onChange={(e) => setStation((prev: any) => ({ ...prev, detailed_address: e.target.value }))} />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label>{t.workStart}</Label>
+              <Input type="time" value={(station.working_hours_start || "08:00").slice(0, 5)} onChange={(e) => setStation((prev: any) => ({ ...prev, working_hours_start: e.target.value }))} />
+            </div>
+            <div>
+              <Label>{t.workEnd}</Label>
+              <Input type="time" value={(station.working_hours_end || "22:00").slice(0, 5)} onChange={(e) => setStation((prev: any) => ({ ...prev, working_hours_end: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <Label>{t.schedulingType}</Label>
+            <Select value={station.scheduling_type || "slots"} onValueChange={(value) => setStation((prev: any) => ({ ...prev, scheduling_type: value }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="slots">{t.slots}</SelectItem>
+                <SelectItem value="instant">{t.instant}</SelectItem>
+                <SelectItem value="daily">{t.daily}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>{t.stationImage}</Label>
+            <Input value={station.image_url || ""} onChange={(e) => setStation((prev: any) => ({ ...prev, image_url: e.target.value }))} placeholder="https://..." />
+          </div>
           <div className="flex items-center justify-between py-2"><span className="text-muted-foreground text-sm">{t.status}</span><Badge variant={station.is_active ? "default" : "destructive"}>{station.is_active ? t.active : t.inactive}</Badge></div>
+          <Button className="w-full" onClick={updateStation} disabled={saving}>{saving ? t.saving : "حفظ بيانات المحطة"}</Button>
         </CardContent>
       </Card>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent dir="rtl">
-          <DialogHeader><DialogTitle>{t.editRequestFor} {editField ? fieldLabels[editField] : ""}</DialogTitle><DialogDescription className="sr-only">{t.editRequestSr}</DialogDescription></DialogHeader>
-          <div className="space-y-4">
-            <div><Label>{t.currentValue}</Label><Input value={editField ? (station[editField] || "") : ""} disabled /></div>
-            <div><Label>{t.newValue}</Label><Input value={editValue} onChange={(e) => setEditValue(e.target.value)} placeholder={t.newValuePh} /></div>
-            <Button onClick={requestEdit} className="w-full">{t.sendEditRequest}</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
 
 const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalTexts }) => {
   const [services, setServices] = useState<any[]>([]);
-  useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase.from("services").select("*").or(`station_id.eq.${stationId},station_id.is.null`).eq("is_active", true).order("sort_order");
-      if (data) setServices(data);
-    };
-    load();
+  const [selectedServiceName, setSelectedServiceName] = useState("");
+  const [customServiceName, setCustomServiceName] = useState("");
+  const [newPrice, setNewPrice] = useState("");
+  const [newDuration, setNewDuration] = useState("30");
+  const [saving, setSaving] = useState(false);
+  const [edits, setEdits] = useState<Record<string, { price: string; duration: string; name: string }>>({});
+
+  const predefinedServices = [
+    "غسل عام",
+    "غسل سطحي",
+    "غسل جك",
+    "حمام داخلي",
+    "حمام ناشف",
+    "بولش",
+    "تكحيل",
+    "تبديل دهن",
+    "فحص سريع فقط",
+    "خدمة أخرى",
+  ];
+
+  const load = useCallback(async () => {
+    const { data } = await supabase
+      .from("services")
+      .select("*")
+      .or(`station_id.eq.${stationId},station_id.is.null`)
+      .eq("is_active", true)
+      .order("sort_order");
+    if (data) {
+      setServices(data);
+      setEdits((prev) => {
+        const next = { ...prev };
+        for (const row of data) {
+          if (!next[row.id]) {
+            next[row.id] = {
+              name: row.name || "",
+              price: String(row.price ?? 0),
+              duration: String(row.duration_minutes ?? 30),
+            };
+          }
+        }
+        return next;
+      });
+    }
   }, [stationId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const addService = async () => {
+    const name = selectedServiceName === "خدمة أخرى" ? customServiceName.trim() : selectedServiceName.trim();
+    const price = Number(newPrice);
+    const duration = Number(newDuration || 30);
+
+    if (!name) {
+      toast({ title: "أدخل اسم الخدمة", variant: "destructive" });
+      return;
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      toast({ title: "أدخل سعراً صحيحاً", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("services").insert({
+      station_id: stationId,
+      name,
+      price,
+      duration_minutes: duration > 0 ? duration : 30,
+      is_active: true,
+      sort_order: 0,
+    } as any);
+    setSaving(false);
+    if (error) {
+      toast({ title: "تعذر إضافة الخدمة", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "تمت إضافة الخدمة" });
+    setSelectedServiceName("");
+    setCustomServiceName("");
+    setNewPrice("");
+    setNewDuration("30");
+    await load();
+  };
+
+  const saveRow = async (serviceId: string) => {
+    const edit = edits[serviceId];
+    if (!edit) return;
+    const price = Number(edit.price);
+    const duration = Number(edit.duration);
+    if (!edit.name.trim() || !Number.isFinite(price) || price < 0) {
+      toast({ title: "تحقق من الاسم والسعر", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase
+      .from("services")
+      .update({
+        name: edit.name.trim(),
+        price,
+        duration_minutes: duration > 0 ? duration : 30,
+      } as any)
+      .eq("id", serviceId)
+      .eq("station_id", stationId);
+    if (error) {
+      toast({ title: "تعذر حفظ الخدمة", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "تم حفظ الخدمة" });
+    await load();
+  };
+
+  const deleteRow = async (serviceId: string) => {
+    const { error } = await supabase
+      .from("services")
+      .update({ is_active: false } as any)
+      .eq("id", serviceId)
+      .eq("station_id", stationId);
+    if (error) {
+      toast({ title: "تعذر حذف الخدمة", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "تم حذف الخدمة" });
+    await load();
+  };
+
+  const cloneGlobalService = async (row: any) => {
+    const { error } = await supabase.from("services").insert({
+      station_id: stationId,
+      name: row.name,
+      price: row.price ?? 0,
+      duration_minutes: row.duration_minutes ?? 30,
+      is_active: true,
+      sort_order: row.sort_order ?? 0,
+    } as any);
+    if (error) {
+      toast({ title: "تعذر إضافة الخدمة للمحطة", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "تمت إضافة الخدمة للمحطة" });
+    await load();
+  };
 
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-foreground">{t.stationServices}</h3>
+      <Card>
+        <CardContent className="space-y-3 pt-5">
+          <div className="grid gap-3 md:grid-cols-4">
+            <Select value={selectedServiceName} onValueChange={setSelectedServiceName}>
+              <SelectTrigger><SelectValue placeholder="اختر خدمة" /></SelectTrigger>
+              <SelectContent>
+                {predefinedServices.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Input placeholder="السعر" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} />
+            <Input placeholder="المدة بالدقائق" value={newDuration} onChange={(e) => setNewDuration(e.target.value)} />
+            <Button onClick={addService} disabled={saving}>{saving ? "جاري الإضافة..." : "إضافة خدمة"}</Button>
+          </div>
+          {selectedServiceName === "خدمة أخرى" && (
+            <Input placeholder="اسم الخدمة الجديدة" value={customServiceName} onChange={(e) => setCustomServiceName(e.target.value)} />
+          )}
+        </CardContent>
+      </Card>
       <Table>
-        <TableHeader><TableRow><TableHead>{t.service}</TableHead><TableHead>{t.price}</TableHead><TableHead>{t.duration}</TableHead><TableHead>{t.scope}</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>{t.service}</TableHead><TableHead>{t.price}</TableHead><TableHead>{t.duration}</TableHead><TableHead>{t.scope}</TableHead><TableHead>{t.action}</TableHead></TableRow></TableHeader>
         <TableBody>
-          {services.map((s) => <TableRow key={s.id}><TableCell className="font-medium">{s.name}</TableCell><TableCell>{s.price} د.ع</TableCell><TableCell>{s.duration_minutes} {t.minutes}</TableCell><TableCell>{s.station_id ? t.privateScope : t.publicScope}</TableCell></TableRow>)}
-          {services.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">{t.noServices}</TableCell></TableRow>}
+          {services.map((s) => {
+            const isOwn = String(s.station_id || "") === stationId;
+            const edit = edits[s.id] || { name: s.name || "", price: String(s.price ?? 0), duration: String(s.duration_minutes ?? 30) };
+            return (
+              <TableRow key={s.id}>
+                <TableCell className="font-medium">
+                  {isOwn ? (
+                    <Input value={edit.name} onChange={(e) => setEdits((prev) => ({ ...prev, [s.id]: { ...edit, name: e.target.value } }))} />
+                  ) : (
+                    s.name
+                  )}
+                </TableCell>
+                <TableCell>
+                  {isOwn ? (
+                    <Input value={edit.price} onChange={(e) => setEdits((prev) => ({ ...prev, [s.id]: { ...edit, price: e.target.value } }))} />
+                  ) : (
+                    `${s.price} د.ع`
+                  )}
+                </TableCell>
+                <TableCell>
+                  {isOwn ? (
+                    <Input value={edit.duration} onChange={(e) => setEdits((prev) => ({ ...prev, [s.id]: { ...edit, duration: e.target.value } }))} />
+                  ) : (
+                    `${s.duration_minutes} ${t.minutes}`
+                  )}
+                </TableCell>
+                <TableCell>{s.station_id ? t.privateScope : t.publicScope}</TableCell>
+                <TableCell>
+                  {isOwn ? (
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => saveRow(s.id)}>حفظ</Button>
+                      <Button size="sm" variant="destructive" onClick={() => deleteRow(s.id)}>حذف</Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => cloneGlobalService(s)}>إضافة للمحطة</Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+          {services.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">{t.noServices}</TableCell></TableRow>}
         </TableBody>
       </Table>
     </div>
