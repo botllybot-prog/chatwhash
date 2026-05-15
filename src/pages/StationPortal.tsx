@@ -690,6 +690,8 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
 const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalTexts }) => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [bookingEdits, setBookingEdits] = useState<Record<string, { date: string; time: string }>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
   const statusLabels: Record<string, string> = { pending: t.pending, confirmed: t.confirmed, completed: t.completed, cancelled: t.cancelled };
   const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = { pending: "secondary", confirmed: "default", completed: "outline", cancelled: "destructive" };
 
@@ -697,7 +699,21 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
     let q = supabase.from("bookings").select("*, services(name, price)").eq("station_id", stationId).order("created_at", { ascending: false }).limit(100);
     if (filterStatus !== "all") q = q.eq("status", filterStatus as any);
     const { data } = await q;
-    if (data) setBookings(data);
+    if (data) {
+      setBookings(data);
+      setBookingEdits((prev) => {
+        const next = { ...prev };
+        for (const row of data) {
+          if (!next[row.id]) {
+            next[row.id] = {
+              date: row.booking_date || "",
+              time: row.booking_time?.slice(0, 5) || "08:00",
+            };
+          }
+        }
+        return next;
+      });
+    }
   }, [stationId, filterStatus]);
 
   useEffect(() => { load(); }, [load]);
@@ -707,8 +723,20 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
     return () => { supabase.removeChannel(channel); };
   }, [stationId, load, t]);
 
-  const updateStatus = async (id: string, status: string) => {
-    await supabase.from("bookings").update({ status: status as any }).eq("id", id);
+  const manageBooking = async (id: string, action: "confirm" | "reject" | "postpone") => {
+    setSavingId(id);
+    const edit = bookingEdits[id];
+    const body: Record<string, unknown> = { booking_id: id, action };
+    if (action === "postpone") {
+      body.booking_date = edit?.date;
+      body.booking_time = edit?.time;
+    }
+    const { data, error } = await supabase.functions.invoke("owner-manage-booking", { body });
+    setSavingId(null);
+    if (error || (data as any)?.error) {
+      toast({ title: "تعذر تحديث الحجز", description: (data as any)?.error || error?.message, variant: "destructive" });
+      return;
+    }
     load();
     toast({ title: t.statusUpdated });
   };
@@ -725,7 +753,7 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
       <Table>
         <TableHeader><TableRow><TableHead>#</TableHead><TableHead>{t.customer}</TableHead><TableHead>{t.service}</TableHead><TableHead>{t.date}</TableHead><TableHead>{t.time}</TableHead><TableHead>{t.status}</TableHead><TableHead>{t.action}</TableHead></TableRow></TableHeader>
         <TableBody>
-          {bookings.map((b) => <TableRow key={b.id}><TableCell>#{b.booking_number}</TableCell><TableCell>{b.customer_name || b.customer_phone}</TableCell><TableCell>{(b as any).services?.name} - {(b as any).services?.price} د.ع</TableCell><TableCell>{b.booking_date}</TableCell><TableCell>{b.booking_time?.substring(0, 5) || "-"}</TableCell><TableCell><Badge variant={statusColors[b.status] || "secondary"}>{statusLabels[b.status] || b.status}</Badge></TableCell><TableCell><Select value={b.status} onValueChange={(v) => updateStatus(b.id, v)}><SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">{t.pending}</SelectItem><SelectItem value="confirmed">{t.confirmed}</SelectItem><SelectItem value="completed">{t.completed}</SelectItem><SelectItem value="cancelled">{t.cancelled}</SelectItem></SelectContent></Select></TableCell></TableRow>)}
+          {bookings.map((b) => <TableRow key={b.id}><TableCell>#{b.booking_number}</TableCell><TableCell>{b.customer_name || b.customer_phone}</TableCell><TableCell>{(b as any).services?.name} - {(b as any).services?.price} د.ع</TableCell><TableCell>{b.booking_date}</TableCell><TableCell>{b.booking_time?.substring(0, 5) || "-"}</TableCell><TableCell><Badge variant={statusColors[b.status] || "secondary"}>{statusLabels[b.status] || b.status}</Badge></TableCell><TableCell><div className="flex flex-wrap items-center gap-2"><Button size="sm" disabled={savingId === b.id} onClick={() => manageBooking(b.id, "confirm")}>{t.confirmed}</Button><Button size="sm" variant="destructive" disabled={savingId === b.id} onClick={() => manageBooking(b.id, "reject")}>{t.cancelled}</Button><Input type="date" className="h-8 w-36" value={bookingEdits[b.id]?.date || ""} onChange={(e) => setBookingEdits((prev) => ({ ...prev, [b.id]: { date: e.target.value, time: prev[b.id]?.time || "08:00" } }))} /><Input type="time" className="h-8 w-28" value={bookingEdits[b.id]?.time || "08:00"} onChange={(e) => setBookingEdits((prev) => ({ ...prev, [b.id]: { date: prev[b.id]?.date || b.booking_date || "", time: e.target.value } }))} /><Button size="sm" variant="outline" disabled={savingId === b.id} onClick={() => manageBooking(b.id, "postpone")}>تأجيل</Button></div></TableCell></TableRow>)}
           {bookings.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">{t.noBookings}</TableCell></TableRow>}
         </TableBody>
       </Table>
