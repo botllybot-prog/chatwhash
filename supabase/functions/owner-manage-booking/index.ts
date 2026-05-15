@@ -92,6 +92,18 @@ Deno.serve(async (req) => {
       });
     }
 
+    const actionableStatuses = new Set(["pending", "pending_owner_approval"]);
+    if (!actionableStatuses.has(String(bookingRow.status || ""))) {
+      const message =
+        bookingRow.status === "cancelled"
+          ? "تم إلغاء هذا الحجز من الزبون أو الإدارة، ولا يمكن تأكيده مرة أخرى."
+          : "هذا الحجز لم يعد قابلًا لإجراء جديد من المحطة.";
+      return new Response(JSON.stringify({ error: message, current_status: bookingRow.status }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const payload: Record<string, unknown> = {};
     if (action === "confirm") {
       payload.status = "confirmed";

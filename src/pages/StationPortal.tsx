@@ -692,7 +692,14 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
   const [filterStatus, setFilterStatus] = useState("all");
   const [bookingEdits, setBookingEdits] = useState<Record<string, { date: string; time: string }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
-  const statusLabels: Record<string, string> = { pending: t.pending, confirmed: t.confirmed, completed: t.completed, cancelled: t.cancelled };
+  const statusLabels: Record<string, string> = {
+    pending: t.pending,
+    pending_owner_approval: t.pending,
+    pending_customer_approval: "بانتظار رد الزبون",
+    confirmed: t.confirmed,
+    completed: t.completed,
+    cancelled: t.cancelled,
+  };
   const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = { pending: "secondary", confirmed: "default", completed: "outline", cancelled: "destructive" };
 
   const load = useCallback(async () => {
@@ -753,7 +760,10 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
       <Table>
         <TableHeader><TableRow><TableHead>#</TableHead><TableHead>{t.customer}</TableHead><TableHead>{t.service}</TableHead><TableHead>{t.date}</TableHead><TableHead>{t.time}</TableHead><TableHead>{t.status}</TableHead><TableHead>{t.action}</TableHead></TableRow></TableHeader>
         <TableBody>
-          {bookings.map((b) => <TableRow key={b.id}><TableCell>#{b.booking_number}</TableCell><TableCell>{b.customer_name || b.customer_phone}</TableCell><TableCell>{(b as any).services?.name} - {(b as any).services?.price} د.ع</TableCell><TableCell>{b.booking_date}</TableCell><TableCell>{b.booking_time?.substring(0, 5) || "-"}</TableCell><TableCell><Badge variant={statusColors[b.status] || "secondary"}>{statusLabels[b.status] || b.status}</Badge></TableCell><TableCell><div className="flex flex-wrap items-center gap-2"><Button size="sm" disabled={savingId === b.id} onClick={() => manageBooking(b.id, "confirm")}>{t.confirmed}</Button><Button size="sm" variant="destructive" disabled={savingId === b.id} onClick={() => manageBooking(b.id, "reject")}>{t.cancelled}</Button><Input type="date" className="h-8 w-36" value={bookingEdits[b.id]?.date || ""} onChange={(e) => setBookingEdits((prev) => ({ ...prev, [b.id]: { date: e.target.value, time: prev[b.id]?.time || "08:00" } }))} /><Input type="time" className="h-8 w-28" value={bookingEdits[b.id]?.time || "08:00"} onChange={(e) => setBookingEdits((prev) => ({ ...prev, [b.id]: { date: prev[b.id]?.date || b.booking_date || "", time: e.target.value } }))} /><Button size="sm" variant="outline" disabled={savingId === b.id} onClick={() => manageBooking(b.id, "postpone")}>تأجيل</Button></div></TableCell></TableRow>)}
+          {bookings.map((b) => {
+            const canOwnerAct = b.status === "pending" || b.status === "pending_owner_approval";
+            return <TableRow key={b.id}><TableCell>#{b.booking_number}</TableCell><TableCell>{b.customer_name || b.customer_phone}</TableCell><TableCell>{(b as any).services?.name} - {(b as any).services?.price} د.ع</TableCell><TableCell>{b.booking_date}</TableCell><TableCell>{b.booking_time?.substring(0, 5) || "-"}</TableCell><TableCell><Badge variant={statusColors[b.status] || "secondary"}>{statusLabels[b.status] || b.status}</Badge></TableCell><TableCell><div className="flex flex-wrap items-center gap-2"><Button size="sm" disabled={!canOwnerAct || savingId === b.id} onClick={() => manageBooking(b.id, "confirm")}>{t.confirmed}</Button><Button size="sm" variant="destructive" disabled={!canOwnerAct || savingId === b.id} onClick={() => manageBooking(b.id, "reject")}>{t.cancelled}</Button><Input type="date" className="h-8 w-36" disabled={!canOwnerAct} value={bookingEdits[b.id]?.date || ""} onChange={(e) => setBookingEdits((prev) => ({ ...prev, [b.id]: { date: e.target.value, time: prev[b.id]?.time || "08:00" } }))} /><Input type="time" className="h-8 w-28" disabled={!canOwnerAct} value={bookingEdits[b.id]?.time || "08:00"} onChange={(e) => setBookingEdits((prev) => ({ ...prev, [b.id]: { date: prev[b.id]?.date || b.booking_date || "", time: e.target.value } }))} /><Button size="sm" variant="outline" disabled={!canOwnerAct || savingId === b.id} onClick={() => manageBooking(b.id, "postpone")}>تأجيل</Button>{!canOwnerAct && <span className="text-xs text-muted-foreground">تم إغلاق الإجراء لهذا الحجز</span>}</div></TableCell></TableRow>;
+          })}
           {bookings.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">{t.noBookings}</TableCell></TableRow>}
         </TableBody>
       </Table>

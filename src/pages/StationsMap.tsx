@@ -570,6 +570,12 @@ type BookingResult = {
   discountPercent: number;
 };
 
+type TrackedBooking = {
+  bookingId: string;
+  bookingNumber?: number;
+  source: "map" | "quick";
+};
+
 type SpinResult = {
   segmentKey: string;
   discountPercent: number;
@@ -727,10 +733,12 @@ function StationCard({
   station,
   onClose,
   language,
+  onBookingCreated,
 }: {
   station: Station;
   onClose: () => void;
   language: Language;
+  onBookingCreated?: (tracked: TrackedBooking, customerPhone: string) => void;
 }) {
   const t = translations[language];
   const isRtl = t.dir === "rtl";
@@ -1072,6 +1080,10 @@ function StationCard({
       bookingNumber: data.bookingNumber,
       discountPercent: spinResult.discountPercent,
     });
+    onBookingCreated?.(
+      { bookingId: data.bookingId, bookingNumber: data.bookingNumber, source: "map" },
+      normalizedPhone,
+    );
 
     toast({
       title: t.bookingCreatedToastTitle,
@@ -1485,10 +1497,44 @@ const StationsMap = () => {
   const [quickTime, setQuickTime] = useState("");
   const [quickSubmitting, setQuickSubmitting] = useState(false);
   const [quickCancelSubmitting, setQuickCancelSubmitting] = useState(false);
+  const [trackedBookings, setTrackedBookings] = useState<TrackedBooking[]>([]);
+  const [trackedStatuses, setTrackedStatuses] = useState<Record<string, string>>({});
+  const [trackedPhone, setTrackedPhone] = useState("");
   const { language, isRtl } = useAppLanguage();
 
   const t = translations[language];
   const q = quickBookingTranslations[language];
+  const TRACK_KEY = "washlly_customer_tracked_bookings_v1";
+  const TRACK_PHONE_KEY = "washlly_customer_tracked_phone_v1";
+  const normalizeTrackedPhone = (phone: string) => {
+    const cleaned = phone.replace(/[^\d+]/g, "").replace(/^\+/, "");
+    if (/^07\d{9}$/.test(cleaned)) return `964${cleaned.substring(1)}`;
+    return cleaned;
+  };
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TRACK_KEY);
+      const rawPhone = localStorage.getItem(TRACK_PHONE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as TrackedBooking[];
+        if (Array.isArray(parsed)) setTrackedBookings(parsed);
+      }
+      if (rawPhone) setTrackedPhone(rawPhone);
+    } catch {
+      // ignore storage parse errors
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(TRACK_KEY, JSON.stringify(trackedBookings));
+  }, [trackedBookings]);
+
+  useEffect(() => {
+    if (trackedPhone) {
+      localStorage.setItem(TRACK_PHONE_KEY, trackedPhone);
+    }
+  }, [trackedPhone]);
   const quickTimeOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
     const now = new Date();
@@ -1701,6 +1747,30 @@ const StationsMap = () => {
       title: q.okTitle,
       description: q.okDesc,
     });
+    const targets = Array.isArray((data as any)?.targets) ? (data as any).targets : [];
+    const quickTracked: TrackedBooking[] = targets
+      .map((target: any) => ({
+        bookingId: String(target.booking_id || ""),
+        bookingNumber: Number(target.booking_number || 0) || undefined,
+        source: "quick" as const,
+      }))
+      .filter((item) => item.bookingId);
+    if (quickTracked.length > 0) {
+      const normalizedPhone = normalizeTrackedPhone(quickCustomerPhone);
+      setTrackedPhone(normalizedPhone);
+      setTrackedBookings((prev) => {
+        const map = new Map(prev.map((item) => [item.bookingId, item]));
+        for (const next of quickTracked) map.set(next.bookingId, next);
+        return [...map.values()];
+      });
+      setTrackedStatuses((prev) => {
+        const next = { ...prev };
+        for (const item of quickTracked) {
+          if (!next[item.bookingId]) next[item.bookingId] = "pending";
+        }
+        return next;
+      });
+    }
     setShowQuickBooking(false);
   };
 
@@ -1735,7 +1805,51 @@ const StationsMap = () => {
       title: q.cancelAllOkTitle,
       description: data.alreadyEmpty ? q.cancelAllOkDesc : `${q.cancelAllOkDesc} (${data.cancelledCount ?? 0})`,
     });
+    setTrackedBookings([]);
+    setTrackedStatuses({});
   };
+
+  useEffect(() => {
+    if (!trackedPhone || trackedBookings.length === 0) return;
+    const ids = trackedBookings.map((b) => b.bookingId).filter(Boolean);
+    if (ids.length === 0) return;
+
+    const timer = window.setInterval(async () => {
+      const { data, error } = await supabase.functions.invoke("get-booking-statuses", {
+        body: {
+          booking_ids: ids,
+          customer_phone: trackedPhone,
+        },
+      });
+      if (error || (data as any)?.error) return;
+
+      const rows = Array.isArray((data as any)?.bookings) ? (data as any).bookings : [];
+      const terminal = new Set(["confirmed", "cancelled", "completed"]);
+      const nextStatuses: Record<string, string> = {};
+      for (const row of rows) {
+        const id = String(row.id || "");
+        const status = String(row.status || "");
+        if (!id || !status) continue;
+        nextStatuses[id] = status;
+        const prev = trackedStatuses[id];
+        if (prev && prev !== status) {
+          const bookingNo = row.booking_number ? `#${row.booking_number}` : `#${id.slice(0, 8)}`;
+          if (status === "confirmed") {
+            toast({ title: "تم قبول الحجز", description: `${bookingNo} تم قبوله من المحطة.` });
+          } else if (status === "cancelled") {
+            toast({ title: "تم رفض/إلغاء الحجز", description: `${bookingNo} تم إلغاؤه.` });
+          } else if (status === "pending_customer_approval") {
+            toast({ title: "تم تأجيل الموعد", description: `${bookingNo} بانتظار موافقتك على الموعد الجديد.` });
+          }
+        }
+      }
+
+      setTrackedStatuses((prev) => ({ ...prev, ...nextStatuses }));
+      setTrackedBookings((prev) => prev.filter((item) => !terminal.has(nextStatuses[item.bookingId])));
+    }, 12000);
+
+    return () => window.clearInterval(timer);
+  }, [trackedBookings, trackedPhone, trackedStatuses]);
 
   return (
     <div className="relative h-[100vh] w-full" dir={isRtl ? "rtl" : "ltr"}>
@@ -1849,7 +1963,19 @@ const StationsMap = () => {
       )}
 
       {selectedStation && (
-        <StationCard station={selectedStation} onClose={() => setSelectedStation(null)} language={language} />
+        <StationCard
+          station={selectedStation}
+          onClose={() => setSelectedStation(null)}
+          language={language}
+          onBookingCreated={(tracked, customerPhone) => {
+            setTrackedPhone(customerPhone);
+            setTrackedBookings((prev) => {
+              if (prev.some((item) => item.bookingId === tracked.bookingId)) return prev;
+              return [tracked, ...prev];
+            });
+            setTrackedStatuses((prev) => ({ ...prev, [tracked.bookingId]: prev[tracked.bookingId] || "pending" }));
+          }}
+        />
       )}
     </div>
   );
