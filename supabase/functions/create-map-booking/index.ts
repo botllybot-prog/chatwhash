@@ -629,6 +629,12 @@ Deno.serve(async (req) => {
 
     const pendingMsg = `📩 ${tt.labels.newMapBooking}\n\n🏪 ${tt.labels.station}: ${stationName}\n🧽 ${tt.labels.service}: ${service.name}\n🎯 ${tt.labels.discount}: (${spinDiscountPercent})%\n📅 ${tt.labels.date}: ${dateLabel}\n⏰ ${tt.labels.time}: ${formatTime(bookingTime)}\n🔢 ${tt.labels.bookingNo}: #${booking.booking_number}\n\n⏳ ${tt.labels.customerPending}`;
     const notificationTasks: Promise<unknown>[] = [sendWhatsAppMessage(customerPhone, pendingMsg, settings, language)];
+    await supabase.from("customer_notifications").insert({
+      customer_phone: customerPhone,
+      title: "تم استلام طلب الحجز",
+      body: `${stationName} - بانتظار موافقة المحطة - #${booking.booking_number}`,
+      reference_booking_id: booking.id,
+    });
 
     if (owner?.owner_phone) {
       const ownerPhone = normalizePhone(owner.owner_phone);

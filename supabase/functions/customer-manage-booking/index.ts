@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
 
     const { data: booking } = await supabase
       .from("bookings")
-      .select("id, customer_phone, status")
+      .select("id, customer_phone, status, booking_number, booking_date, booking_time, customer_name, station_id, stations(name)")
       .eq("id", bookingId)
       .maybeSingle();
     if (!booking || String(booking.customer_phone) !== customerPhone) {
@@ -97,6 +97,29 @@ Deno.serve(async (req) => {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    if ((booking as any)?.station_id) {
+      const { data: owner } = await supabase
+        .from("station_owners")
+        .select("user_id")
+        .eq("station_id", (booking as any).station_id)
+        .maybeSingle();
+
+      if (owner?.user_id) {
+        const title = action === "cancel" ? "إلغاء من الزبون" : "طلب تأجيل من الزبون";
+        const body =
+          action === "cancel"
+            ? `الزبون ${(booking as any)?.customer_name || customerPhone} ألغى الحجز #${(booking as any)?.booking_number || ""}.`
+            : `الزبون ${(booking as any)?.customer_name || customerPhone} طلب تأجيل الحجز #${(booking as any)?.booking_number || ""} إلى ${updated.booking_date} ${String(updated.booking_time || "").slice(0, 5)}.`;
+        await supabase.from("notifications").insert({
+          user_id: owner.user_id,
+          title,
+          body,
+          type: "booking",
+          reference_id: bookingId,
+        });
+      }
     }
 
     return new Response(JSON.stringify({ success: true, booking: updated }), {

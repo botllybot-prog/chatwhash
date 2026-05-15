@@ -773,15 +773,48 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
 
 const NotificationsTab = ({ t, locale, isRtl }: { t: PortalTexts; locale: string; isRtl: boolean }) => {
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [ownerUserId, setOwnerUserId] = useState<string | null>(null);
+  const beep = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.06, audioCtx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.25);
+      oscillator.connect(gain);
+      gain.connect(audioCtx.destination);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.25);
+    } catch {
+      // ignore sound errors
+    }
+  };
   const load = useCallback(async () => {
-    const { data } = await supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50);
+    const { data: auth } = await supabase.auth.getUser();
+    const userId = auth.user?.id || null;
+    if (!userId) return;
+    setOwnerUserId(userId);
+    const { data } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(50);
     if (data) setNotifications(data);
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    const channel = supabase.channel("my-notifications").on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, () => { load(); }).subscribe();
+    if (!ownerUserId) return;
+    const channel = supabase.channel(`my-notifications-${ownerUserId}`).on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${ownerUserId}` },
+      () => { beep(); load(); },
+    ).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [load]);
+  }, [load, ownerUserId]);
 
   const markRead = async (id: string) => {
     await supabase.from("notifications").update({ is_read: true }).eq("id", id);

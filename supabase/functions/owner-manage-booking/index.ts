@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
 
     const { data: bookingRow, error: bookingLookupError } = await supabaseAdmin
       .from("bookings")
-      .select("id, station_id, status")
+      .select("id, station_id, status, booking_number, booking_date, booking_time, customer_name, customer_phone, stations(name)")
       .eq("id", bookingId)
       .maybeSingle();
 
@@ -137,6 +137,27 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: updateError.message }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const stationName = (bookingRow as any)?.stations?.name || "Washlly";
+    const actionLabel =
+      action === "confirm"
+        ? "تم تأكيد الحجز"
+        : action === "reject"
+          ? "تم رفض الحجز"
+          : "تم تعديل موعد الحجز";
+    const customerBody =
+      action === "postpone"
+        ? `${stationName} - ${actionLabel} #${updated.booking_number} إلى ${updated.booking_date} ${String(updated.booking_time || "").slice(0, 5)}`
+        : `${stationName} - ${actionLabel} #${updated.booking_number}`;
+
+    if ((bookingRow as any)?.customer_phone) {
+      await supabaseAdmin.from("customer_notifications").insert({
+        customer_phone: String((bookingRow as any).customer_phone),
+        title: actionLabel,
+        body: customerBody,
+        reference_booking_id: bookingId,
       });
     }
 
