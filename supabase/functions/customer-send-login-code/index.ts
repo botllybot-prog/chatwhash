@@ -8,7 +8,10 @@ const corsHeaders = {
 };
 
 function normalizePhone(phone: string) {
-  const cleaned = phone.replace(/[^\d+]/g, "").replace(/^\+/, "");
+  const western = phone
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+  const cleaned = western.replace(/[^\d+]/g, "").replace(/^\+/, "");
   if (/^07\d{9}$/.test(cleaned)) return `964${cleaned.substring(1)}`;
   return cleaned;
 }
