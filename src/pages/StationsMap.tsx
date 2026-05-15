@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+ï»¿import { useEffect, useMemo, useRef, useState } from "react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import { useAppLanguage } from "@/lib/language";
 import InstallAppButton from "@/components/InstallAppButton";
 import { clearCustomerSession, getCustomerSession } from "@/lib/customerSession";
 import {
+  Bell,
   CalendarCheck,
   CheckCircle2,
   Clock,
@@ -332,82 +333,82 @@ const translations = {
     currency: "IQD",
     dir: "ltr",
     languageLabel: "Dil",
-    languagePlaceholder: "Dil seçin",
-    searchPlaceholder: "Istasyon veya bölge ara",
+    languagePlaceholder: "Dil seÃ§in",
+    searchPlaceholder: "Istasyon veya bÃ¶lge ara",
     myLocation: "Konumum",
-    loadingMap: "Harita yükleniyor...",
-    stationOpen: "Istasyon su anda açik",
+    loadingMap: "Harita yÃ¼kleniyor...",
+    stationOpen: "Istasyon su anda aÃ§ik",
     stationClosed: "Istasyon su anda kapali",
     googleMaps: "Google Maps",
     waze: "Waze",
-    searchLoadErrorTitle: "Istasyonlar yüklenemedi",
+    searchLoadErrorTitle: "Istasyonlar yÃ¼klenemedi",
     browserLocationTitle: "Tarayici konumu desteklemiyor",
     browserLocationDescription: "Tarayici mevcut konumunuza erisemedi.",
     locationErrorTitle: "Konum alinamadi",
-    locationErrorDescription: "En yakin istasyonlari göstermek için konum erisimine izin verin.",
+    locationErrorDescription: "En yakin istasyonlari gÃ¶stermek iÃ§in konum erisimine izin verin.",
     schedulingLabels: {
       slots: "Saatli rezervasyon",
       instant: "Hizli rezervasyon",
-      daily: "Günlük rezervasyon",
+      daily: "GÃ¼nlÃ¼k rezervasyon",
     },
-    step1Title: "Hizmeti seçin",
-    step1Description: "Önce istediginiz hizmeti seçin. Ardindan indirim ve son fiyat net sekilde gösterilir.",
-    step2TitleSlots: "Gün ve saat seçin",
-    step2TitleDaily: "Gün seçin",
-    step2Description: "Uygun günü seçin. Istasyon saatli çalisiyorsa sadece uygun saatler görünür.",
+    step1Title: "Hizmeti seÃ§in",
+    step1Description: "Ã–nce istediginiz hizmeti seÃ§in. Ardindan indirim ve son fiyat net sekilde gÃ¶sterilir.",
+    step2TitleSlots: "GÃ¼n ve saat seÃ§in",
+    step2TitleDaily: "GÃ¼n seÃ§in",
+    step2Description: "Uygun gÃ¼nÃ¼ seÃ§in. Istasyon saatli Ã§alisiyorsa sadece uygun saatler gÃ¶rÃ¼nÃ¼r.",
     step3Title: "Rezervasyon bilgileri",
-    step3Description: "Adinizi ve dogru WhatsApp numaranizi girin. Onay veya iptal bildirimleri bu numaraya gönderilir.",
-    step4Title: "Indirim çarki",
-    step4Description: "Önce hizmeti seçin, sonra çarki çevirin. Gösterge hangi dilimde durursa o indirim kaydedilir.",
+    step3Description: "Adinizi ve dogru WhatsApp numaranizi girin. Onay veya iptal bildirimleri bu numaraya gÃ¶nderilir.",
+    step4Title: "Indirim Ã§arki",
+    step4Description: "Ã–nce hizmeti seÃ§in, sonra Ã§arki Ã§evirin. GÃ¶sterge hangi dilimde durursa o indirim kaydedilir.",
     step5Title: "Son adim",
-    step5Description: "Bilgileri kontrol edin, sonra rezervasyonu onaylayin veya iptal edin. Her iki islemden sonra harita eski seçimler olmadan geri gelir.",
-    loadingServices: "Hizmetler yükleniyor...",
-    noServices: "Bu istasyon için su anda uygun hizmet yok.",
-    loadingSlots: "Uygun saatler yükleniyor...",
-    noSlots: "Bu gün için uygun saat yok. Lütfen baska bir gün seçin.",
+    step5Description: "Bilgileri kontrol edin, sonra rezervasyonu onaylayin veya iptal edin. Her iki islemden sonra harita eski seÃ§imler olmadan geri gelir.",
+    loadingServices: "Hizmetler yÃ¼kleniyor...",
+    noServices: "Bu istasyon iÃ§in su anda uygun hizmet yok.",
+    loadingSlots: "Uygun saatler yÃ¼kleniyor...",
+    noSlots: "Bu gÃ¼n iÃ§in uygun saat yok. LÃ¼tfen baska bir gÃ¼n seÃ§in.",
     namePlaceholder: "Ad",
     phonePlaceholder: "Telefon numarasi",
-    importantNotice: "Önemli not",
-    bookingLimitNotice: "Ayni numara ile en fazla 2 aktif rezervasyon tutabilirsiniz. Yeni rezervasyon için önce eski rezervasyonlardan birini iptal edin.",
-    wheelHintDefault: "Onaylamadan önce çarki bir kez çevirin. Indirim 0%, 5%, 10% veya 15% olur.",
-    wheelHintSpinning: "Indirim çarki dönüyor...",
-    wheelHintRetry: "Çark bu rezervasyon için yalnizca bir kez çevrilir.",
-    wheelHintSaved: "Bu rezervasyon için indirim kaydedildi",
+    importantNotice: "Ã–nemli not",
+    bookingLimitNotice: "Ayni numara ile en fazla 2 aktif rezervasyon tutabilirsiniz. Yeni rezervasyon iÃ§in Ã¶nce eski rezervasyonlardan birini iptal edin.",
+    wheelHintDefault: "Onaylamadan Ã¶nce Ã§arki bir kez Ã§evirin. Indirim 0%, 5%, 10% veya 15% olur.",
+    wheelHintSpinning: "Indirim Ã§arki dÃ¶nÃ¼yor...",
+    wheelHintRetry: "Ã‡ark bu rezervasyon iÃ§in yalnizca bir kez Ã§evrilir.",
+    wheelHintSaved: "Bu rezervasyon iÃ§in indirim kaydedildi",
     wheelCurrentBookingDiscount: "Mevcut rezervasyon indirimi",
-    wheelButton: "Çarki çevir",
-    wheelSpinningButton: "Çark dönüyor...",
+    wheelButton: "Ã‡arki Ã§evir",
+    wheelSpinningButton: "Ã‡ark dÃ¶nÃ¼yor...",
     wheelRetryButton: "Tekrar dene",
     wheelSavedButton: "Indirim kaydedildi",
     price: "Fiyat",
     discount: "Indirim",
     afterDiscount: "Indirim sonrasi",
-    summaryBoxLine1: "Onaydan sonra talebiniz kaydedilen indirim ile birlikte WhatsApp üzerinden istasyon sahibine gönderilir.",
-    summaryBoxLine2: "Rezervasyonu olusturduktan sonra iptal ederseniz size ve istasyon sahibine WhatsApp iptal bildirimi gönderilir.",
+    summaryBoxLine1: "Onaydan sonra talebiniz kaydedilen indirim ile birlikte WhatsApp Ã¼zerinden istasyon sahibine gÃ¶nderilir.",
+    summaryBoxLine2: "Rezervasyonu olusturduktan sonra iptal ederseniz size ve istasyon sahibine WhatsApp iptal bildirimi gÃ¶nderilir.",
     confirmBooking: "Rezervasyonu onayla",
     confirmingBooking: "Rezervasyon onaylaniyor...",
     cancelBooking: "Rezervasyonu iptal et",
-    returnToMap: "Haritaya dön",
+    returnToMap: "Haritaya dÃ¶n",
     cancellingBooking: "Iptal ediliyor...",
-    bookingSentTitle: "Rezervasyon talebi basariyla gönderildi",
+    bookingSentTitle: "Rezervasyon talebi basariyla gÃ¶nderildi",
     bookingNumber: "Rezervasyon numarasi",
     fixedDiscount: "Kaydedilen indirim",
     waitingApproval: "Talebiniz istasyon onayini bekliyor. Buradan yine iptal edebilirsiniz.",
-    successResetNote: "Iptal veya dönüsten sonra harita eski seçimler olmadan tekrar görünür.",
+    successResetNote: "Iptal veya dÃ¶nÃ¼sten sonra harita eski seÃ§imler olmadan tekrar gÃ¶rÃ¼nÃ¼r.",
     serviceDuration: "dk",
-    completeDataTitle: "Önce bilgileri tamamlayin",
-    completeSpinDataDescription: "Çarki çevirmeden önce hizmeti ve saati seçin, sonra adinizi ve telefonunuzu girin.",
-    completeBookingDataDescription: "Lütfen rezervasyonu onaylamadan önce adinizi ve telefon numaranizi girin.",
-    chooseTimeTitle: "Saat seçin",
-    chooseTimeDescription: "Lütfen uygun saatlerden birini seçin.",
-    spinFirstTitle: "Önce indirim çarkini çevirin",
-    spinFirstDescription: "Rezervasyon istegi gönderilmeden önce çark sonucu kaydedilmelidir.",
-    spinFailedTitle: "Çark döndürülemedi",
-    spinFailedDescription: "Lütfen biraz sonra tekrar deneyin.",
+    completeDataTitle: "Ã–nce bilgileri tamamlayin",
+    completeSpinDataDescription: "Ã‡arki Ã§evirmeden Ã¶nce hizmeti ve saati seÃ§in, sonra adinizi ve telefonunuzu girin.",
+    completeBookingDataDescription: "LÃ¼tfen rezervasyonu onaylamadan Ã¶nce adinizi ve telefon numaranizi girin.",
+    chooseTimeTitle: "Saat seÃ§in",
+    chooseTimeDescription: "LÃ¼tfen uygun saatlerden birini seÃ§in.",
+    spinFirstTitle: "Ã–nce indirim Ã§arkini Ã§evirin",
+    spinFirstDescription: "Rezervasyon istegi gÃ¶nderilmeden Ã¶nce Ã§ark sonucu kaydedilmelidir.",
+    spinFailedTitle: "Ã‡ark dÃ¶ndÃ¼rÃ¼lemedi",
+    spinFailedDescription: "LÃ¼tfen biraz sonra tekrar deneyin.",
     bookingFailedTitle: "Rezervasyon basarisiz oldu",
     bookingBlockedTitle: "Rezervasyon tamamlanamadi",
     bookingCancelledTitle: "Rezervasyon iptal edildi",
-    bookingCancelledDescription: "WhatsApp üzerinden iptal bildirimi gönderdik.",
-    bookingCreatedToastTitle: "Rezervasyon talebi gönderildi",
+    bookingCancelledDescription: "WhatsApp Ã¼zerinden iptal bildirimi gÃ¶nderdik.",
+    bookingCreatedToastTitle: "Rezervasyon talebi gÃ¶nderildi",
     bookingCreatedToastDescription: "Kaydedilen indirim",
     cancelFailedTitle: "Rezervasyon iptal edilemedi",
     spinSegments: {
@@ -506,27 +507,27 @@ const quickBookingTranslations = {
   },
   tr: {
     cta: "Hizli rezervasyon",
-    cancelAllCta: "Tüm rezervasyonlari iptal et",
-    cardTitle: "Hizli rezervasyon (fiyat henüz sabit degil)",
-    cardHint: "Ilk onay veren istasyon rezervasyonu alir. Bu akista indirim çarki yok.",
-    customerName: "Müsteri adi",
-    customerPhone: "Müsteri WhatsApp",
-    servicePlaceholder: "Yikama türü",
-    serviceSurface: "Yüzey yikama",
+    cancelAllCta: "TÃ¼m rezervasyonlari iptal et",
+    cardTitle: "Hizli rezervasyon (fiyat henÃ¼z sabit degil)",
+    cardHint: "Ilk onay veren istasyon rezervasyonu alir. Bu akista indirim Ã§arki yok.",
+    customerName: "MÃ¼steri adi",
+    customerPhone: "MÃ¼steri WhatsApp",
+    servicePlaceholder: "Yikama tÃ¼rÃ¼",
+    serviceSurface: "YÃ¼zey yikama",
     serviceJack: "Kriko yikama",
-    submit: "Hizli rezervasyon gönder",
-    submitting: "Gönderiliyor...",
+    submit: "Hizli rezervasyon gÃ¶nder",
+    submitting: "GÃ¶nderiliyor...",
     completeTitle: "Bilgileri tamamlayin",
-    completeDesc: "Lütfen önce hizli rezervasyon alanlarini doldurun.",
-    failTitle: "Hizli rezervasyon gönderilemedi",
+    completeDesc: "LÃ¼tfen Ã¶nce hizli rezervasyon alanlarini doldurun.",
+    failTitle: "Hizli rezervasyon gÃ¶nderilemedi",
     failDesc: "Beklenmeyen bir hata olustu.",
-    okTitle: "Hizli rezervasyon gönderildi",
-    okDesc: "Talep en yakin 3 istasyona gönderildi. En hizli yanit rezervasyonu alir.",
+    okTitle: "Hizli rezervasyon gÃ¶nderildi",
+    okDesc: "Talep en yakin 3 istasyona gÃ¶nderildi. En hizli yanit rezervasyonu alir.",
     cancelAllNeedPhoneTitle: "WhatsApp numarasi girin",
-    cancelAllNeedPhoneDesc: "Önce müsteri numarasini girin, sonra bu numaranin tüm aktif rezervasyonlari iptal edilir.",
+    cancelAllNeedPhoneDesc: "Ã–nce mÃ¼steri numarasini girin, sonra bu numaranin tÃ¼m aktif rezervasyonlari iptal edilir.",
     cancelAllSubmitting: "Iptal ediliyor...",
-    cancelAllOkTitle: "Tüm rezervasyonlar iptal edildi",
-    cancelAllOkDesc: "Tüm aktif rezervasyonlar iptal edildi ve her rezervasyon diline göre WhatsApp bildirimi gönderildi.",
+    cancelAllOkTitle: "TÃ¼m rezervasyonlar iptal edildi",
+    cancelAllOkDesc: "TÃ¼m aktif rezervasyonlar iptal edildi ve her rezervasyon diline gÃ¶re WhatsApp bildirimi gÃ¶nderildi.",
     cancelAllFailTitle: "Rezervasyonlar iptal edilemedi",
     cancelAllFailDesc: "Iptal sirasinda bir hata olustu.",
   },
@@ -1566,6 +1567,51 @@ const StationsMap = () => {
       localStorage.setItem(TRACK_PHONE_KEY, trackedPhone);
     }
   }, [trackedPhone]);
+
+  const playInboxBell = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      oscillator.type = "triangle";
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.08, audioCtx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.25);
+      oscillator.connect(gain);
+      gain.connect(audioCtx.destination);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.25);
+    } catch {
+      // ignore audio errors
+    }
+  };
+
+  useEffect(() => {
+    const loadInbox = async () => {
+      const session = getCustomerSession();
+      if (!session) {
+        setCustomerInbox([]);
+        return;
+      }
+
+      const { data } = await supabase.functions.invoke("customer-get-inbox", {
+        body: {
+          customer_phone: session.customerPhone,
+          session_token: session.sessionToken,
+        },
+      });
+
+      const rows = Array.isArray((data as any)?.notifications) ? (data as any).notifications : [];
+      if (rows.length > inboxCountRef.current) playInboxBell();
+      inboxCountRef.current = rows.length;
+      setCustomerInbox(rows);
+    };
+
+    void loadInbox();
+    const timer = window.setInterval(() => void loadInbox(), 10000);
+    return () => window.clearInterval(timer);
+  }, []);
   const quickTimeOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
     const now = new Date();
@@ -2055,6 +2101,8 @@ const StationsMap = () => {
 };
 
 export default StationsMap;
+
+
 
 
 
