@@ -32,6 +32,8 @@ import AdminEmployees from "./pages/admin/AdminEmployees";
 import AdminBroadcast from "./pages/admin/AdminBroadcast";
 import EmployeeLayout from "./components/EmployeeLayout";
 import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
+import CustomerLogin from "./pages/CustomerLogin";
+import { getCustomerSession } from "@/lib/customerSession";
 
 const queryClient = new QueryClient();
 
@@ -64,6 +66,12 @@ const ProtectedRoutes = () => (
   </AuthGuard>
 );
 
+const CustomerMapGuard = ({ children }: { children: JSX.Element }) => {
+  const session = typeof window !== "undefined" ? getCustomerSession() : null;
+  if (!session) return <Navigate to="/customer-login" replace />;
+  return children;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AppLanguageProvider>
@@ -77,9 +85,10 @@ const App = () => (
             <Route element={<MobileLayout />}>
               <Route path="/" element={<LandingPage />} />
               <Route path="/stations-list" element={<StationsList />} />
-              <Route path="/map" element={<StationsMap />} />
+              <Route path="/map" element={<CustomerMapGuard><StationsMap /></CustomerMapGuard>} />
             </Route>
             <Route path="/mobile-map" element={<MobileAppMap />} />
+            <Route path="/customer-login" element={<CustomerLogin />} />
             <Route path="/login" element={<Login />} />
             <Route path="/owner" element={<OwnerAccess />} />
             <Route path="/app/*" element={<ProtectedRoutes />} />

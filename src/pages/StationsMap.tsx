@@ -16,6 +16,7 @@ import {
 import { toast } from "@/components/ui/use-toast";
 import { useAppLanguage } from "@/lib/language";
 import InstallAppButton from "@/components/InstallAppButton";
+import { clearCustomerSession, getCustomerSession } from "@/lib/customerSession";
 import {
   CalendarCheck,
   CheckCircle2,
@@ -1500,6 +1501,7 @@ const StationsMap = () => {
   const [trackedBookings, setTrackedBookings] = useState<TrackedBooking[]>([]);
   const [trackedStatuses, setTrackedStatuses] = useState<Record<string, string>>({});
   const [trackedPhone, setTrackedPhone] = useState("");
+  const [customerBookings, setCustomerBookings] = useState<any[]>([]);
   const { language, isRtl } = useAppLanguage();
 
   const t = translations[language];
@@ -1511,6 +1513,33 @@ const StationsMap = () => {
     if (/^07\d{9}$/.test(cleaned)) return `964${cleaned.substring(1)}`;
     return cleaned;
   };
+
+  useEffect(() => {
+    const session = getCustomerSession();
+    if (session) {
+      setQuickCustomerName(session.customerName || "");
+      setQuickCustomerPhone(session.customerPhone || "");
+      setTrackedPhone(session.customerPhone || "");
+    }
+  }, []);
+
+  useEffect(() => {
+    const loadCustomerBookings = async () => {
+      if (!trackedPhone) {
+        setCustomerBookings([]);
+        return;
+      }
+      const { data } = await supabase
+        .from("bookings")
+        .select("id, booking_number, booking_date, booking_time, status, stations(name), services(name)")
+        .eq("customer_phone", trackedPhone)
+        .in("status", ["pending", "pending_owner_approval", "pending_customer_approval", "confirmed", "cancelled"])
+        .order("created_at", { ascending: false })
+        .limit(20);
+      setCustomerBookings(data || []);
+    };
+    void loadCustomerBookings();
+  }, [trackedPhone]);
 
   useEffect(() => {
     try {
@@ -1809,6 +1838,39 @@ const StationsMap = () => {
     setTrackedStatuses({});
   };
 
+  const handleCustomerBookingAction = async (
+    bookingId: string,
+    action: "cancel" | "postpone",
+    nextDate?: string,
+    nextTime?: string,
+  ) => {
+    const session = getCustomerSession();
+    if (!session) return;
+    const { data, error } = await supabase.functions.invoke("customer-manage-booking", {
+      body: {
+        booking_id: bookingId,
+        action,
+        booking_date: nextDate || null,
+        booking_time: nextTime || null,
+        customer_phone: session.customerPhone,
+        session_token: session.sessionToken,
+      },
+    });
+    if (error || (data as any)?.error) {
+      toast({ title: "تعذر تعديل الحجز", description: (data as any)?.error || error?.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "تم تحديث الحجز" });
+    const { data: refreshed } = await supabase
+      .from("bookings")
+      .select("id, booking_number, booking_date, booking_time, status, stations(name), services(name)")
+      .eq("customer_phone", session.customerPhone)
+      .in("status", ["pending", "pending_owner_approval", "pending_customer_approval", "confirmed", "cancelled"])
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setCustomerBookings(refreshed || []);
+  };
+
   useEffect(() => {
     if (!trackedPhone || trackedBookings.length === 0) return;
     const ids = trackedBookings.map((b) => b.bookingId).filter(Boolean);
@@ -1856,6 +1918,16 @@ const StationsMap = () => {
       <div className="absolute left-4 right-4 top-4 z-[900] mx-auto max-w-xl">
         <div className="mt-3 flex justify-end">
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                clearCustomerSession();
+                window.location.href = "/customer-login";
+              }}
+            >
+              خروج الزبون
+            </Button>
             <InstallAppButton />
             <Button
               size="sm"
@@ -1927,6 +1999,26 @@ const StationsMap = () => {
               >
                 رجوع
               </Button>
+            </CardContent>
+          </Card>
+        )}
+        {customerBookings.length > 0 && (
+          <Card className="mt-3 border-0 bg-background/95 shadow-xl backdrop-blur">
+            <CardContent className="space-y-2 p-3">
+              <div className="text-sm font-semibold">بريدي وحجوزاتي الحالية</div>
+              {customerBookings.slice(0, 6).map((b) => (
+                <div key={b.id} className="rounded-xl border p-2 text-xs">
+                  <div className="font-semibold">#{b.booking_number} - {(b as any).stations?.name || "محطة"}</div>
+                  <div className="text-muted-foreground">{(b as any).services?.name || "-"} | {b.booking_date} {String(b.booking_time || "").slice(0, 5)}</div>
+                  <div className="mt-1">الحالة: {b.status}</div>
+                  {(b.status === "pending" || b.status === "pending_owner_approval" || b.status === "pending_customer_approval" || b.status === "confirmed") && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" variant="destructive" onClick={() => handleCustomerBookingAction(b.id, "cancel")}>إلغاء</Button>
+                      <Button size="sm" variant="outline" onClick={() => handleCustomerBookingAction(b.id, "postpone", b.booking_date, String(b.booking_time || "08:00").slice(0, 5))}>تأجيل</Button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}
