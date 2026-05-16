@@ -1488,6 +1488,8 @@ const StationsMap = () => {
   const [trackedStatuses, setTrackedStatuses] = useState<Record<string, string>>({});
   const [trackedPhone, setTrackedPhone] = useState("");
   const [customerBookings, setCustomerBookings] = useState<any[]>([]);
+  const [customerInbox, setCustomerInbox] = useState<any[]>([]);
+  const inboxCountRef = useRef(0);
   const { language, isRtl } = useAppLanguage();
 
   const t = translations[language];
