@@ -46,8 +46,12 @@ export type Database = {
           created_at: string
           customer_name: string | null
           customer_phone: string
+          customer_rating: number | null
           id: string
+          rated_at: string | null
           reminder_sent: boolean
+          rating_requested: boolean
+          rating_requested_at: string | null
           service_id: string
           spin_discount_percent: number
           station_id: string
@@ -60,8 +64,12 @@ export type Database = {
           created_at?: string
           customer_name?: string | null
           customer_phone: string
+          customer_rating?: number | null
           id?: string
+          rated_at?: string | null
           reminder_sent?: boolean
+          rating_requested?: boolean
+          rating_requested_at?: string | null
           service_id: string
           spin_discount_percent?: number
           station_id: string
@@ -74,8 +82,12 @@ export type Database = {
           created_at?: string
           customer_name?: string | null
           customer_phone?: string
+          customer_rating?: number | null
           id?: string
+          rated_at?: string | null
           reminder_sent?: boolean
+          rating_requested?: boolean
+          rating_requested_at?: string | null
           service_id?: string
           spin_discount_percent?: number
           station_id?: string
@@ -472,6 +484,8 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           name: string
+          rating_average: number
+          rating_count: number
           scheduling_type: Database["public"]["Enums"]["scheduling_type"]
           slot_duration_minutes: number
           working_hours_end: string
@@ -489,6 +503,8 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           name: string
+          rating_average?: number
+          rating_count?: number
           scheduling_type?: Database["public"]["Enums"]["scheduling_type"]
           slot_duration_minutes?: number
           working_hours_end?: string
@@ -506,6 +522,8 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           name?: string
+          rating_average?: number
+          rating_count?: number
           scheduling_type?: Database["public"]["Enums"]["scheduling_type"]
           slot_duration_minutes?: number
           working_hours_end?: string

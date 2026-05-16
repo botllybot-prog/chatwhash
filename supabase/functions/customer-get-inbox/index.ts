@@ -47,13 +47,13 @@ Deno.serve(async (req) => {
 
     const { data: bookings, error: bookingsError } = await supabase
       .from("bookings")
-      .select("id, booking_number, booking_date, booking_time, status, created_at, stations(name), services(name)")
+      .select("id, booking_number, booking_date, booking_time, status, created_at, customer_rating, rated_at, stations(name), services(name)")
       .in("customer_phone", customerPhones)
       .order("created_at", { ascending: false })
       .limit(20);
     if (bookingsError) return new Response(JSON.stringify({ error: bookingsError.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const visibleStatuses = new Set(["pending", "pending_owner_approval", "pending_customer_approval", "confirmed", "cancelled"]);
+    const visibleStatuses = new Set(["pending", "pending_owner_approval", "pending_customer_approval", "confirmed", "completed", "cancelled"]);
     const visibleBookings = (bookings || []).filter((booking) => visibleStatuses.has(String(booking.status || "")));
 
     return new Response(JSON.stringify({ success: true, notifications: data || [], bookings: visibleBookings }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });

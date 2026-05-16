@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Store, Wrench, CalendarCheck, Users, FileEdit,
   CreditCard, BarChart3, Settings, MessageCircle, LogOut, Car, LayoutDashboard, UserCheck, Briefcase, Megaphone,
+  Star,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -24,6 +25,7 @@ const sidebarTexts = {
     bookings: "الحجوزات",
     owners: "الحسابات",
     customers: "عملاء البوت",
+    ratings: "تقييمات الغسل",
     editRequests: "طلبات التعديل",
     subscriptions: "الاشتراكات",
     reports: "التقارير",
@@ -42,6 +44,7 @@ const sidebarTexts = {
     bookings: "Bookings",
     owners: "Accounts",
     customers: "Bot customers",
+    ratings: "Wash ratings",
     editRequests: "Edit requests",
     subscriptions: "Subscriptions",
     reports: "Reports",
@@ -60,6 +63,7 @@ const sidebarTexts = {
     bookings: "حجزەکان",
     owners: "هەژمارەکان",
     customers: "کڕیارانی بۆت",
+    ratings: "هەڵسەنگاندنەکان",
     editRequests: "داواکاری دەستکاری",
     subscriptions: "بەشدارییەکان",
     reports: "ڕاپۆرتەکان",
@@ -78,6 +82,7 @@ const sidebarTexts = {
     bookings: "Rezervasyonlar",
     owners: "Hesaplar",
     customers: "Bot müşterileri",
+    ratings: "Yıkama puanları",
     editRequests: "Düzenleme talepleri",
     subscriptions: "Abonelikler",
     reports: "Raporlar",
@@ -104,6 +109,7 @@ export function AdminSidebar() {
     { title: t.bookings, url: "/app/admin/bookings", icon: CalendarCheck, badgeKey: "bookings" as const },
     { title: t.owners, url: "/app/admin/owners", icon: Users, badgeKey: null },
     { title: t.customers, url: "/app/admin/customers", icon: UserCheck, badgeKey: null },
+    { title: t.ratings, url: "/app/admin/ratings", icon: Star, badgeKey: null },
     { title: t.editRequests, url: "/app/admin/edit-requests", icon: FileEdit, badgeKey: "editRequests" as const },
     { title: t.subscriptions, url: "/app/admin/subscriptions", icon: CreditCard, badgeKey: null },
     { title: t.reports, url: "/app/admin/reports", icon: BarChart3, badgeKey: null },

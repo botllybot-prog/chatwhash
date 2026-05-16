@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap, Marker, OverlayView, useJsApiLoader } from "@react-google-maps/api";
 import { useCallback } from "react";
+import { Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,8 @@ import {
   Navigation,
   RotateCw,
   Search,
+  Star,
+  ThumbsUp,
   Wrench,
   X,
 } from "lucide-react";
@@ -556,6 +559,8 @@ type Station = {
   scheduling_type: "slots" | "instant" | "daily";
   slot_duration_minutes: number;
   is_active: boolean;
+  rating_average?: number | null;
+  rating_count?: number | null;
 };
 
 type Service = {
@@ -1495,6 +1500,8 @@ const StationsMap = () => {
   );
   const [customerBookingEdits, setCustomerBookingEdits] = useState<Record<string, { date: string; time: string }>>({});
   const [customerActionBusy, setCustomerActionBusy] = useState<Record<string, boolean>>({});
+  const [customerRatingBusy, setCustomerRatingBusy] = useState<Record<string, boolean>>({});
+  const [showRatingForBooking, setShowRatingForBooking] = useState<Record<string, boolean>>({});
   const [showFullCustomerInbox, setShowFullCustomerInbox] = useState(false);
   const { language, isRtl } = useAppLanguage();
 
@@ -2009,6 +2016,38 @@ const StationsMap = () => {
     }
   };
 
+  const handleCustomerRating = async (bookingId: string, rating: number) => {
+    const session = getCustomerSession();
+    if (!session) return;
+
+    setCustomerRatingBusy((prev) => ({ ...prev, [bookingId]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-submit-rating", {
+        body: {
+          booking_id: bookingId,
+          rating,
+          customer_phone: session.customerPhone,
+          session_token: session.sessionToken,
+        },
+      });
+
+      if (error || (data as any)?.error) {
+        toast({
+          title: "تعذر إرسال التقييم",
+          description: (data as any)?.error || error?.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({ title: "شكراً لتقييمك", description: "تم إرسال تقييم الغسل إلى الإدارة." });
+      setShowRatingForBooking((prev) => ({ ...prev, [bookingId]: false }));
+      await refreshCustomerInbox(false);
+    } finally {
+      setCustomerRatingBusy((prev) => ({ ...prev, [bookingId]: false }));
+    }
+  };
+
   useEffect(() => {
     if (!trackedPhone || trackedBookings.length === 0) return;
     const ids = trackedBookings.map((b) => b.bookingId).filter(Boolean);
@@ -2195,13 +2234,36 @@ const StationsMap = () => {
                   }}
                 >
                   {userLocation && <Marker position={userLocation} />}
-                  {filteredStations.map((station) => (
-                    <Marker
-                      key={station.id}
-                      position={{ lat: station.latitude!, lng: station.longitude! }}
-                      onClick={() => handleMarkerClick(station)}
-                    />
-                  ))}
+                  {filteredStations.map((station) => {
+                    const ratingAverage = Number(station.rating_average || 0);
+                    const ratingCount = Number(station.rating_count || 0);
+                    const hasRating = ratingCount > 0 && ratingAverage > 0;
+
+                    return (
+                      <Fragment key={station.id}>
+                        <Marker
+                          position={{ lat: station.latitude!, lng: station.longitude! }}
+                          onClick={() => handleMarkerClick(station)}
+                        />
+                        {hasRating && (
+                          <OverlayView
+                            position={{ lat: station.latitude!, lng: station.longitude! }}
+                            mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleMarkerClick(station)}
+                              className="flex -translate-x-1/2 -translate-y-[54px] items-center gap-1 rounded-full border border-amber-200 bg-white px-2 py-1 text-xs font-bold text-slate-900 shadow-lg"
+                            >
+                              <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                              <span>{ratingAverage.toFixed(1)}</span>
+                              <span className="text-[10px] text-slate-500">({ratingCount})</span>
+                            </button>
+                          </OverlayView>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </GoogleMap>
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
@@ -2283,6 +2345,11 @@ const StationsMap = () => {
                 };
                 const canAct = activeCustomerStatuses.has(status);
                 const busy = !!customerActionBusy[b.id];
+                const ratingBusy = !!customerRatingBusy[b.id];
+                const ratingValue = Number(b.customer_rating || 0);
+                const canFinishAndRate = status === "confirmed" && !ratingValue;
+                const canRateCompleted = status === "completed" && !ratingValue;
+                const showRatingStars = !!showRatingForBooking[b.id] || canRateCompleted;
                 const awaitingCustomerApproval = status === "pending_customer_approval";
 
                 return (
@@ -2344,6 +2411,61 @@ const StationsMap = () => {
                         >
                           إلغاء
                         </Button>
+                      </div>
+                    )}
+
+                    {ratingValue > 0 && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                        <span className="font-semibold">تقييمك:</span>
+                        <span className="flex items-center gap-0.5">
+                          {Array.from({ length: 5 }, (_, index) => (
+                            <Star
+                              key={index}
+                              className={`h-4 w-4 ${index < ratingValue ? "fill-amber-400 text-amber-400" : "text-amber-200"}`}
+                            />
+                          ))}
+                        </span>
+                      </div>
+                    )}
+
+                    {canFinishAndRate && !showRatingStars && (
+                      <Button
+                        variant="outline"
+                        className="mt-3 gap-2 border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                        disabled={ratingBusy}
+                        onClick={() => setShowRatingForBooking((prev) => ({ ...prev, [b.id]: true }))}
+                      >
+                        <ThumbsUp className="h-4 w-4" />
+                        تأكيد إتمام المهمة
+                      </Button>
+                    )}
+
+                    {showRatingStars && !ratingValue && (
+                      <div className="mt-3 rounded-2xl border border-amber-200 bg-gradient-to-l from-amber-50 to-white p-3">
+                        <div className="mb-2 text-sm font-semibold text-slate-900">قيّم الغسل من 1 إلى 5 نجوم</div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {Array.from({ length: 5 }, (_, index) => {
+                            const rating = index + 1;
+                            return (
+                              <button
+                                key={rating}
+                                type="button"
+                                disabled={ratingBusy}
+                                onClick={() => handleCustomerRating(b.id, rating)}
+                                className="rounded-full p-1 transition hover:scale-110 disabled:opacity-50"
+                                aria-label={`تقييم ${rating}`}
+                              >
+                                <Star className="h-8 w-8 fill-amber-400 text-amber-400 drop-shadow-sm" />
+                              </button>
+                            );
+                          })}
+                          {ratingBusy && (
+                            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              جاري إرسال التقييم...
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

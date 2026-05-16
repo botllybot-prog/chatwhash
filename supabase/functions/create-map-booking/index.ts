@@ -1,6 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { consumeStationRequestQuota, loadAppSettings } from "../_shared/request-packages.ts";
-import { sendWhatsAppInteractiveReliable, sendWhatsAppTextReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -247,99 +246,6 @@ async function verifySpinToken(
     payload.customer_phone === expected.customer_phone &&
     payload.discount_percent === expected.discount_percent
   );
-}
-
-async function getSettings(supabase: ReturnType<typeof createClient>) {
-  const { data } = await supabase.from("app_settings").select("key, value");
-  const settings: Record<string, string> = {};
-  for (const row of data || []) settings[row.key] = row.value;
-  return settings;
-}
-
-async function sendWhatsAppMessage(
-  phone: string,
-  message: string,
-  settings: Record<string, string>,
-  language?: Language,
-) {
-  const result = await sendWhatsAppTextReliable({
-    phone,
-    message,
-    settings,
-    language,
-  });
-
-  if (!result.ok) {
-    console.error("[create-map-booking] WhatsApp text send failed:", result.error);
-  }
-}
-
-async function sendWhatsAppInteractive(
-  phone: string,
-  body: string,
-  buttons: { id: string; title: string }[],
-  settings: Record<string, string>,
-  language?: Language,
-) {
-  const result = await sendWhatsAppInteractiveReliable({
-    phone,
-    body,
-    buttons,
-    settings,
-    language,
-  });
-
-  if (!result.ok) {
-    console.error("[create-map-booking] WhatsApp interactive send failed:", result.error);
-  }
-
-  return result.messageId;
-}
-
-async function getOrCreateSession(supabase: ReturnType<typeof createClient>, phone: string) {
-  const { data: existing } = await supabase
-    .from("bot_sessions")
-    .select("*")
-    .eq("customer_phone", phone)
-    .maybeSingle();
-
-  if (existing && new Date(existing.expires_at) > new Date()) return existing;
-
-  const sessionData = {
-    customer_phone: phone,
-    current_step: "idle",
-    selected_station_id: null,
-    selected_service_id: null,
-    selected_date: null,
-    selected_time: null,
-    vehicle_details: null,
-    pending_booking_id: null,
-    expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  if (existing) {
-    await supabase.from("bot_sessions").update(sessionData).eq("id", existing.id);
-    return { ...existing, ...sessionData };
-  }
-
-  const { data: created } = await supabase.from("bot_sessions").insert(sessionData).select().single();
-  return created;
-}
-
-async function updateSession(
-  supabase: ReturnType<typeof createClient>,
-  phone: string,
-  updates: Record<string, unknown>,
-) {
-  await supabase
-    .from("bot_sessions")
-    .update({
-      ...updates,
-      expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("customer_phone", phone);
 }
 
 Deno.serve(async (req) => {
@@ -635,16 +541,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    const dateLabel = new Date(bookingDate).toLocaleDateString(tt.dateLocale, {
-      calendar: "gregory",
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-
-    const pendingMsg = `📩 ${tt.labels.newMapBooking}\n\n🏪 ${tt.labels.station}: ${stationName}\n🧽 ${tt.labels.service}: ${service.name}\n🎯 ${tt.labels.discount}: (${spinDiscountPercent})%\n📅 ${tt.labels.date}: ${dateLabel}\n⏰ ${tt.labels.time}: ${formatTime(bookingTime)}\n🔢 ${tt.labels.bookingNo}: #${booking.booking_number}\n\n⏳ ${tt.labels.customerPending}`;
-    const notificationTasks: Promise<unknown>[] = [sendWhatsAppMessage(customerPhone, pendingMsg, settings, language)];
     await supabase.from("customer_notifications").insert({
       customer_phone: customerPhone,
       title: "تم استلام طلب الحجز",
@@ -652,32 +548,8 @@ Deno.serve(async (req) => {
       reference_booking_id: booking.id,
     });
 
-    if (owner?.owner_phone) {
-      const ownerPhone = normalizePhone(owner.owner_phone);
-      const ownerMsg = `📢 ${tt.labels.newMapBooking}!\n\n🏪 ${tt.labels.station}: ${stationName}\n🔢 ${tt.labels.bookingNo}: #${booking.booking_number}\n👤 ${tt.labels.customer}: ${customerName}\n📱 ${tt.labels.phone}: ${customerPhone}\n🧽 ${tt.labels.service}: ${service.name}\n🎯 ${tt.labels.discount}: (${spinDiscountPercent})%\n📅 ${tt.labels.date}: ${dateLabel}\n⏰ ${tt.labels.time}: ${formatTime(bookingTime)}\n\n${tt.labels.ownerChoose}`;
 
-      await getOrCreateSession(supabase, ownerPhone);
-      await updateSession(supabase, ownerPhone, {
-        current_step: "owner_approve_reject",
-        pending_booking_id: booking.id,
-        selected_station_id: stationId,
-      });
-
-      notificationTasks.push(
-        sendWhatsAppInteractive(
-          ownerPhone,
-          ownerMsg,
-          [
-            { id: "approve_yes", title: tt.ownerButtons.approve },
-            { id: "approve_no", title: tt.ownerButtons.reject },
-          ],
-          settings,
-          language,
-        ),
-      );
-    }
-
-    await Promise.allSettled(notificationTasks);
+    // Booking decisions now stay inside the web/app inbox. WhatsApp is reserved for OTP, subscriptions, and admin broadcasts.
 
     return new Response(
       JSON.stringify({

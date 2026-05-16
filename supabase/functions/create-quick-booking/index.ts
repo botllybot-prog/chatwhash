@@ -1,6 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { consumeStationRequestQuota } from "../_shared/request-packages.ts";
-import { sendWhatsAppInteractiveReliable, sendWhatsAppTextReliable } from "../_shared/whatsapp-reliable.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -171,13 +170,13 @@ async function getSettings(supabase: any) {
   return settings;
 }
 
-type OwnerStationInfo = { ownerPhone: string; ownerActive: boolean };
+type OwnerStationInfo = { ownerPhone: string; ownerActive: boolean; userId: string | null };
 
 async function getStationOwnerInfoMap(supabase: any): Promise<Map<string, OwnerStationInfo>> {
   const { data } = await supabase
     .from("station_owners")
-    .select("station_id, owner_phone, is_active, created_at")
-    .not("owner_phone", "is", null);
+    .select("station_id, owner_phone, user_id, is_active, created_at")
+    .not("user_id", "is", null);
 
   const ownerMap = new Map<string, OwnerStationInfo>();
   const sortedRows = [...(data || [])].sort((a: any, b: any) => {
@@ -188,68 +187,17 @@ async function getStationOwnerInfoMap(supabase: any): Promise<Map<string, OwnerS
 
   for (const row of sortedRows) {
     const stationId = String(row.station_id || "");
-    const ownerPhone = normalizePhone(String(row.owner_phone || ""));
+    const ownerPhone = row.owner_phone ? normalizePhone(String(row.owner_phone || "")) : "";
     const ownerActive = row.is_active !== false;
-    if (!stationId || !ownerPhone) continue;
+    const userId = String(row.user_id || "");
+    if (!stationId || !userId) continue;
     // Keep the newest owner row per station only.
     // This ensures "suspended/paused" latest state is respected.
     if (!ownerMap.has(stationId)) {
-      ownerMap.set(stationId, { ownerPhone, ownerActive });
+      ownerMap.set(stationId, { ownerPhone, ownerActive, userId });
     }
   }
   return ownerMap;
-}
-
-async function sendWhatsAppInteractive(
-  to: string,
-  body: string,
-  buttons: { id: string; title: string }[],
-  settings: Record<string, string>,
-  language?: Language,
-) {
-  try {
-    const result = await sendWhatsAppInteractiveReliable({
-      phone: to,
-      body,
-      buttons,
-      settings,
-      language,
-    });
-
-    if (!result.ok) {
-      console.error("[create-quick-booking] WhatsApp interactive send failed:", result.error);
-    }
-
-    return result.messageId;
-  } catch (error) {
-    console.error("[create-quick-booking] WhatsApp interactive send crashed:", error);
-    return null;
-  }
-}
-
-async function sendWhatsAppText(
-  to: string,
-  body: string,
-  settings: Record<string, string>,
-  language?: Language,
-) {
-  try {
-    const result = await sendWhatsAppTextReliable({
-      phone: to,
-      message: body,
-      settings,
-      language,
-    });
-
-    if (!result.ok) {
-      console.error("[create-quick-booking] WhatsApp text send failed:", result.error);
-    }
-
-    return result.messageId;
-  } catch (error) {
-    console.error("[create-quick-booking] WhatsApp text send crashed:", error);
-    return null;
-  }
 }
 
 Deno.serve(async (req) => {
@@ -387,8 +335,8 @@ Deno.serve(async (req) => {
           return null;
         }
         const ownerInfo = ownerInfoMap.get(station.id);
-        if (!ownerInfo?.ownerPhone) {
-          skippedStations.push({ station_id: station.id, station_name: station.name, reason: "missing_owner_phone" });
+        if (!ownerInfo?.userId) {
+          skippedStations.push({ station_id: station.id, station_name: station.name, reason: "missing_owner_account" });
           return null;
         }
         if (!ownerInfo.ownerActive) {
@@ -414,12 +362,13 @@ Deno.serve(async (req) => {
           station,
           service: firstService,
           ownerPhone: ownerInfo.ownerPhone,
+          ownerUserId: ownerInfo.userId,
           distance,
         };
       })
       .filter(Boolean)
       .sort((a: any, b: any) => a.distance - b.distance) as {
-        station: StationRow; service: ServiceRow; distance: number; ownerPhone: string
+        station: StationRow; service: ServiceRow; distance: number; ownerPhone: string; ownerUserId: string | null
       }[];
 
     const matched = ranked;
@@ -541,42 +490,16 @@ Deno.serve(async (req) => {
         reference_booking_id: booking.id,
       });
 
-      if (item.ownerPhone) {
-        const ownerPhone = item.ownerPhone;
-        const ownerText =
-          `📢 ${msg.ownerTitle}\n\n` +
-          `👤 ${msg.customer}: ${customerName}\n` +
-          `📱 ${msg.phone}: ${customerPhone}\n` +
-          `🔧 ${msg.service}: ${item.service.name}\n` +
-          `📅 ${msg.date}: ${bookingDate}\n` +
-          `🕐 ${msg.time}: ${bookingTime}\n` +
-          `🏷️ ${msg.bookingNo}: #${booking.booking_number ?? "---"}\n\n` +
-          `${msg.ownerHint}`;
-
-        await sendWhatsAppInteractive(
-          ownerPhone,
-          ownerText,
-          [
-            { id: `approve_yes_${booking.id}`, title: msg.approve },
-            { id: `approve_no_${booking.id}`, title: msg.reject },
-            { id: `change_time_${booking.id}`, title: msg.changeTime },
-          ],
-          settings,
-          language,
-        );
-
-        await supabase.from("bot_sessions").upsert(
-          {
-            customer_phone: ownerPhone,
-            current_step: "owner_approve_reject",
-            pending_booking_id: booking.id,
-            selected_station_id: item.station.id,
-            expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "customer_phone" },
-        );
+      if (item.ownerUserId) {
+        await supabase.from("notifications").insert({
+          user_id: item.ownerUserId,
+          title: msg.ownerTitle,
+          body: `${customerName} - ${item.service.name} - ${bookingDate} ${bookingTime} - #${booking.booking_number}`,
+          type: "booking",
+          reference_id: booking.id,
+        });
       }
+
     }
 
     if (bookingRows.length === 0) {
@@ -585,44 +508,6 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const targetCount = bookingRows.length;
-    const waitingOwnerReply =
-      language === "en"
-        ? `Your request was sent to ${targetCount} station(s) and we are waiting for the first response. You can submit again later for different nearby stations if you still have fewer than 3 active bookings.`
-        : language === "tr"
-          ? `Talebiniz ${targetCount} istasyona gönderildi ve yanıt bekleniyor.`
-          : language === "ku"
-            ? `داواکارییەکەت بۆ ${targetCount} وێستگە نێردرا و چاوەڕێی وەڵام دەکەین.`
-            : `تم إرسال طلبك إلى ${targetCount} محطة وبانتظار الرد. يمكنك التقديم مرة أخرى لاحقاً لمحطات مختلفة إذا بقي لديك أقل من 3 حجوزات نشطة.`;
-
-    const customerWaitingMessage =
-      language === "ar"
-        ? `${waitingOwnerReply}\n\nفي حال تأخر الرد عليك بإمكانك الرجوع إلى الخريطة والتقديم مرة أخرى كحجز سريع، وسيذهب الطلب لمحطات أخرى مختلفة.`
-        : waitingOwnerReply;
-
-    await sendWhatsAppInteractive(
-      customerPhone,
-      customerWaitingMessage,
-      [
-        { id: "quick_targets", title: "المحطات الحالية" },
-        { id: "quick_cancel_all", title: "إلغاء الحجوزات" },
-        { id: "quick_map", title: "العودة للخريطة" },
-      ],
-      settings,
-      language,
-    );
-
-    await supabase.from("bot_sessions").upsert(
-      {
-        customer_phone: customerPhone,
-        current_step: "quick_booking_waiting",
-        timeout_request_id: requestRow?.id || null,
-        expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "customer_phone" },
-    );
 
     return new Response(
       JSON.stringify({

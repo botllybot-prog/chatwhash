@@ -4,11 +4,11 @@ Last updated: 2026-05-10
 
 ## Overview
 
-Washlly uses Supabase as the backend for the website and mobile app.
+Washlly uses Supabase as the backend for the website.
 
 - Supabase project URL: `https://yhklvtzonvgzkodysawu.supabase.co`
 - Edge Functions base URL: `https://yhklvtzonvgzkodysawu.supabase.co/functions/v1`
-- Public anon key: stored in `src/integrations/supabase/client.ts` and `mobile-app/src/lib/supabase.ts`
+- Public anon key: stored in `src/integrations/supabase/client.ts`
 - Auth: Supabase Auth JWT for protected dashboard operations.
 - Admin/server-only work: Supabase Edge Functions use `SUPABASE_SERVICE_ROLE_KEY` internally.
 
@@ -78,7 +78,6 @@ For browser/mobile calls using `supabase.functions.invoke()`, Supabase automatic
 | --- | --- |
 | `/` | Landing page |
 | `/map` | Full web map, quick booking, regular booking, install button |
-| `/mobile-map` | Compact map for the native mobile app WebView only |
 | `/stations-list` | Public station list |
 | `/owner` | Owner registration/login |
 | `/login` | Admin/employee/station owner login |
@@ -534,30 +533,6 @@ curl -X PATCH "https://yhklvtzonvgzkodysawu.supabase.co/rest/v1/bookings?id=eq.<
   -H "Content-Type: application/json" \
   -d '{ "status": "confirmed" }'
 ```
-
-## Mobile App APIs
-
-Mobile app uses the same Supabase backend.
-
-Primary files:
-
-- `mobile-app/src/lib/supabase.ts`
-- `mobile-app/src/lib/bookingApi.ts`
-- `mobile-app/src/lib/ownerApi.ts`
-- `mobile-app/src/lib/subscriptionApi.ts`
-- `mobile-app/src/lib/stations.ts`
-
-Mobile booking API wrappers:
-
-| Function | Backend |
-| --- | --- |
-| `spinBookingDiscount()` | `spin-booking-discount` |
-| `createMapBooking()` | `create-map-booking` |
-| `createQuickBooking()` | `create-quick-booking` |
-| `cancelMapBooking()` | `cancel-map-booking` |
-| `cancelAllMapBookings()` | `cancel-all-map-bookings` |
-| `fetchCustomerBookings()` | direct `bookings` query |
-| `fetchStationsWithServices()` | direct `stations` and `services` queries |
 
 ## Environment Variables and Settings
 

@@ -13,7 +13,6 @@ import StationsList from "./pages/StationsList";
 import Conversations from "./pages/Conversations";
 import StationPortal from "./pages/StationPortal";
 import StationsMap from "./pages/StationsMap";
-import MobileAppMap from "./pages/MobileAppMap";
 import Login from "./pages/Login";
 import OwnerAccess from "./pages/OwnerAccess";
 import NotFound from "./pages/NotFound";
@@ -30,6 +29,7 @@ import AdminSettings from "./pages/admin/AdminSettings";
 import AdminCustomers from "./pages/admin/AdminCustomers";
 import AdminEmployees from "./pages/admin/AdminEmployees";
 import AdminBroadcast from "./pages/admin/AdminBroadcast";
+import AdminRatings from "./pages/admin/AdminRatings";
 import EmployeeLayout from "./components/EmployeeLayout";
 import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 import CustomerLogin from "./pages/CustomerLogin";
@@ -54,6 +54,7 @@ const ProtectedRoutes = () => (
         <Route path="reports" element={<AdminReports />} />
         <Route path="settings" element={<AdminSettings />} />
         <Route path="customers" element={<AdminCustomers />} />
+        <Route path="ratings" element={<AdminRatings />} />
         <Route path="employees" element={<AdminEmployees />} />
         <Route path="broadcast" element={<AdminBroadcast />} />
       </Route>
@@ -79,7 +80,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          {window.location.pathname !== "/mobile-map" ? <LanguageSwitcher /> : null}
+          <LanguageSwitcher />
           <Routes>
             {/* Public pages with mobile bottom nav */}
             <Route element={<MobileLayout />}>
@@ -87,7 +88,6 @@ const App = () => (
               <Route path="/stations-list" element={<StationsList />} />
               <Route path="/map" element={<CustomerMapGuard><StationsMap /></CustomerMapGuard>} />
             </Route>
-            <Route path="/mobile-map" element={<MobileAppMap />} />
             <Route path="/customer-login" element={<CustomerLogin />} />
             <Route path="/login" element={<Login />} />
             <Route path="/owner" element={<OwnerAccess />} />
