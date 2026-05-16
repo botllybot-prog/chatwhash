@@ -890,6 +890,9 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
   const [bookingEdits, setBookingEdits] = useState<Record<string, { date: string; time: string }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const bookingActivityRef = useRef("");
+  const [ownerNotificationPermission, setOwnerNotificationPermission] = useState<NotificationPermission | "unsupported">(
+    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported",
+  );
   const statusLabels: Record<string, string> = {
     pending: t.pending,
     pending_owner_approval: t.pending,
@@ -924,6 +927,40 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
     }
   }, []);
 
+  const showOwnerScreenNotice = useCallback((title: string, body?: string) => {
+    toast({ title, description: body });
+
+    if (typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") {
+      return;
+    }
+
+    try {
+      new Notification(title, {
+        body,
+        icon: "/pwa-icon-192.png",
+        tag: "washlly-owner-bookings",
+      });
+    } catch {
+      // Browser notifications can be unavailable on some mobile browsers.
+    }
+  }, []);
+
+  const requestOwnerNotificationPermission = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setOwnerNotificationPermission("unsupported");
+      toast({ title: "الإشعارات غير مدعومة", description: "هذا المتصفح لا يدعم إشعارات الشاشة." });
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    setOwnerNotificationPermission(permission);
+    if (permission === "granted") {
+      showOwnerScreenNotice("تم تفعيل تنبيهات الحجوزات", "سيظهر تنبيه عند وصول أو تحديث حجز.");
+    } else {
+      toast({ title: "لم يتم تفعيل الإشعارات", description: "يمكن تفعيلها لاحقاً من إعدادات المتصفح." });
+    }
+  }, [showOwnerScreenNotice]);
+
   const load = useCallback(async (notifyOnChange = false) => {
     let q = supabase.from("bookings").select("*, services(name, price)").eq("station_id", stationId).order("created_at", { ascending: false }).limit(100);
     if (filterStatus !== "all") q = q.eq("status", filterStatus as any);
@@ -932,7 +969,7 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
       const fingerprint = data.map((row) => `${row.id}:${row.status}:${row.booking_date}:${row.booking_time || ""}`).join("|");
       if (notifyOnChange && bookingActivityRef.current && fingerprint !== bookingActivityRef.current) {
         playOwnerBell();
-        toast({ title: t.newBooking, description: t.bookingReceived });
+        showOwnerScreenNotice(t.newBooking, t.bookingReceived);
       }
       bookingActivityRef.current = fingerprint;
       setBookings(data);
@@ -949,7 +986,7 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
         return next;
       });
     }
-  }, [stationId, filterStatus, playOwnerBell, t]);
+  }, [stationId, filterStatus, playOwnerBell, showOwnerScreenNotice, t]);
 
   useEffect(() => { load(false); }, [load]);
 
@@ -991,6 +1028,11 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
           <SelectTrigger className="w-40"><SelectValue placeholder={t.status} /></SelectTrigger>
           <SelectContent><SelectItem value="all">{t.allStatuses}</SelectItem><SelectItem value="pending">{t.pending}</SelectItem><SelectItem value="confirmed">{t.confirmed}</SelectItem><SelectItem value="completed">{t.completed}</SelectItem><SelectItem value="cancelled">{t.cancelled}</SelectItem></SelectContent>
         </Select>
+        {ownerNotificationPermission !== "granted" && ownerNotificationPermission !== "unsupported" && (
+          <Button variant="outline" size="sm" onClick={requestOwnerNotificationPermission}>
+            تفعيل التنبيه
+          </Button>
+        )}
       </div>
       <Table>
         <TableHeader><TableRow><TableHead>#</TableHead><TableHead>{t.customer}</TableHead><TableHead>{t.service}</TableHead><TableHead>{t.date}</TableHead><TableHead>{t.time}</TableHead><TableHead>{t.status}</TableHead><TableHead>{t.action}</TableHead></TableRow></TableHeader>

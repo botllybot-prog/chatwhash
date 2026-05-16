@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
       .select("id, customer_phone, status, booking_number, booking_date, booking_time, customer_name, station_id, stations(name)")
       .eq("id", bookingId)
       .maybeSingle();
-    if (!booking || String(booking.customer_phone) !== customerPhone) {
+    if (!booking || normalizePhone(String(booking.customer_phone || "")) !== customerPhone) {
       return new Response(JSON.stringify({ error: "Booking not found" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

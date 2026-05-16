@@ -594,7 +594,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "station_owner"
-      booking_status: "pending" | "confirmed" | "completed" | "cancelled"
+      booking_status: "pending" | "pending_owner_approval" | "pending_customer_approval" | "confirmed" | "completed" | "cancelled"
       edit_request_status: "pending" | "approved" | "rejected"
       payment_status: "paid" | "pending" | "failed" | "refunded"
       scheduling_type: "slots" | "instant" | "daily"
@@ -728,7 +728,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "station_owner"],
-      booking_status: ["pending", "confirmed", "completed", "cancelled"],
+      booking_status: ["pending", "pending_owner_approval", "pending_customer_approval", "confirmed", "completed", "cancelled"],
       edit_request_status: ["pending", "approved", "rejected"],
       payment_status: ["paid", "pending", "failed", "refunded"],
       scheduling_type: ["slots", "instant", "daily"],

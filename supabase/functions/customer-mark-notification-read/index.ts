@@ -14,6 +14,14 @@ function normalizePhone(phone: string) {
   return cleaned;
 }
 
+function phoneVariants(phone: string) {
+  const normalized = normalizePhone(phone);
+  const variants = new Set<string>([normalized]);
+  if (/^9647\d{9}$/.test(normalized)) variants.add(`0${normalized.slice(3)}`);
+  if (normalized) variants.add(`+${normalized}`);
+  return [...variants].filter(Boolean);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") {
@@ -24,6 +32,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const body = await req.json();
     const customerPhone = normalizePhone(String(body.customer_phone || ""));
+    const customerPhones = phoneVariants(customerPhone);
     const sessionToken = String(body.session_token || "");
     const notificationId = String(body.notification_id || "").trim();
     const markAll = Boolean(body.mark_all);
@@ -34,7 +43,7 @@ Deno.serve(async (req) => {
       .eq("session_token", sessionToken)
       .maybeSingle();
 
-    if (!session || session.customer_phone !== customerPhone || new Date(session.expires_at).getTime() < Date.now()) {
+    if (!session || normalizePhone(String(session.customer_phone || "")) !== customerPhone || new Date(session.expires_at).getTime() < Date.now()) {
       return new Response(JSON.stringify({ error: "Invalid session" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -42,7 +51,7 @@ Deno.serve(async (req) => {
       const { error } = await supabase
         .from("customer_notifications")
         .update({ is_read: true })
-        .eq("customer_phone", customerPhone)
+        .in("customer_phone", customerPhones)
         .eq("is_read", false);
       if (error) throw error;
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -56,7 +65,7 @@ Deno.serve(async (req) => {
       .from("customer_notifications")
       .update({ is_read: true })
       .eq("id", notificationId)
-      .eq("customer_phone", customerPhone);
+      .in("customer_phone", customerPhones);
     if (error) throw error;
 
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });

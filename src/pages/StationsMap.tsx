@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1492,6 +1493,12 @@ const StationsMap = () => {
   const inboxCountRef = useRef(0);
   const customerActivityRef = useRef("");
   const [loadingInbox, setLoadingInbox] = useState(false);
+  const [customerInboxError, setCustomerInboxError] = useState("");
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(
+    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported",
+  );
+  const [customerBookingEdits, setCustomerBookingEdits] = useState<Record<string, { date: string; time: string }>>({});
+  const [customerActionBusy, setCustomerActionBusy] = useState<Record<string, boolean>>({});
   const { language, isRtl } = useAppLanguage();
 
   const t = translations[language];
@@ -1537,7 +1544,7 @@ const StationsMap = () => {
     }
   }, [trackedPhone]);
 
-  const playInboxBell = () => {
+  const playInboxBell = useCallback(() => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const oscillator = audioCtx.createOscillator();
@@ -1554,44 +1561,118 @@ const StationsMap = () => {
     } catch {
       // ignore audio errors
     }
-  };
+  }, []);
 
-  useEffect(() => {
-    const loadInbox = async () => {
-      const session = getCustomerSession();
-      if (!session) {
-        setCustomerInbox([]);
-        return;
-      }
-      setLoadingInbox(true);
-      const { data } = await supabase.functions.invoke("customer-get-inbox", {
+  const showCustomerScreenNotice = useCallback((title: string, body?: string) => {
+    toast({ title, description: body });
+
+    if (typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") {
+      return;
+    }
+
+    try {
+      new Notification(title, {
+        body,
+        icon: "/pwa-icon-192.png",
+        tag: "washlly-customer-inbox",
+      });
+    } catch {
+      // Browser notification support differs between mobile browsers.
+    }
+  }, []);
+
+  const requestCustomerNotificationPermission = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      toast({ title: "الإشعارات غير مدعومة", description: "هذا المتصفح لا يدعم إشعارات الشاشة." });
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission === "granted") {
+      showCustomerScreenNotice("تم تفعيل إشعارات Washlly", "سيظهر تنبيه على الشاشة عند تحديث الحجز.");
+    } else {
+      toast({ title: "لم يتم تفعيل الإشعارات", description: "يمكن تفعيلها لاحقاً من إعدادات المتصفح." });
+    }
+  }, [showCustomerScreenNotice]);
+
+  const refreshCustomerInbox = useCallback(async (notifyOnChange = false) => {
+    const session = getCustomerSession();
+    if (!session) {
+      setCustomerInbox([]);
+      setCustomerBookings([]);
+      setCustomerInboxError("");
+      return;
+    }
+
+    setLoadingInbox(true);
+    setCustomerInboxError("");
+
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-get-inbox", {
         body: {
           customer_phone: session.customerPhone,
           session_token: session.sessionToken,
         },
       });
+
+      if (error || (data as any)?.error) {
+        const message = (data as any)?.error || error?.message || "تعذر تحديث صندوق البريد.";
+        setCustomerInboxError(message);
+        if (notifyOnChange) {
+          toast({ title: "تعذر تحديث صندوق البريد", description: message, variant: "destructive" });
+        }
+        return;
+      }
+
       const rows = Array.isArray((data as any)?.notifications) ? (data as any).notifications : [];
       const bookings = Array.isArray((data as any)?.bookings) ? (data as any).bookings : [];
       const unreadCount = rows.filter((row: any) => !row.is_read).length;
       const activityFingerprint = [
-        ...rows.map((row: any) => `${row.id}:${row.is_read ? "read" : "unread"}`),
+        ...rows.map((row: any) => `${row.id}:${row.created_at || ""}`),
         ...bookings.map((booking: any) => `${booking.id}:${booking.status}:${booking.booking_date}:${booking.booking_time || ""}`),
       ].join("|");
       const hasExistingActivity = customerActivityRef.current.length > 0;
       if ((unreadCount > inboxCountRef.current || (hasExistingActivity && activityFingerprint !== customerActivityRef.current))) {
         playInboxBell();
+        const latestUnread = rows.find((row: any) => !row.is_read);
+        showCustomerScreenNotice(
+          latestUnread?.title || "تحديث جديد على الحجز",
+          latestUnread?.body || "تم تحديث حالة أحد حجوزاتك داخل صندوق البريد.",
+        );
       }
       inboxCountRef.current = unreadCount;
       customerActivityRef.current = activityFingerprint;
       setCustomerInbox(rows);
       setCustomerBookings(bookings);
+      setCustomerBookingEdits((prev) => {
+        const next = { ...prev };
+        for (const booking of bookings) {
+          if (!booking?.id || next[booking.id]) continue;
+          next[booking.id] = {
+            date: booking.booking_date || formatLocalDate(new Date()),
+            time: String(booking.booking_time || "08:00").slice(0, 5),
+          };
+        }
+        return next;
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "تعذر تحديث صندوق البريد.";
+      setCustomerInboxError(message);
+      if (notifyOnChange) {
+        toast({ title: "تعذر تحديث صندوق البريد", description: message, variant: "destructive" });
+      }
+    } finally {
       setLoadingInbox(false);
-    };
+    }
+  }, [playInboxBell, showCustomerScreenNotice]);
 
-    void loadInbox();
-    const timer = window.setInterval(() => void loadInbox(), 10000);
+  useEffect(() => {
+    void refreshCustomerInbox(false);
+    const timer = window.setInterval(() => void refreshCustomerInbox(true), 7000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [refreshCustomerInbox]);
 
   const markCustomerNotificationRead = async (notificationId: string) => {
     const session = getCustomerSession();
@@ -1900,29 +1981,27 @@ const StationsMap = () => {
   ) => {
     const session = getCustomerSession();
     if (!session) return;
-    const { data, error } = await supabase.functions.invoke("customer-manage-booking", {
-      body: {
-        booking_id: bookingId,
-        action,
-        booking_date: nextDate || null,
-        booking_time: nextTime || null,
-        customer_phone: session.customerPhone,
-        session_token: session.sessionToken,
-      },
-    });
-    if (error || (data as any)?.error) {
-      toast({ title: "تعذر تعديل الحجز", description: (data as any)?.error || error?.message, variant: "destructive" });
-      return;
+    setCustomerActionBusy((prev) => ({ ...prev, [bookingId]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-manage-booking", {
+        body: {
+          booking_id: bookingId,
+          action,
+          booking_date: nextDate || null,
+          booking_time: nextTime || null,
+          customer_phone: session.customerPhone,
+          session_token: session.sessionToken,
+        },
+      });
+      if (error || (data as any)?.error) {
+        toast({ title: "تعذر تعديل الحجز", description: (data as any)?.error || error?.message, variant: "destructive" });
+        return;
+      }
+      toast({ title: action === "cancel" ? "تم إلغاء الحجز" : "تم إرسال طلب التأجيل" });
+      await refreshCustomerInbox(false);
+    } finally {
+      setCustomerActionBusy((prev) => ({ ...prev, [bookingId]: false }));
     }
-    toast({ title: "تم تحديث الحجز" });
-    const { data: refreshed } = await supabase
-      .from("bookings")
-      .select("id, booking_number, booking_date, booking_time, status, stations(name), services(name)")
-      .eq("customer_phone", session.customerPhone)
-      .in("status", ["pending", "pending_owner_approval", "pending_customer_approval", "confirmed", "cancelled"])
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setCustomerBookings(refreshed || []);
   };
 
   useEffect(() => {
@@ -1966,6 +2045,25 @@ const StationsMap = () => {
 
     return () => window.clearInterval(timer);
   }, [trackedBookings, trackedPhone, trackedStatuses]);
+
+  const unreadCustomerInboxCount = customerInbox.filter((item) => !item.is_read).length;
+  const customerStatusLabels: Record<string, string> = {
+    pending: "بانتظار موافقة المحطة",
+    pending_owner_approval: "بانتظار موافقة المحطة",
+    pending_customer_approval: "بانتظار موافقتك على الموعد الجديد",
+    confirmed: "مؤكد",
+    cancelled: "ملغي",
+    completed: "مكتمل",
+  };
+  const customerStatusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+    pending: "secondary",
+    pending_owner_approval: "secondary",
+    pending_customer_approval: "outline",
+    confirmed: "default",
+    cancelled: "destructive",
+    completed: "outline",
+  };
+  const activeCustomerStatuses = new Set(["pending", "pending_owner_approval", "pending_customer_approval", "confirmed"]);
 
   return (
     <div className="min-h-screen w-full bg-slate-50" dir={isRtl ? "rtl" : "ltr"}>
@@ -2042,48 +2140,137 @@ const StationsMap = () => {
         )}
 
         <Card className="border-blue-100 shadow-sm">
-          <CardContent className="space-y-2 p-4">
-            <div className="flex items-center justify-between gap-2 text-sm font-semibold">
-              <div className="flex items-center gap-2">
-                <Bell className="h-4 w-4" /> صندوق البريد
-                {customerInbox.some((item) => !item.is_read) && (
-                  <Badge variant="destructive">
-                    {customerInbox.filter((item) => !item.is_read).length}
-                  </Badge>
+          <CardContent className="space-y-4 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="relative flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+                  <Bell className="h-5 w-5" />
+                  {unreadCustomerInboxCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                      {unreadCustomerInboxCount}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">صندوق البريد</h3>
+                  <p className="text-xs text-muted-foreground">كل إشعارات الحجز وخيارات الإلغاء أو التأجيل تظهر هنا.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
+                  <Button variant="outline" size="sm" onClick={requestCustomerNotificationPermission}>
+                    تفعيل التنبيه
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="gap-2" onClick={() => refreshCustomerInbox(false)}>
+                  <RotateCw className={`h-4 w-4 ${loadingInbox ? "animate-spin" : ""}`} />
+                  تحديث
+                </Button>
+                {unreadCustomerInboxCount > 0 && (
+                  <Button variant="outline" size="sm" onClick={markAllCustomerNotificationsRead}>
+                    تحديد الكل كمقروء
+                  </Button>
                 )}
               </div>
-              {customerInbox.some((item) => !item.is_read) && (
-                <Button variant="outline" size="sm" onClick={markAllCustomerNotificationsRead}>
-                  تحديد الكل كمقروء
-                </Button>
-              )}
             </div>
+
+            {customerInboxError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                <div className="font-semibold">تعذر تحميل صندوق البريد</div>
+                <div className="mt-1 text-xs">{customerInboxError}</div>
+              </div>
+            )}
+
             {customerInbox.slice(0, 6).map((item) => (
               <button
                 type="button"
                 key={item.id}
                 onClick={() => !item.is_read && void markCustomerNotificationRead(item.id)}
-                className={`w-full rounded-xl border p-2 text-xs text-start ${item.is_read ? "bg-white" : "border-primary bg-primary/5"}`}
+                className={`w-full rounded-xl border p-3 text-start text-sm transition ${
+                  item.is_read ? "bg-white hover:border-blue-200" : "border-blue-300 bg-blue-50 shadow-sm"
+                }`}
               >
-                <div className="font-semibold">{item.title}</div>
-                <div className="text-muted-foreground">{item.body}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold">{item.title}</div>
+                  {!item.is_read && <Badge variant="destructive">جديد</Badge>}
+                </div>
+                <div className="mt-1 text-xs leading-6 text-muted-foreground">{item.body}</div>
               </button>
             ))}
-            {loadingInbox && <p className="text-xs text-muted-foreground">جاري تحديث صندوق البريد...</p>}
-            {customerBookings.slice(0, 8).map((b) => (
-              <div key={b.id} className="rounded-xl border bg-white p-2 text-xs">
-                <div className="font-semibold">#{b.booking_number} - {(b as any).stations?.name || "محطة"}</div>
-                <div className="text-muted-foreground">{(b as any).services?.name || "-"} | {b.booking_date} {String(b.booking_time || "").slice(0, 5)}</div>
-                <div className="mt-1">الحالة: {b.status}</div>
-                {(b.status === "pending" || b.status === "pending_owner_approval" || b.status === "pending_customer_approval" || b.status === "confirmed") && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button size="sm" variant="destructive" onClick={() => handleCustomerBookingAction(b.id, "cancel")}>إلغاء</Button>
-                    <Button size="sm" variant="outline" onClick={() => handleCustomerBookingAction(b.id, "postpone", b.booking_date, String(b.booking_time || "08:00").slice(0, 5))}>تأجيل</Button>
+
+            <div className="space-y-3">
+              {customerBookings.slice(0, 10).map((b) => {
+                const status = String(b.status || "");
+                const edit = customerBookingEdits[b.id] || {
+                  date: b.booking_date || formatLocalDate(new Date()),
+                  time: String(b.booking_time || "08:00").slice(0, 5),
+                };
+                const canAct = activeCustomerStatuses.has(status);
+                const busy = !!customerActionBusy[b.id];
+
+                return (
+                  <div key={b.id} className="rounded-2xl border bg-white p-3 text-sm shadow-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <div className="font-bold">#{b.booking_number} - {(b as any).stations?.name || "محطة"}</div>
+                        <div className="mt-1 text-xs leading-6 text-muted-foreground">
+                          {(b as any).services?.name || "-"} | {b.booking_date} {String(b.booking_time || "").slice(0, 5)}
+                        </div>
+                      </div>
+                      <Badge variant={customerStatusVariants[status] || "secondary"}>
+                        {customerStatusLabels[status] || status}
+                      </Badge>
+                    </div>
+
+                    {canAct && (
+                      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto_auto]">
+                        <Input
+                          type="date"
+                          value={edit.date}
+                          onChange={(event) =>
+                            setCustomerBookingEdits((prev) => ({
+                              ...prev,
+                              [b.id]: { date: event.target.value, time: prev[b.id]?.time || edit.time },
+                            }))
+                          }
+                        />
+                        <Input
+                          type="time"
+                          value={edit.time}
+                          onChange={(event) =>
+                            setCustomerBookingEdits((prev) => ({
+                              ...prev,
+                              [b.id]: { date: prev[b.id]?.date || edit.date, time: event.target.value },
+                            }))
+                          }
+                        />
+                        <Button
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => handleCustomerBookingAction(b.id, "postpone", edit.date, edit.time)}
+                        >
+                          {busy ? "..." : "تأجيل"}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          disabled={busy}
+                          onClick={() => handleCustomerBookingAction(b.id, "cancel")}
+                        >
+                          إلغاء
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
-            {customerBookings.length === 0 && customerInbox.length === 0 && <p className="text-xs text-muted-foreground">لا توجد إشعارات أو حجوزات حالية.</p>}
+                );
+              })}
+            </div>
+
+            {loadingInbox && <p className="text-xs text-muted-foreground">جاري تحديث صندوق البريد...</p>}
+            {customerBookings.length === 0 && customerInbox.length === 0 && !loadingInbox && (
+              <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
+                لا توجد إشعارات أو حجوزات حالية.
+              </p>
+            )}
           </CardContent>
         </Card>
 
