@@ -5,6 +5,12 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-05-17] - Customer Inbox Ratings and Booking Bot Cleanup
+
+- Added customer in-app booking rating flow, admin ratings view, and station rating summaries on the map.
+- Kept booking notifications and actions inside the web app, while cleaning the WhatsApp webhook so it no longer handles booking confirmation, cancellation, or rating flows.
+- Removed obsolete Expo mobile app code and the `/mobile-map` web route.
+
 ## [2026-05-09] - Mobile Owner Portal & Quick Booking
 
 - Updated the Expo mobile app with persistent owner login, station photo upload, editable station info, owner-side booking actions, 24-hour booking stats, compact quota summaries, and package renewal requests to admin notifications/WhatsApp.
