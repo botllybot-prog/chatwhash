@@ -2443,7 +2443,7 @@ const StationsMap = () => {
                     {showRatingStars && !ratingValue && (
                       <div className="mt-3 rounded-2xl border border-amber-200 bg-gradient-to-l from-amber-50 to-white p-3">
                         <div className="mb-2 text-sm font-semibold text-slate-900">قيّم الغسل من 1 إلى 5 نجوم</div>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-end gap-3" dir="ltr">
                           {Array.from({ length: 5 }, (_, index) => {
                             const rating = index + 1;
                             return (
@@ -2452,10 +2452,13 @@ const StationsMap = () => {
                                 type="button"
                                 disabled={ratingBusy}
                                 onClick={() => handleCustomerRating(b.id, rating)}
-                                className="rounded-full p-1 transition hover:scale-110 disabled:opacity-50"
+                                className="group flex min-w-12 flex-col items-center gap-1 rounded-2xl border border-amber-200 bg-white/70 px-2 py-2 shadow-sm transition hover:-translate-y-0.5 hover:border-amber-400 hover:bg-amber-50 hover:shadow-md disabled:opacity-50"
                                 aria-label={`تقييم ${rating}`}
                               >
-                                <Star className="h-8 w-8 fill-amber-400 text-amber-400 drop-shadow-sm" />
+                                <span className="text-xs font-bold leading-none text-slate-600 group-hover:text-amber-700">
+                                  {rating}
+                                </span>
+                                <Star className="h-8 w-8 fill-amber-200/25 text-amber-400/70 transition group-hover:fill-amber-400 group-hover:text-amber-500" />
                               </button>
                             );
                           })}
