@@ -9,6 +9,7 @@ Format: `## [YYYY-MM-DD] — Title`
 
 - Added customer in-app booking rating flow, admin ratings view, and station rating summaries on the map.
 - Improved customer rating stars with clearer 1-5 labels and lighter unselected star styling.
+- Updated API documentation for customer sessions, inbox actions, ratings, owner booking actions, and the reduced WhatsApp webhook scope.
 - Kept booking notifications and actions inside the web app, while cleaning the WhatsApp webhook so it no longer handles booking confirmation, cancellation, or rating flows.
 - Removed obsolete Expo mobile app code and the `/mobile-map` web route.
 
