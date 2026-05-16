@@ -1490,6 +1490,7 @@ const StationsMap = () => {
   const [customerBookings, setCustomerBookings] = useState<any[]>([]);
   const [customerInbox, setCustomerInbox] = useState<any[]>([]);
   const inboxCountRef = useRef(0);
+  const customerActivityRef = useRef("");
   const [loadingInbox, setLoadingInbox] = useState(false);
   const { language, isRtl } = useAppLanguage();
 
@@ -1511,24 +1512,6 @@ const StationsMap = () => {
       setTrackedPhone(session.customerPhone || "");
     }
   }, []);
-
-  useEffect(() => {
-    const loadCustomerBookings = async () => {
-      if (!trackedPhone) {
-        setCustomerBookings([]);
-        return;
-      }
-      const { data } = await supabase
-        .from("bookings")
-        .select("id, booking_number, booking_date, booking_time, status, stations(name), services(name)")
-        .eq("customer_phone", trackedPhone)
-        .in("status", ["pending", "pending_owner_approval", "pending_customer_approval", "confirmed", "cancelled"])
-        .order("created_at", { ascending: false })
-        .limit(20);
-      setCustomerBookings(data || []);
-    };
-    void loadCustomerBookings();
-  }, [trackedPhone]);
 
   useEffect(() => {
     try {
@@ -1588,10 +1571,20 @@ const StationsMap = () => {
         },
       });
       const rows = Array.isArray((data as any)?.notifications) ? (data as any).notifications : [];
+      const bookings = Array.isArray((data as any)?.bookings) ? (data as any).bookings : [];
       const unreadCount = rows.filter((row: any) => !row.is_read).length;
-      if (unreadCount > inboxCountRef.current) playInboxBell();
+      const activityFingerprint = [
+        ...rows.map((row: any) => `${row.id}:${row.is_read ? "read" : "unread"}`),
+        ...bookings.map((booking: any) => `${booking.id}:${booking.status}:${booking.booking_date}:${booking.booking_time || ""}`),
+      ].join("|");
+      const hasExistingActivity = customerActivityRef.current.length > 0;
+      if ((unreadCount > inboxCountRef.current || (hasExistingActivity && activityFingerprint !== customerActivityRef.current))) {
+        playInboxBell();
+      }
       inboxCountRef.current = unreadCount;
+      customerActivityRef.current = activityFingerprint;
       setCustomerInbox(rows);
+      setCustomerBookings(bookings);
       setLoadingInbox(false);
     };
 

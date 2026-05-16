@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Store, CalendarCheck, Bell, Pencil, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key, CreditCard, AlertTriangle, Wallet, Sparkles, Gift } from "lucide-react";
+import { Store, CalendarCheck, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key, CreditCard, AlertTriangle, Wallet, Sparkles, Gift } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useAppLanguage } from "@/lib/language";
 
@@ -889,6 +889,7 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
   const [filterStatus, setFilterStatus] = useState("all");
   const [bookingEdits, setBookingEdits] = useState<Record<string, { date: string; time: string }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const bookingActivityRef = useRef("");
   const statusLabels: Record<string, string> = {
     pending: t.pending,
     pending_owner_approval: t.pending,
@@ -899,11 +900,41 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
   };
   const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = { pending: "secondary", confirmed: "default", completed: "outline", cancelled: "destructive" };
 
-  const load = useCallback(async () => {
+  const playOwnerBell = useCallback(() => {
+    try {
+      const AudioCtor = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioCtor();
+      const now = audioCtx.currentTime;
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+      gain.connect(audioCtx.destination);
+
+      [880, 1175].forEach((frequency, index) => {
+        const oscillator = audioCtx.createOscillator();
+        oscillator.type = "sine";
+        oscillator.frequency.value = frequency;
+        oscillator.connect(gain);
+        oscillator.start(now + index * 0.18);
+        oscillator.stop(now + index * 0.18 + 0.18);
+      });
+    } catch {
+      // Browser audio can be blocked until the owner interacts with the page.
+    }
+  }, []);
+
+  const load = useCallback(async (notifyOnChange = false) => {
     let q = supabase.from("bookings").select("*, services(name, price)").eq("station_id", stationId).order("created_at", { ascending: false }).limit(100);
     if (filterStatus !== "all") q = q.eq("status", filterStatus as any);
     const { data } = await q;
     if (data) {
+      const fingerprint = data.map((row) => `${row.id}:${row.status}:${row.booking_date}:${row.booking_time || ""}`).join("|");
+      if (notifyOnChange && bookingActivityRef.current && fingerprint !== bookingActivityRef.current) {
+        playOwnerBell();
+        toast({ title: t.newBooking, description: t.bookingReceived });
+      }
+      bookingActivityRef.current = fingerprint;
       setBookings(data);
       setBookingEdits((prev) => {
         const next = { ...prev };
@@ -918,14 +949,21 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
         return next;
       });
     }
-  }, [stationId, filterStatus]);
+  }, [stationId, filterStatus, playOwnerBell, t]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(false); }, [load]);
 
   useEffect(() => {
-    const channel = supabase.channel("station-bookings").on("postgres_changes", { event: "INSERT", schema: "public", table: "bookings", filter: `station_id=eq.${stationId}` }, () => { load(); toast({ title: t.newBooking, description: t.bookingReceived }); }).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [stationId, load, t]);
+    const interval = window.setInterval(() => void load(true), 8000);
+    const channel = supabase
+      .channel(`station-bookings-${stationId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `station_id=eq.${stationId}` }, () => { void load(true); })
+      .subscribe();
+    return () => {
+      window.clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [stationId, load]);
 
   const manageBooking = async (id: string, action: "confirm" | "reject" | "postpone") => {
     setSavingId(id);
@@ -941,7 +979,7 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
       toast({ title: "تعذر تحديث الحجز", description: (data as any)?.error || error?.message, variant: "destructive" });
       return;
     }
-    load();
+    load(false);
     toast({ title: t.statusUpdated });
   };
 
@@ -1807,7 +1845,6 @@ const StationPortal = () => {
   const [ownerName, setOwnerName] = useState("");
   const [ownerMeta, setOwnerMeta] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [activeTab, setActiveTab] = useState("dashboard");
   const { language, locale, isRtl } = useAppLanguage();
   const t = texts[language];
@@ -1838,8 +1875,6 @@ const StationPortal = () => {
           setActiveTab("dashboard");
         }
       }
-      const { count } = await supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("is_read", false);
-      setUnreadCount(count || 0);
       setLoading(false);
     };
     load();
@@ -1875,8 +1910,6 @@ const StationPortal = () => {
             <TabsTrigger value="info" className="gap-1"><Store className="h-4 w-4" />{t.station}</TabsTrigger>
             <TabsTrigger value="services" className="gap-1"><Wrench className="h-4 w-4" />{t.stationServices}</TabsTrigger>
             <TabsTrigger value="bookings" className="gap-1"><CalendarCheck className="h-4 w-4" />{t.bookings}</TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-1 relative"><Bell className="h-4 w-4" />{t.notifications}{unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs rounded-full h-4 w-4 flex items-center justify-center">{unreadCount}</span>}</TabsTrigger>
-            <TabsTrigger value="edit-requests" className="gap-1"><Pencil className="h-4 w-4" />{t.editRequests}</TabsTrigger>
             <TabsTrigger value="subscription" className="gap-1"><CreditCard className="h-4 w-4" />{t.subscription}</TabsTrigger>
             <TabsTrigger value="account" className="gap-1"><Key className="h-4 w-4" />{t.account}</TabsTrigger>
           </TabsList>
@@ -1884,8 +1917,6 @@ const StationPortal = () => {
           <TabsContent value="info"><StationInfoTab stationId={stationId} t={t} /></TabsContent>
           <TabsContent value="services"><StationServicesTab stationId={stationId} t={t} /></TabsContent>
           <TabsContent value="bookings"><StationBookingsTab stationId={stationId} t={t} /></TabsContent>
-          <TabsContent value="notifications"><NotificationsTab t={t} locale={locale} isRtl={isRtl} /></TabsContent>
-          <TabsContent value="edit-requests"><MyEditRequestsTab stationId={stationId} t={t} locale={locale} /></TabsContent>
           <TabsContent value="subscription"><SubscriptionTab stationId={stationId} t={t} locale={locale} language={language as keyof typeof OWNER_PACKAGE_TEXTS} ownerMeta={ownerMeta} /></TabsContent>
           <TabsContent value="account"><AccountTab t={t} /></TabsContent>
         </Tabs>

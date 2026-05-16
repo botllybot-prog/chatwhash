@@ -35,7 +35,17 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    return new Response(JSON.stringify({ success: true, notifications: data || [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    const { data: bookings, error: bookingsError } = await supabase
+      .from("bookings")
+      .select("id, booking_number, booking_date, booking_time, status, created_at, stations(name), services(name)")
+      .eq("customer_phone", customerPhone)
+      .in("status", ["pending", "pending_owner_approval", "pending_customer_approval", "confirmed", "cancelled"])
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (bookingsError) return new Response(JSON.stringify({ error: bookingsError.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    return new Response(JSON.stringify({ success: true, notifications: data || [], bookings: bookings || [] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unexpected error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
