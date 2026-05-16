@@ -153,12 +153,18 @@ Deno.serve(async (req) => {
         : `${stationName} - ${actionLabel} #${updated.booking_number}`;
 
     if ((bookingRow as any)?.customer_phone) {
-      await supabaseAdmin.from("customer_notifications").insert({
+      const { error: customerNotifError } = await supabaseAdmin.from("customer_notifications").insert({
         customer_phone: String((bookingRow as any).customer_phone),
         title: actionLabel,
         body: customerBody,
         reference_booking_id: bookingId,
       });
+      if (customerNotifError) {
+        return new Response(JSON.stringify({ error: `Failed to notify customer: ${customerNotifError.message}` }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     return new Response(JSON.stringify({ success: true, booking: updated }), {

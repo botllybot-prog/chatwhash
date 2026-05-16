@@ -1490,6 +1490,7 @@ const StationsMap = () => {
   const [customerBookings, setCustomerBookings] = useState<any[]>([]);
   const [customerInbox, setCustomerInbox] = useState<any[]>([]);
   const inboxCountRef = useRef(0);
+  const [loadingInbox, setLoadingInbox] = useState(false);
   const { language, isRtl } = useAppLanguage();
 
   const t = translations[language];
@@ -1579,6 +1580,7 @@ const StationsMap = () => {
         setCustomerInbox([]);
         return;
       }
+      setLoadingInbox(true);
       const { data } = await supabase.functions.invoke("customer-get-inbox", {
         body: {
           customer_phone: session.customerPhone,
@@ -1586,15 +1588,43 @@ const StationsMap = () => {
         },
       });
       const rows = Array.isArray((data as any)?.notifications) ? (data as any).notifications : [];
-      if (rows.length > inboxCountRef.current) playInboxBell();
-      inboxCountRef.current = rows.length;
+      const unreadCount = rows.filter((row: any) => !row.is_read).length;
+      if (unreadCount > inboxCountRef.current) playInboxBell();
+      inboxCountRef.current = unreadCount;
       setCustomerInbox(rows);
+      setLoadingInbox(false);
     };
 
     void loadInbox();
     const timer = window.setInterval(() => void loadInbox(), 10000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const markCustomerNotificationRead = async (notificationId: string) => {
+    const session = getCustomerSession();
+    if (!session) return;
+    await supabase.functions.invoke("customer-mark-notification-read", {
+      body: {
+        customer_phone: session.customerPhone,
+        session_token: session.sessionToken,
+        notification_id: notificationId,
+      },
+    });
+    setCustomerInbox((prev) => prev.map((item) => (item.id === notificationId ? { ...item, is_read: true } : item)));
+  };
+
+  const markAllCustomerNotificationsRead = async () => {
+    const session = getCustomerSession();
+    if (!session) return;
+    await supabase.functions.invoke("customer-mark-notification-read", {
+      body: {
+        customer_phone: session.customerPhone,
+        session_token: session.sessionToken,
+        mark_all: true,
+      },
+    });
+    setCustomerInbox((prev) => prev.map((item) => ({ ...item, is_read: true })));
+  };
   const quickTimeOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
     const now = new Date();
@@ -2020,13 +2050,33 @@ const StationsMap = () => {
 
         <Card className="border-blue-100 shadow-sm">
           <CardContent className="space-y-2 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold"><Bell className="h-4 w-4" /> صندوق البريد</div>
+            <div className="flex items-center justify-between gap-2 text-sm font-semibold">
+              <div className="flex items-center gap-2">
+                <Bell className="h-4 w-4" /> صندوق البريد
+                {customerInbox.some((item) => !item.is_read) && (
+                  <Badge variant="destructive">
+                    {customerInbox.filter((item) => !item.is_read).length}
+                  </Badge>
+                )}
+              </div>
+              {customerInbox.some((item) => !item.is_read) && (
+                <Button variant="outline" size="sm" onClick={markAllCustomerNotificationsRead}>
+                  تحديد الكل كمقروء
+                </Button>
+              )}
+            </div>
             {customerInbox.slice(0, 6).map((item) => (
-              <div key={item.id} className={`rounded-xl border p-2 text-xs ${item.is_read ? "bg-white" : "border-primary bg-primary/5"}`}>
+              <button
+                type="button"
+                key={item.id}
+                onClick={() => !item.is_read && void markCustomerNotificationRead(item.id)}
+                className={`w-full rounded-xl border p-2 text-xs text-start ${item.is_read ? "bg-white" : "border-primary bg-primary/5"}`}
+              >
                 <div className="font-semibold">{item.title}</div>
                 <div className="text-muted-foreground">{item.body}</div>
-              </div>
+              </button>
             ))}
+            {loadingInbox && <p className="text-xs text-muted-foreground">جاري تحديث صندوق البريد...</p>}
             {customerBookings.slice(0, 8).map((b) => (
               <div key={b.id} className="rounded-xl border bg-white p-2 text-xs">
                 <div className="font-semibold">#{b.booking_number} - {(b as any).stations?.name || "محطة"}</div>
