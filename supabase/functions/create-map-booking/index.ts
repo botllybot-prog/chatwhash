@@ -379,6 +379,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { data: customerProfile } = await supabase
+      .from("customer_profiles")
+      .select("is_blocked")
+      .eq("customer_phone", customerPhone)
+      .maybeSingle();
+    if (customerProfile?.is_blocked) {
+      const blockedMessage = language === "ar"
+        ? "تم حظر هذا الحساب من الحجز. يرجى التواصل مع الإدارة."
+        : "This customer account is blocked from booking. Please contact support.";
+      return new Response(JSON.stringify({ error: blockedMessage }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (!spinToken || ![0, 5, 10, 15].includes(spinDiscountPercent)) {
       return new Response(JSON.stringify({ error: tt.errors.spinRequired }), {
         status: 400,

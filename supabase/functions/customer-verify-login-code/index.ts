@@ -95,9 +95,16 @@ Deno.serve(async (req) => {
 
     const { data: profile } = await supabase
       .from("customer_profiles")
-      .select("customer_name")
+      .select("customer_name, is_blocked")
       .eq("customer_phone", customerPhone)
       .maybeSingle();
+
+    if (profile?.is_blocked) {
+      return new Response(JSON.stringify({ error: "Customer account is blocked" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const token = randomToken();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();

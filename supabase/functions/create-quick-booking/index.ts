@@ -286,6 +286,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { data: customerProfile } = await supabase
+      .from("customer_profiles")
+      .select("is_blocked")
+      .eq("customer_phone", customerPhone)
+      .maybeSingle();
+    if (customerProfile?.is_blocked) {
+      const message = language === "en"
+        ? "This customer account is blocked from booking. Please contact support."
+        : "تم حظر هذا الحساب من الحجز. يرجى التواصل مع الإدارة.";
+      return new Response(JSON.stringify({ error: "customer_blocked", message }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (!Number.isFinite(customerLat) || !Number.isFinite(customerLng)) {
       const message = language === "en"
         ? "Please share your location first so we only search within 15 km."

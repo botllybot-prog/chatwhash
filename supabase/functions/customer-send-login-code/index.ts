@@ -46,6 +46,19 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { data: existingProfile } = await supabase
+      .from("customer_profiles")
+      .select("is_blocked")
+      .eq("customer_phone", customerPhone)
+      .maybeSingle();
+
+    if (existingProfile?.is_blocked) {
+      return new Response(JSON.stringify({ error: "Customer account is blocked" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const code = generateCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 

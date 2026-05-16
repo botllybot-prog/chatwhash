@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Home, List, Map, MoreHorizontal, MessageCircle } from "lucide-react";
+import { Home, MessageCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAppLanguage } from "@/lib/language";
 import { cn } from "@/lib/utils";
 
 const tabTranslations = {
-  ar: { home: "الرئيسية", stations: "المحطات", whatsapp: "واتساب", map: "الخريطة", more: "المزيد" },
-  en: { home: "Home", stations: "Stations", whatsapp: "WhatsApp", map: "Map", more: "More" },
-  ku: { home: "سەرەکی", stations: "وێستگەکان", whatsapp: "واتساپ", map: "نەخشە", more: "زیاتر" },
-  tr: { home: "Ana sayfa", stations: "İstasyonlar", whatsapp: "WhatsApp", map: "Harita", more: "Daha fazla" },
+  ar: { home: "الرئيسية", whatsapp: "واتساب" },
+  en: { home: "Home", whatsapp: "WhatsApp" },
+  ku: { home: "سەرەکی", whatsapp: "واتساپ" },
+  tr: { home: "Ana sayfa", whatsapp: "WhatsApp" },
 } as const;
 
 const MobileLayout = () => {
@@ -21,10 +21,7 @@ const MobileLayout = () => {
   const labels = tabTranslations[language];
   const tabs = [
     { key: "/", icon: Home, label: labels.home },
-    { key: "/stations-list", icon: List, label: labels.stations },
     { key: "__whatsapp__", icon: MessageCircle, label: labels.whatsapp },
-    { key: "/map", icon: Map, label: labels.map },
-    { key: "/more", icon: MoreHorizontal, label: labels.more },
   ];
 
   useEffect(() => {

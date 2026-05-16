@@ -43,13 +43,20 @@ Deno.serve(async (req) => {
 
     const { data: profile } = await supabase
       .from("customer_profiles")
-      .select("customer_name")
+      .select("customer_name, is_blocked")
       .eq("customer_phone", customerPhone)
       .maybeSingle();
 
     if (!profile) {
       return new Response(JSON.stringify({ success: false, requires_verification: true }), {
         status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (profile.is_blocked) {
+      return new Response(JSON.stringify({ error: "Customer account is blocked" }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
