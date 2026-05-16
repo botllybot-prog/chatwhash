@@ -81,7 +81,7 @@ const translations = {
     namePlaceholder: "الاسم",
     phonePlaceholder: "رقم الهاتف",
     importantNotice: "تنبيه مهم",
-    bookingLimitNotice: "يمكنك الاحتفاظ بحجزين نشطين فقط على نفس الرقم. إذا أردت إنشاء حجز جديد بعد ذلك، يجب أولاً إلغاء أحد الحجوزات القديمة.",
+    bookingLimitNotice: "يمكنك الاحتفاظ بثلاثة حجوزات نشطة فقط على نفس الرقم. إذا أردت إنشاء حجز جديد بعد ذلك، يجب أولاً إلغاء أحد الحجوزات القديمة.",
     wheelHintDefault: "لف العجلة مرة واحدة قبل تأكيد الحجز. الخصم المعتمد يكون 0% أو 5% أو 10% أو 15%.",
     wheelHintSpinning: "جاري تدوير عجلة الخصم الآن...",
     wheelHintRetry: "لف العجلة مرة واحدة فقط لهذا الحجز.",
@@ -177,7 +177,7 @@ const translations = {
     namePlaceholder: "Name",
     phonePlaceholder: "Phone number",
     importantNotice: "Important notice",
-    bookingLimitNotice: "You can keep only 2 active reservations per phone number. To make another one, cancel one of your older bookings first.",
+    bookingLimitNotice: "You can keep only 3 active reservations per phone number. To make another one, cancel one of your older bookings first.",
     wheelHintDefault: "Spin once before confirming. The saved discount is 0%, 5%, 10%, or 15%.",
     wheelHintSpinning: "Spinning the discount wheel now...",
     wheelHintRetry: "The wheel can be spun once for this booking.",
@@ -273,7 +273,7 @@ const translations = {
     namePlaceholder: "ناو",
     phonePlaceholder: "ژمارەی تەلەفۆن",
     importantNotice: "ئاگاداری گرنگ",
-    bookingLimitNotice: "تەنها دەتوانیت دوو حجزی چالاکت هەبێت بۆ هەمان ژمارە. بۆ دروستکردنی حجزێکی نوێ، یەکێک لە حجزەکانی پێشوو هەڵبوەشێنەوە.",
+    bookingLimitNotice: "تەنها دەتوانیت 3 حجزی چالاکت هەبێت بۆ هەمان ژمارە. بۆ دروستکردنی حجزێکی نوێ، یەکێک لە حجزەکانی پێشوو هەڵبوەشێنەوە.",
     wheelHintDefault: "پێش پشتڕاستکردنەوە یەکجار گەردەکە بگێڕە. داشکاندن 0%، 5%، 10%، یان 15% دەبێت.",
     wheelHintSpinning: "گەردی داشکاندن ئێستا دەسووڕێت...",
     wheelHintRetry: "گەردەکە تەنها یەکجار بۆ ئەم حجزە دەسووڕێت.",
@@ -369,7 +369,7 @@ const translations = {
     namePlaceholder: "Ad",
     phonePlaceholder: "Telefon numarası",
     importantNotice: "Önemli not",
-    bookingLimitNotice: "Aynı numara ile en fazla 2 aktif rezervasyon tutabilirsiniz. Yeni rezervasyon için önce eski rezervasyonlardan birini iptal edin.",
+    bookingLimitNotice: "Aynı numara ile en fazla 3 aktif rezervasyon tutabilirsiniz. Yeni rezervasyon için önce eski rezervasyonlardan birini iptal edin.",
     wheelHintDefault: "Onaylamadan önce çarkı bir kez çevirin. İndirim 0%, 5%, 10% veya 15% olur.",
     wheelHintSpinning: "İndirim çarkı dönüyor...",
     wheelHintRetry: "Çark bu rezervasyon için yalnızca bir kez çevrilir.",
@@ -1085,11 +1085,6 @@ function StationCard({
       return;
     }
 
-    setBookingResult({
-      bookingId: data.bookingId,
-      bookingNumber: data.bookingNumber,
-      discountPercent: spinResult.discountPercent,
-    });
     onBookingCreated?.(
       { bookingId: data.bookingId, bookingNumber: data.bookingNumber, source: "map" },
       normalizedPhone,
@@ -1099,6 +1094,7 @@ function StationCard({
       title: t.bookingCreatedToastTitle,
       description: `#${data.bookingNumber} - ${t.bookingCreatedToastDescription} (${spinResult.discountPercent})%`,
     });
+    resetSelectionAndClose();
   };
 
   const handleCancelBooking = async () => {
@@ -1499,6 +1495,7 @@ const StationsMap = () => {
   );
   const [customerBookingEdits, setCustomerBookingEdits] = useState<Record<string, { date: string; time: string }>>({});
   const [customerActionBusy, setCustomerActionBusy] = useState<Record<string, boolean>>({});
+  const [showFullCustomerInbox, setShowFullCustomerInbox] = useState(false);
   const { language, isRtl } = useAppLanguage();
 
   const t = translations[language];
@@ -1936,6 +1933,7 @@ const StationsMap = () => {
       });
     }
     setShowQuickBooking(false);
+    window.setTimeout(() => void refreshCustomerInbox(false), 500);
   };
 
   const handleCancelAllBookings = async () => {
@@ -1975,7 +1973,7 @@ const StationsMap = () => {
 
   const handleCustomerBookingAction = async (
     bookingId: string,
-    action: "cancel" | "postpone",
+    action: "cancel" | "postpone" | "accept_postpone",
     nextDate?: string,
     nextTime?: string,
   ) => {
@@ -1997,7 +1995,14 @@ const StationsMap = () => {
         toast({ title: "تعذر تعديل الحجز", description: (data as any)?.error || error?.message, variant: "destructive" });
         return;
       }
-      toast({ title: action === "cancel" ? "تم إلغاء الحجز" : "تم إرسال طلب التأجيل" });
+      toast({
+        title:
+          action === "cancel"
+            ? "تم إلغاء الحجز"
+            : action === "accept_postpone"
+              ? "تمت الموافقة على الموعد"
+              : "تم إرسال طلب التأجيل",
+      });
       await refreshCustomerInbox(false);
     } finally {
       setCustomerActionBusy((prev) => ({ ...prev, [bookingId]: false }));
@@ -2046,7 +2051,42 @@ const StationsMap = () => {
     return () => window.clearInterval(timer);
   }, [trackedBookings, trackedPhone, trackedStatuses]);
 
-  const unreadCustomerInboxCount = customerInbox.filter((item) => !item.is_read).length;
+  const uniqueCustomerBookings = useMemo(() => {
+    const seen = new Set<string>();
+    return customerBookings.filter((booking) => {
+      const key = String(booking?.id || "");
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [customerBookings]);
+
+  const uniqueCustomerBookingIds = useMemo(
+    () => new Set(uniqueCustomerBookings.map((booking) => String(booking?.id || "")).filter(Boolean)),
+    [uniqueCustomerBookings],
+  );
+
+  const uniqueCustomerInbox = useMemo(() => {
+    const seen = new Set<string>();
+    return customerInbox.filter((item) => {
+      const bookingRef = String(item.reference_booking_id || "");
+      if (bookingRef && uniqueCustomerBookingIds.has(bookingRef)) return false;
+      const key = bookingRef ? `booking:${bookingRef}` : `${item.title || ""}:${item.body || ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [customerInbox, uniqueCustomerBookingIds]);
+
+  const visibleCustomerNotifications = showFullCustomerInbox ? uniqueCustomerInbox : uniqueCustomerInbox.slice(0, 2);
+  const visibleCustomerBookings = showFullCustomerInbox ? uniqueCustomerBookings : uniqueCustomerBookings.slice(0, 2);
+  const hiddenCustomerInboxCount = Math.max(
+    0,
+    uniqueCustomerInbox.length + uniqueCustomerBookings.length
+      - Math.min(uniqueCustomerInbox.length, 2)
+      - Math.min(uniqueCustomerBookings.length, 2),
+  );
+  const unreadCustomerInboxCount = uniqueCustomerInbox.filter((item) => !item.is_read).length;
   const customerStatusLabels: Record<string, string> = {
     pending: "بانتظار موافقة المحطة",
     pending_owner_approval: "بانتظار موافقة المحطة",
@@ -2139,6 +2179,42 @@ const StationsMap = () => {
           </Card>
         )}
 
+        <Card className="overflow-hidden border-blue-100 shadow-sm">
+          <CardContent className="p-0">
+            <div className="h-[65vh] min-h-[420px] w-full">
+              {isLoaded ? (
+                <GoogleMap
+                  onLoad={(instance) => setMap(instance)}
+                  mapContainerStyle={{ width: "100%", height: "100%" }}
+                  center={userLocation || DEFAULT_CENTER}
+                  zoom={userLocation ? 12 : 7}
+                  options={{
+                    fullscreenControl: false,
+                    mapTypeControl: false,
+                    streetViewControl: false,
+                  }}
+                >
+                  {userLocation && <Marker position={userLocation} />}
+                  {filteredStations.map((station) => (
+                    <Marker
+                      key={station.id}
+                      position={{ lat: station.latitude!, lng: station.longitude! }}
+                      onClick={() => handleMarkerClick(station)}
+                    />
+                  ))}
+                </GoogleMap>
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t.loadingMap}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="border-blue-100 shadow-sm">
           <CardContent className="space-y-4 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2181,7 +2257,7 @@ const StationsMap = () => {
               </div>
             )}
 
-            {customerInbox.slice(0, 6).map((item) => (
+            {visibleCustomerNotifications.map((item) => (
               <button
                 type="button"
                 key={item.id}
@@ -2199,7 +2275,7 @@ const StationsMap = () => {
             ))}
 
             <div className="space-y-3">
-              {customerBookings.slice(0, 10).map((b) => {
+              {visibleCustomerBookings.map((b) => {
                 const status = String(b.status || "");
                 const edit = customerBookingEdits[b.id] || {
                   date: b.booking_date || formatLocalDate(new Date()),
@@ -2207,6 +2283,7 @@ const StationsMap = () => {
                 };
                 const canAct = activeCustomerStatuses.has(status);
                 const busy = !!customerActionBusy[b.id];
+                const awaitingCustomerApproval = status === "pending_customer_approval";
 
                 return (
                   <div key={b.id} className="rounded-2xl border bg-white p-3 text-sm shadow-sm">
@@ -2223,7 +2300,7 @@ const StationsMap = () => {
                     </div>
 
                     {canAct && (
-                      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto_auto]">
+                      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto_auto_auto]">
                         <Input
                           type="date"
                           value={edit.date}
@@ -2244,12 +2321,21 @@ const StationsMap = () => {
                             }))
                           }
                         />
+                        {awaitingCustomerApproval && (
+                          <Button
+                            className="bg-emerald-600 text-white hover:bg-emerald-700"
+                            disabled={busy}
+                            onClick={() => handleCustomerBookingAction(b.id, "accept_postpone")}
+                          >
+                            {busy ? "..." : "قبول الموعد"}
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           disabled={busy}
                           onClick={() => handleCustomerBookingAction(b.id, "postpone", edit.date, edit.time)}
                         >
-                          {busy ? "..." : "تأجيل"}
+                          {busy ? "..." : awaitingCustomerApproval ? "طلب وقت آخر" : "تأجيل"}
                         </Button>
                         <Button
                           variant="destructive"
@@ -2265,8 +2351,18 @@ const StationsMap = () => {
               })}
             </div>
 
+            {hiddenCustomerInboxCount > 0 && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowFullCustomerInbox((current) => !current)}
+              >
+                {showFullCustomerInbox ? "إخفاء الباقي" : `إظهار الباقي (${hiddenCustomerInboxCount})`}
+              </Button>
+            )}
+
             {loadingInbox && <p className="text-xs text-muted-foreground">جاري تحديث صندوق البريد...</p>}
-            {customerBookings.length === 0 && customerInbox.length === 0 && !loadingInbox && (
+            {uniqueCustomerBookings.length === 0 && uniqueCustomerInbox.length === 0 && !loadingInbox && (
               <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
                 لا توجد إشعارات أو حجوزات حالية.
               </p>
@@ -2274,41 +2370,6 @@ const StationsMap = () => {
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden border-blue-100 shadow-sm">
-          <CardContent className="p-0">
-            <div className="h-[65vh] min-h-[420px] w-full">
-              {isLoaded ? (
-                <GoogleMap
-                  onLoad={(instance) => setMap(instance)}
-                  mapContainerStyle={{ width: "100%", height: "100%" }}
-                  center={userLocation || DEFAULT_CENTER}
-                  zoom={userLocation ? 12 : 7}
-                  options={{
-                    fullscreenControl: false,
-                    mapTypeControl: false,
-                    streetViewControl: false,
-                  }}
-                >
-                  {userLocation && <Marker position={userLocation} />}
-                  {filteredStations.map((station) => (
-                    <Marker
-                      key={station.id}
-                      position={{ lat: station.latitude!, lng: station.longitude! }}
-                      onClick={() => handleMarkerClick(station)}
-                    />
-                  ))}
-                </GoogleMap>
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {t.loadingMap}
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {selectedStation && (
@@ -2323,6 +2384,7 @@ const StationsMap = () => {
               return [tracked, ...prev];
             });
             setTrackedStatuses((prev) => ({ ...prev, [tracked.bookingId]: prev[tracked.bookingId] || "pending" }));
+            window.setTimeout(() => void refreshCustomerInbox(false), 500);
           }}
         />
       )}

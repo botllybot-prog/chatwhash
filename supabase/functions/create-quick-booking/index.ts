@@ -25,6 +25,8 @@ type ServiceRow = {
 type Language = "ar" | "en" | "ku" | "tr";
 type ServiceKind = "surface" | "jack" | "quick";
 const QUICK_BOOKING_RADIUS_KM = 15;
+const MAX_ACTIVE_BOOKINGS = 3;
+const ACTIVE_BOOKING_STATUSES = ["pending", "pending_owner_approval", "pending_customer_approval", "confirmed"];
 
 const localizedMessages: Record<
   Language,
@@ -49,7 +51,7 @@ const localizedMessages: Record<
 > = {
   ar: {
     duplicateSameTime: "لديك حجز سابق في نفس الموعد، يرجى إلغاؤه أولاً.",
-    activeLimit: "يمكنك امتلاك حجزين نشطين كحد أقصى. ألغِ حجزاً قديماً أولاً.",
+    activeLimit: "يمكنك امتلاك 3 حجوزات نشطة كحد أقصى. ألغِ حجزاً قديماً أولاً.",
     noStations: "لا توجد محطات متاحة حالياً لهذا النوع من الخدمة.",
     requestSent: "تم إرسال طلب الحجز السريع لأقرب 3 محطات.",
     ownerTitle: "طلب حجز سريع جديد",
@@ -85,7 +87,7 @@ const localizedMessages: Record<
   },
   ku: {
     duplicateSameTime: "لە هەمان کاتدا حجزت هەیە، تکایە سەرەتا هەڵیبوەشێنەوە.",
-    activeLimit: "زۆرترین دوو حجزی چالاک دەتوانیت هەبێت. سەرەتا یەکێکی کۆن هەڵبوەشێنەوە.",
+    activeLimit: "زۆرترین 3 حجزی چالاک دەتوانیت هەبێت. سەرەتا یەکێکی کۆن هەڵبوەشێنەوە.",
     noStations: "هیچ وێستگەیەکی بەردەست بۆ ئەم جۆرە خزمەتگوزارییە نییە.",
     requestSent: "داواکاری حجزی خێرا بۆ 3 وێستگەی نزیک نێردرا.",
     ownerTitle: "داواکاری حجزی خێرای نوێ",
@@ -301,6 +303,28 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { data: activeBookings, error: activeBookingsError } = await supabase
+      .from("bookings")
+      .select("id, station_id")
+      .eq("customer_phone", customerPhone)
+      .in("status", ACTIVE_BOOKING_STATUSES);
+
+    if (activeBookingsError) {
+      return new Response(JSON.stringify({ error: activeBookingsError.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const activeBookingRows = activeBookings || [];
+    if (activeBookingRows.length >= MAX_ACTIVE_BOOKINGS) {
+      return new Response(JSON.stringify({ error: "active_limit", message: msg.activeLimit }), {
+        status: 409,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const remainingTargetSlots = MAX_ACTIVE_BOOKINGS - activeBookingRows.length;
+
     if (!Number.isFinite(customerLat) || !Number.isFinite(customerLng)) {
       const message = language === "en"
         ? "Please share your location first so we only search within 15 km."
@@ -351,6 +375,10 @@ Deno.serve(async (req) => {
     );
     for (const stationId of previousStationIds) {
       excludedStationIds.add(stationId);
+    }
+    for (const booking of activeBookingRows) {
+      const stationId = String((booking as any)?.station_id || "");
+      if (stationId) excludedStationIds.add(stationId);
     }
     const ranked = stationRows
       .map((station) => {
@@ -434,10 +462,10 @@ Deno.serve(async (req) => {
       requestRow = requestInsert.data || null;
     }
 
-    const bookingRows: { station_id: string; booking_id: string; station_name: string; distance_km: number }[] = [];
+    const bookingRows: { station_id: string; booking_id: string; booking_number: number; station_name: string; distance_km: number }[] = [];
 
     for (const item of matched) {
-      if (bookingRows.length >= 3) break;
+      if (bookingRows.length >= remainingTargetSlots) break;
 
       const quotaResult = await consumeStationRequestQuota({
         supabase,
@@ -489,6 +517,7 @@ Deno.serve(async (req) => {
       bookingRows.push({
         station_id: item.station.id,
         booking_id: booking.id,
+        booking_number: booking.booking_number,
         station_name: item.station.name,
         distance_km: Number(item.distance.toFixed(2)),
       });
@@ -499,6 +528,17 @@ Deno.serve(async (req) => {
         booking_id: booking.id,
         distance_km: Number(item.distance.toFixed(2)),
         state: "pending",
+      });
+
+      const inboxBody =
+        language === "en"
+          ? `${item.station.name} - ${Number(item.distance.toFixed(2))} km - pending station approval - #${booking.booking_number}`
+          : `${item.station.name} - ${Number(item.distance.toFixed(2))} كم - بانتظار موافقة المحطة - #${booking.booking_number}`;
+      await supabase.from("customer_notifications").insert({
+        customer_phone: customerPhone,
+        title: msg.requestSent,
+        body: inboxBody,
+        reference_booking_id: booking.id,
       });
 
       if (item.ownerPhone) {
@@ -546,14 +586,15 @@ Deno.serve(async (req) => {
       });
     }
 
+    const targetCount = bookingRows.length;
     const waitingOwnerReply =
       language === "en"
-        ? "Your request was sent to 3 stations and we are waiting for the first response. We will notify you if none of the stations reply, then send your request to 3 other stations within 15 km."
+        ? `Your request was sent to ${targetCount} station(s) and we are waiting for the first response. You can submit again later for different nearby stations if you still have fewer than 3 active bookings.`
         : language === "tr"
-          ? "Talebiniz 3 istasyona gönderildi ve yanıt bekleniyor. Hiçbir istasyon yanıt vermezse sizi bilgilendirip talebinizi 15 km içindeki 3 başka istasyona göndereceğiz."
+          ? `Talebiniz ${targetCount} istasyona gönderildi ve yanıt bekleniyor.`
           : language === "ku"
-            ? "داواکارییەکەت بۆ 3 وێستگە نێردرا و چاوەڕێی وەڵام دەکەین. ئەگەر هیچ وێستگەیەک وەڵامی نەداوە، ئاگادارت دەکەین و داواکارییەکەت بۆ 3 وێستگەی تری ناو 15 کم دەنێرین."
-            : "تم إرسال طلبك إلى 3 محطات وبانتظار الرد. سنعلمك في حالة لم يجب أحد المحطات ونرسل طلبك إلى 3 محطات أخرى ضمن نطاق 15 كلم.";
+            ? `داواکارییەکەت بۆ ${targetCount} وێستگە نێردرا و چاوەڕێی وەڵام دەکەین.`
+            : `تم إرسال طلبك إلى ${targetCount} محطة وبانتظار الرد. يمكنك التقديم مرة أخرى لاحقاً لمحطات مختلفة إذا بقي لديك أقل من 3 حجوزات نشطة.`;
 
     const customerWaitingMessage =
       language === "ar"

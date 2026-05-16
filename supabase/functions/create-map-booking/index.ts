@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 type Language = "ar" | "en" | "ku" | "tr";
+const ACTIVE_BOOKING_STATUSES = ["pending", "pending_owner_approval", "pending_customer_approval", "confirmed"];
 
 const i18n: Record<
   Language,
@@ -56,7 +57,7 @@ const i18n: Record<
       chooseTime: "يرجى اختيار وقت للحجز.",
       slotTaken: "هذا الموعد محجوز بالفعل. اختر وقتاً آخر.",
       verifyActiveBookings: "تعذر التحقق من عدد الحجوزات الحالية.",
-      activeLimit: "لا يمكن إنشاء أكثر من حجزين نشطين لنفس الرقم. ألغِ أحد الحجوزات الحالية أولاً.",
+      activeLimit: "يمكنك امتلاك 3 حجوزات نشطة كحد أقصى. ألغِ أحد الحجوزات الحالية أولاً.",
       verifySpin: "تعذر التحقق من خصم عجلة الحظ.",
       spinInvalid: "تعذر اعتماد نتيجة عجلة الخصم. أعد المحاولة مرة أخرى.",
       saveFailed: "تعذر حفظ الحجز.",
@@ -122,7 +123,7 @@ const i18n: Record<
       chooseTime: "تکایە کاتی حجز هەڵبژێرە.",
       slotTaken: "ئەم کاتە پڕکراوە. کاتێکی تر هەڵبژێرە.",
       verifyActiveBookings: "ناتوانرێت ژمارەی حجزە چالاکەکان بپشکنرێت.",
-      activeLimit: "بۆ هەمان ژمارە زیاتر لە 2 حجزی چالاک ناتوانرێت دروست بکرێت.",
+      activeLimit: "زۆرترین 3 حجزی چالاک دەتوانیت هەبێت. سەرەتا یەکێکی کۆن هەڵبوەشێنەوە.",
       verifySpin: "ناتوانرێت داشکاندنی گەردەکە بپشکنرێت.",
       spinInvalid: "ئەنجامی گەردەکە ناگونجاوە. تکایە دووبارە بگێڕە.",
       saveFailed: "پاشەکەوتکردنی حجز سەرکەوتوو نەبوو.",
@@ -155,7 +156,7 @@ const i18n: Record<
       chooseTime: "Lütfen rezervasyon saatini seçin.",
       slotTaken: "Bu saat dolu. Lütfen başka bir saat seçin.",
       verifyActiveBookings: "Aktif rezervasyon sayısı doğrulanamadı.",
-      activeLimit: "Aynı numara için 2’den fazla aktif rezervasyon oluşturulamaz.",
+      activeLimit: "En fazla 3 aktif rezervasyonunuz olabilir. Önce eski bir rezervasyonu iptal edin.",
       verifySpin: "Çark indirimi doğrulanamadı.",
       spinInvalid: "Çark sonucu geçersiz. Lütfen tekrar çevirin.",
       saveFailed: "Rezervasyon kaydedilemedi.",
@@ -452,7 +453,7 @@ Deno.serve(async (req) => {
         .eq("station_id", stationId)
         .eq("booking_date", bookingDate)
         .eq("booking_time", bookingTime)
-        .in("status", ["pending", "confirmed"])
+        .in("status", ACTIVE_BOOKING_STATUSES)
         .maybeSingle();
 
       if (existingSlot) {
@@ -470,7 +471,7 @@ Deno.serve(async (req) => {
       .eq("station_id", stationId)
       .eq("booking_date", bookingDate)
       .eq("service_id", serviceId)
-      .in("status", ["pending", "confirmed"])
+      .in("status", ACTIVE_BOOKING_STATUSES)
       .maybeSingle();
 
     if (existingCustomerBooking) {
@@ -489,7 +490,7 @@ Deno.serve(async (req) => {
       .from("bookings")
       .select("id", { count: "exact", head: true })
       .eq("customer_phone", customerPhone)
-      .in("status", ["pending", "confirmed"]);
+      .in("status", ACTIVE_BOOKING_STATUSES);
 
     if (activeBookingsError) {
       return new Response(JSON.stringify({ error: tt.errors.verifyActiveBookings }), {
@@ -498,7 +499,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if ((activeBookingsCount || 0) >= 2) {
+    if ((activeBookingsCount || 0) >= 3) {
       return new Response(
         JSON.stringify({
           error: tt.errors.activeLimit,

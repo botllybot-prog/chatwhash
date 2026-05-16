@@ -6,6 +6,92 @@ const corsHeaders = {
 };
 
 type Action = "confirm" | "reject" | "postpone";
+const PENDING_ALTERNATIVE_STATUSES = ["pending", "pending_owner_approval", "pending_customer_approval"];
+
+async function notifyStationOwner(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  stationId: string,
+  title: string,
+  body: string,
+  referenceId: string,
+) {
+  const { data: owner } = await supabaseAdmin
+    .from("station_owners")
+    .select("user_id")
+    .eq("station_id", stationId)
+    .maybeSingle();
+
+  if (!owner?.user_id) return;
+
+  await supabaseAdmin.from("notifications").insert({
+    user_id: owner.user_id,
+    title,
+    body,
+    type: "booking",
+    reference_id: referenceId,
+  });
+}
+
+async function cancelOtherPendingBookings(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  confirmedBooking: {
+    id: string;
+    customer_phone?: string | null;
+    booking_number?: number | null;
+    booking_date?: string | null;
+    booking_time?: string | null;
+  },
+) {
+  const customerPhone = String(confirmedBooking.customer_phone || "").trim();
+  if (!customerPhone) return 0;
+
+  let otherBookingsQuery = supabaseAdmin
+    .from("bookings")
+    .select("id, station_id, booking_number")
+    .eq("customer_phone", customerPhone)
+    .neq("id", confirmedBooking.id)
+    .in("status", PENDING_ALTERNATIVE_STATUSES);
+
+  if (confirmedBooking.booking_date) {
+    otherBookingsQuery = otherBookingsQuery.eq("booking_date", confirmedBooking.booking_date);
+  }
+  if (confirmedBooking.booking_time) {
+    otherBookingsQuery = otherBookingsQuery.eq("booking_time", confirmedBooking.booking_time);
+  }
+
+  const { data: otherBookings, error: lookupError } = await otherBookingsQuery;
+
+  if (lookupError || !otherBookings?.length) return 0;
+
+  const otherIds = otherBookings.map((booking: any) => booking.id).filter(Boolean);
+  if (otherIds.length === 0) return 0;
+
+  const { error: cancelError } = await supabaseAdmin
+    .from("bookings")
+    .update({ status: "cancelled" })
+    .in("id", otherIds);
+
+  if (cancelError) throw cancelError;
+
+  await supabaseAdmin
+    .from("quick_booking_targets")
+    .update({ state: "cancelled" })
+    .in("booking_id", otherIds);
+
+  await Promise.allSettled(
+    otherBookings.map((booking: any) =>
+      notifyStationOwner(
+        supabaseAdmin,
+        String(booking.station_id || ""),
+        "تم إلغاء الحجز تلقائياً",
+        `تم إلغاء الحجز #${booking.booking_number || ""} لأن الزبون حصل على موافقة محطة أخرى.`,
+        String(booking.id || ""),
+      ),
+    ),
+  );
+
+  return otherIds.length;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -140,6 +226,11 @@ Deno.serve(async (req) => {
       });
     }
 
+    await supabaseAdmin
+      .from("quick_booking_targets")
+      .update({ state: action === "confirm" ? "confirmed" : action === "reject" ? "cancelled" : "pending" })
+      .eq("booking_id", bookingId);
+
     const stationName = (bookingRow as any)?.stations?.name || "Washlly";
     const actionLabel =
       action === "confirm"
@@ -167,7 +258,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ success: true, booking: updated }), {
+    let cancelledAlternatives = 0;
+    if (action === "confirm") {
+      cancelledAlternatives = await cancelOtherPendingBookings(supabaseAdmin, {
+        id: bookingId,
+        customer_phone: (bookingRow as any).customer_phone,
+        booking_number: updated.booking_number,
+        booking_date: updated.booking_date,
+        booking_time: updated.booking_time,
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true, booking: updated, cancelledAlternatives }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
