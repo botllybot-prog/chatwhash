@@ -5,8 +5,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import { useAppLanguage } from "@/lib/language";
+import { Trash2 } from "lucide-react";
 
 const texts = {
   ar: {
@@ -123,15 +134,57 @@ const texts = {
   },
 } as const;
 
+const deleteTexts = {
+  ar: {
+    delete: "حذف",
+    title: "حذف الحجز",
+    description: "هل تريد حذف هذا الحجز نهائياً من لوحة الإدارة وبورتال المحطة؟",
+    confirm: "نعم، احذف",
+    cancel: "إلغاء",
+    deleted: "تم حذف الحجز",
+    deleting: "جاري الحذف...",
+  },
+  en: {
+    delete: "Delete",
+    title: "Delete reservation",
+    description: "Do you want to permanently delete this reservation from the admin panel and station portal?",
+    confirm: "Yes, delete",
+    cancel: "Cancel",
+    deleted: "Reservation deleted",
+    deleting: "Deleting...",
+  },
+  ku: {
+    delete: "سڕینەوە",
+    title: "سڕینەوەی حجز",
+    description: "دەتەوێت ئەم حجزە بە تەواوی لە پەنێڵی ئەدمین و دەروازەی وێستگە بسڕیتەوە؟",
+    confirm: "بەڵێ، بسڕەوە",
+    cancel: "پاشگەزبوونەوە",
+    deleted: "حجز سڕایەوە",
+    deleting: "لە سڕینەوەدایە...",
+  },
+  tr: {
+    delete: "Sil",
+    title: "Rezervasyonu sil",
+    description: "Bu rezervasyonu admin panelinden ve istasyon portalından kalıcı olarak silmek istiyor musunuz?",
+    confirm: "Evet, sil",
+    cancel: "Vazgeç",
+    deleted: "Rezervasyon silindi",
+    deleting: "Siliniyor...",
+  },
+} as const;
+
 const AdminBookings = () => {
   const { language, isRtl } = useAppLanguage();
   const t = texts[language];
+  const deleteText = deleteTexts[language];
   const [bookings, setBookings] = useState<any[]>([]);
   const [filterStation, setFilterStation] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [stations, setStations] = useState<any[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const statusLabels: Record<string, string> = {
     pending: t.pending,
@@ -177,6 +230,27 @@ const AdminBookings = () => {
     }
     await load();
     toast({ title: t.updated });
+  };
+
+  const deleteBooking = async () => {
+    if (!deleteTarget?.id) return;
+
+    setDeleting(true);
+    const bookingId = deleteTarget.id;
+    const bookingNumber = deleteTarget.booking_number;
+    const { error } = await supabase.from("bookings").delete().eq("id", bookingId);
+
+    if (error) {
+      toast({ title: t.error, description: error.message, variant: "destructive" });
+      setDeleting(false);
+      return;
+    }
+
+    setBookings((current) => current.filter((booking) => booking.id !== bookingId));
+    setDeleteTarget(null);
+    setDeleting(false);
+    await load();
+    toast({ title: deleteText.deleted, description: bookingNumber ? `#${bookingNumber}` : undefined });
   };
 
   const exportCSV = async () => {
@@ -284,19 +358,31 @@ const AdminBookings = () => {
                 <TableCell>{b.booking_time?.substring(0, 5) || "-"}</TableCell>
                 <TableCell><Badge variant={statusVariant}>{statusLabel}</Badge></TableCell>
                 <TableCell>
-                  <Select value={selectStatusValue} onValueChange={(v) => updateStatus(b.id, v)}>
-                    <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {!allowedStatuses.includes(selectStatusValue as any) && (
-                        <SelectItem value={selectStatusValue}>{statusLabel}</SelectItem>
-                      )}
-                      <SelectItem value="pending">{t.pending}</SelectItem>
-                      <SelectItem value="confirmed">{t.confirmed}</SelectItem>
-                      <SelectItem value="pending_customer_approval">{t.pendingCustomerApproval}</SelectItem>
-                      <SelectItem value="completed">{t.completed}</SelectItem>
-                      <SelectItem value="cancelled">{t.cancelled}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <Select value={selectStatusValue} onValueChange={(v) => updateStatus(b.id, v)}>
+                      <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {!allowedStatuses.includes(selectStatusValue as any) && (
+                          <SelectItem value={selectStatusValue}>{statusLabel}</SelectItem>
+                        )}
+                        <SelectItem value="pending">{t.pending}</SelectItem>
+                        <SelectItem value="confirmed">{t.confirmed}</SelectItem>
+                        <SelectItem value="pending_customer_approval">{t.pendingCustomerApproval}</SelectItem>
+                        <SelectItem value="completed">{t.completed}</SelectItem>
+                        <SelectItem value="cancelled">{t.cancelled}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="h-8 gap-1"
+                      onClick={() => setDeleteTarget(b)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {deleteText.delete}
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             );
@@ -308,6 +394,33 @@ const AdminBookings = () => {
           )}
         </TableBody>
       </Table>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null); }}>
+        <AlertDialogContent dir={isRtl ? "rtl" : "ltr"}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{deleteText.title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteText.description}
+              {deleteTarget?.booking_number ? (
+                <span className="mt-2 block font-semibold text-foreground">#{deleteTarget.booking_number}</span>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>{deleteText.cancel}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void deleteBooking();
+              }}
+            >
+              {deleting ? deleteText.deleting : deleteText.confirm}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
