@@ -1473,6 +1473,18 @@ function StationCard({
   );
 }
 
+const buildGoogleMapsDirectionsUrl = (latitude?: number | string | null, longitude?: number | string | null) => {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "";
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+};
+
+const extractFirstUrl = (value?: string | null) => {
+  const match = String(value || "").match(/https?:\/\/\S+/);
+  return match?.[0] || "";
+};
+
 const StationsMap = () => {
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
@@ -2319,22 +2331,48 @@ const StationsMap = () => {
               </div>
             )}
 
-            {visibleCustomerNotifications.map((item) => (
-              <button
-                type="button"
-                key={item.id}
-                onClick={() => !item.is_read && void markCustomerNotificationRead(item.id)}
-                className={`w-full rounded-xl border p-3 text-start text-sm transition ${
-                  item.is_read ? "bg-white hover:border-blue-200" : "border-blue-300 bg-blue-50 shadow-sm"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-semibold">{item.title}</div>
-                  {!item.is_read && <Badge variant="destructive">جديد</Badge>}
+            {visibleCustomerNotifications.map((item) => {
+              const notificationUrl = extractFirstUrl(item.body);
+              const notificationBody = notificationUrl ? String(item.body || "").replace(notificationUrl, "").trim() : item.body;
+
+              return (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  key={item.id}
+                  onClick={() => !item.is_read && void markCustomerNotificationRead(item.id)}
+                  onKeyDown={(event) => {
+                    if ((event.key === "Enter" || event.key === " ") && !item.is_read) {
+                      void markCustomerNotificationRead(item.id);
+                    }
+                  }}
+                  className={`w-full rounded-xl border p-3 text-start text-sm transition ${
+                    item.is_read ? "bg-white hover:border-blue-200" : "border-blue-300 bg-blue-50 shadow-sm"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-semibold">{item.title}</div>
+                    {!item.is_read && <Badge variant="destructive">جديد</Badge>}
+                  </div>
+                  {notificationBody && (
+                    <div className="mt-1 text-xs leading-6 text-muted-foreground">{notificationBody}</div>
+                  )}
+                  {notificationUrl && (
+                    <Button asChild variant="outline" size="sm" className="mt-3 gap-2">
+                      <a
+                        href={notificationUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <Navigation className="h-4 w-4" />
+                        فتح موقع المحطة
+                      </a>
+                    </Button>
+                  )}
                 </div>
-                <div className="mt-1 text-xs leading-6 text-muted-foreground">{item.body}</div>
-              </button>
-            ))}
+              );
+            })}
 
             <div className="space-y-3">
               {visibleCustomerBookings.map((b) => {
@@ -2351,6 +2389,10 @@ const StationsMap = () => {
                 const canRateCompleted = status === "completed" && !ratingValue;
                 const showRatingStars = !!showRatingForBooking[b.id] || canRateCompleted;
                 const awaitingCustomerApproval = status === "pending_customer_approval";
+                const stationMapsUrl = buildGoogleMapsDirectionsUrl(
+                  (b as any).stations?.latitude,
+                  (b as any).stations?.longitude,
+                );
 
                 return (
                   <div key={b.id} className="rounded-2xl border bg-white p-3 text-sm shadow-sm">
@@ -2365,6 +2407,15 @@ const StationsMap = () => {
                         {customerStatusLabels[status] || status}
                       </Badge>
                     </div>
+
+                    {status === "confirmed" && stationMapsUrl && (
+                      <Button asChild variant="outline" size="sm" className="mt-3 gap-2">
+                        <a href={stationMapsUrl} target="_blank" rel="noreferrer">
+                          <Navigation className="h-4 w-4" />
+                          فتح مسار المحطة على Google Maps
+                        </a>
+                      </Button>
+                    )}
 
                     {canAct && (
                       <div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto_auto_auto]">

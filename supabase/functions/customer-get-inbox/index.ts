@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
 
     const { data: bookings, error: bookingsError } = await supabase
       .from("bookings")
-      .select("id, booking_number, booking_date, booking_time, status, created_at, customer_rating, rated_at, stations(name), services(name)")
+      .select("id, booking_number, booking_date, booking_time, status, created_at, customer_rating, rated_at, stations(name, latitude, longitude), services(name)")
       .in("customer_phone", customerPhones)
       .order("created_at", { ascending: false })
       .limit(20);

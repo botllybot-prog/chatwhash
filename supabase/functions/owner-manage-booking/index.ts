@@ -8,6 +8,13 @@ const corsHeaders = {
 type Action = "confirm" | "reject" | "postpone";
 const PENDING_ALTERNATIVE_STATUSES = ["pending", "pending_owner_approval", "pending_customer_approval"];
 
+function buildGoogleMapsUrl(latitude?: number | string | null, longitude?: number | string | null) {
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "";
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}
+
 async function notifyStationOwner(
   supabaseAdmin: ReturnType<typeof createClient>,
   stationId: string,
@@ -160,7 +167,7 @@ Deno.serve(async (req) => {
 
     const { data: bookingRow, error: bookingLookupError } = await supabaseAdmin
       .from("bookings")
-      .select("id, station_id, status, booking_number, booking_date, booking_time, customer_name, customer_phone, stations(name)")
+      .select("id, station_id, status, booking_number, booking_date, booking_time, customer_name, customer_phone, stations(name, latitude, longitude)")
       .eq("id", bookingId)
       .maybeSingle();
 
@@ -231,7 +238,9 @@ Deno.serve(async (req) => {
       .update({ state: action === "confirm" ? "confirmed" : action === "reject" ? "cancelled" : "pending" })
       .eq("booking_id", bookingId);
 
-    const stationName = (bookingRow as any)?.stations?.name || "Washlly";
+    const station = (bookingRow as any)?.stations || {};
+    const stationName = station?.name || "Washlly";
+    const stationMapsUrl = buildGoogleMapsUrl(station?.latitude, station?.longitude);
     const actionLabel =
       action === "confirm"
         ? "تم تأكيد الحجز"
@@ -241,7 +250,9 @@ Deno.serve(async (req) => {
     const customerBody =
       action === "postpone"
         ? `${stationName} - ${actionLabel} #${updated.booking_number} إلى ${updated.booking_date} ${String(updated.booking_time || "").slice(0, 5)}`
-        : `${stationName} - ${actionLabel} #${updated.booking_number}`;
+        : action === "confirm" && stationMapsUrl
+          ? `${stationName} - ${actionLabel} #${updated.booking_number}\nرابط موقع المحطة على Google Maps: ${stationMapsUrl}`
+          : `${stationName} - ${actionLabel} #${updated.booking_number}`;
 
     if ((bookingRow as any)?.customer_phone) {
       const { error: customerNotifError } = await supabaseAdmin.from("customer_notifications").insert({
