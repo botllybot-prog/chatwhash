@@ -9,8 +9,8 @@ const corsHeaders = {
 
 function normalizePhone(phone: string) {
   const western = phone
-    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
-    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
   const cleaned = western.replace(/[^\d+]/g, "").replace(/^\+/, "");
   if (/^07\d{9}$/.test(cleaned)) return `964${cleaned.substring(1)}`;
   return cleaned;
@@ -46,11 +46,18 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile, error: profileError } = await supabase
       .from("customer_profiles")
       .select("is_blocked")
       .eq("customer_phone", customerPhone)
       .maybeSingle();
+
+    if (profileError) {
+      return new Response(JSON.stringify({ error: profileError.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (existingProfile?.is_blocked) {
       return new Response(JSON.stringify({ error: "Customer account is blocked" }), {
@@ -61,6 +68,12 @@ Deno.serve(async (req) => {
 
     const code = generateCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    await supabase
+      .from("customer_login_codes")
+      .update({ verified_at: new Date().toISOString() })
+      .eq("customer_phone", customerPhone)
+      .is("verified_at", null);
 
     await supabase.from("customer_profiles").upsert(
       {
@@ -85,7 +98,7 @@ Deno.serve(async (req) => {
       `لا تشارك هذا الرمز مع أي شخص.`;
     const wa = await sendWhatsAppTextReliable({ phone: customerPhone, message: msg, settings, language: "ar" });
     if (!wa.ok) {
-      return new Response(JSON.stringify({ error: "Failed to send WhatsApp code" }), {
+      return new Response(JSON.stringify({ error: wa.error || "Failed to send WhatsApp code" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

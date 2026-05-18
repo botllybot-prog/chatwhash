@@ -14,10 +14,6 @@ function normalizePhone(phone: string) {
   return cleaned;
 }
 
-function randomToken() {
-  return `${crypto.randomUUID()}-${crypto.randomUUID()}`;
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") {
@@ -41,43 +37,33 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("customer_profiles")
       .select("customer_name, is_blocked")
       .eq("customer_phone", customerPhone)
       .maybeSingle();
 
-    if (!profile) {
-      return new Response(JSON.stringify({ success: false, requires_verification: true }), {
-        status: 200,
+    if (profileError) {
+      return new Response(JSON.stringify({ error: profileError.message }), {
+        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    if (profile.is_blocked) {
+    if (profile?.is_blocked) {
       return new Response(JSON.stringify({ error: "Customer account is blocked" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const token = randomToken();
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    await supabase.from("customer_web_sessions").insert({
-      customer_phone: customerPhone,
-      customer_name: profile.customer_name,
-      session_token: token,
-      expires_at: expiresAt,
-    });
-
     return new Response(
       JSON.stringify({
         success: true,
-        requires_verification: false,
-        session_token: token,
-        expires_at: expiresAt,
+        requires_verification: true,
+        requires_name: !profile?.customer_name,
         customer_phone: customerPhone,
-        customer_name: profile.customer_name,
+        customer_name: profile?.customer_name || "",
       }),
       {
         status: 200,

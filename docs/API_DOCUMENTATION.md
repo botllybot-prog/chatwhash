@@ -1,6 +1,6 @@
 # Washlly Website API Documentation
 
-Last updated: 2026-05-17
+Last updated: 2026-05-18
 
 ## Overview
 
@@ -53,7 +53,7 @@ Authorization: Bearer <USER_ACCESS_TOKEN or SUPABASE_ANON_KEY>
 
 ### `customer-send-login-code`
 
-Sends an OTP code to the customer WhatsApp number. Used only when the phone is not already verified or when changing to a new phone number.
+Sends an OTP code to the customer WhatsApp number. The customer web session is created only after this OTP is verified.
 
 ```http
 POST /functions/v1/customer-send-login-code
@@ -118,7 +118,7 @@ Common errors: `No active code found`, `Code expired`, `Invalid code`, `Too many
 
 ### `customer-login-by-phone`
 
-Logs in a previously verified customer using phone only, without sending OTP again.
+Looks up a customer phone before sending OTP. This endpoint never creates a customer session by itself.
 
 ```http
 POST /functions/v1/customer-login-by-phone
@@ -132,25 +132,27 @@ Request:
 }
 ```
 
-Success when verified:
+Success when a saved customer name exists:
 
 ```json
 {
   "success": true,
-  "requires_verification": false,
-  "session_token": "customer-session-token",
-  "expires_at": "2026-06-16T12:00:00.000Z",
+  "requires_verification": true,
+  "requires_name": false,
   "customer_phone": "9647736635435",
   "customer_name": "Mustafa"
 }
 ```
 
-Success when first verification is needed:
+Success when the phone needs a name before OTP sending:
 
 ```json
 {
-  "success": false,
-  "requires_verification": true
+  "success": true,
+  "requires_verification": true,
+  "requires_name": true,
+  "customer_phone": "9647736635435",
+  "customer_name": ""
 }
 ```
 

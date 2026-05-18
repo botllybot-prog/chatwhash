@@ -13,6 +13,7 @@ Format: `## [YYYY-MM-DD] — Title`
 - Updated the Postman collection with the latest customer inbox, booking action, rating, owner portal, REST, and WhatsApp utility requests.
 - Added an admin reservation delete action that removes bookings from the admin panel and station portal.
 - Added Google Maps station directions to customer confirmation notifications and confirmed booking cards.
+- Fixed customer login so WhatsApp OTP is required before session creation, including after replacing the phone number.
 - Kept booking notifications and actions inside the web app, while cleaning the WhatsApp webhook so it no longer handles booking confirmation, cancellation, or rating flows.
 - Removed obsolete Expo mobile app code and the `/mobile-map` web route.
 

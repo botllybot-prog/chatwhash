@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "f1f76df9-4c6f-4b5e-9af5-d3fd8de8d889",
     "name": "Washlly Website API - Latest",
-    "description": "Updated: 2026-05-17.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nBooking actions now happen inside the app/web inbox. WhatsApp remains for OTP, subscription/package notices, and admin broadcasts.\nUse customer login requests first to get customerSessionToken. Use Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
+    "description": "Updated: 2026-05-18.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nBooking actions now happen inside the app/web inbox. WhatsApp remains for OTP, subscription/package notices, and admin broadcasts.\nUse customer login requests first; customer-login-by-phone only checks the phone and OTP verification creates customerSessionToken. Use Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -141,7 +141,7 @@
                 "value": "Bearer {{anonKey}}"
               }
             ],
-            "description": "Login by phone after first verification. Returns requires_verification=true if OTP is still needed.",
+            "description": "Looks up the customer phone and tells the client whether a name is needed. This endpoint does not create a session; send and verify OTP next.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"customer_phone\": \"{{customerPhone}}\"\n}",
@@ -160,9 +160,12 @@
                 "type": "text/javascript",
                 "exec": [
                   "const data = pm.response.json();",
-                  "if (data.session_token) pm.collectionVariables.set(\"customerSessionToken\", data.session_token);",
                   "if (data.customer_phone) pm.collectionVariables.set(\"customerPhoneNormalized\", data.customer_phone);",
-                  "if (data.customer_name) pm.collectionVariables.set(\"customerName\", data.customer_name);"
+                  "if (data.customer_name) pm.collectionVariables.set(\"customerName\", data.customer_name);",
+                  "pm.test(\"OTP is required before session creation\", function () {",
+                  "  pm.expect(data.requires_verification).to.eql(true);",
+                  "  pm.expect(data.session_token).to.be.undefined;",
+                  "});"
                 ]
               }
             }
