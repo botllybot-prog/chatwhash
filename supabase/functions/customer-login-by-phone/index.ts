@@ -88,12 +88,19 @@ Deno.serve(async (req) => {
       const token = randomToken();
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-      await supabase.from("customer_web_sessions").insert({
+      const { error: sessionError } = await supabase.from("customer_web_sessions").insert({
         customer_phone: customerPhone,
         customer_name: profile.customer_name,
         session_token: token,
         expires_at: expiresAt,
       });
+
+      if (sessionError) {
+        return new Response(JSON.stringify({ error: sessionError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       return new Response(
         JSON.stringify({
