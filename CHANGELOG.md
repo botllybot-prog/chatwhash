@@ -17,6 +17,7 @@ Format: `## [YYYY-MM-DD] — Title`
 - Enabled the main `/login` page to accept station owner mobile numbers as well as email addresses.
 - Remembered verified customer phone numbers in the database so repeat customer login no longer sends another OTP.
 - Validated customer session database writes before returning successful OTP verification or remembered login responses.
+- Disabled customer OTP login and switched customer access to direct name/phone login with saved customer profile sessions.
 - Kept booking notifications and actions inside the web app, while cleaning the WhatsApp webhook so it no longer handles booking confirmation, cancellation, or rating flows.
 - Removed obsolete Expo mobile app code and the `/mobile-map` web route.
 

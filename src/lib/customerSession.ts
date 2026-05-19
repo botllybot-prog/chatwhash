@@ -7,9 +7,9 @@ export type CustomerSession = {
 
 const KEY = "washlly_customer_session_v1";
 
-export function getCustomerSession(): CustomerSession | null {
+function readSession(storage: Storage | null): CustomerSession | null {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = storage?.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CustomerSession;
     if (!parsed?.sessionToken || !parsed?.customerPhone || !parsed?.expiresAt) return null;
@@ -20,10 +20,19 @@ export function getCustomerSession(): CustomerSession | null {
   }
 }
 
-export function setCustomerSession(session: CustomerSession) {
-  localStorage.setItem(KEY, JSON.stringify(session));
+export function getCustomerSession(): CustomerSession | null {
+  return readSession(localStorage) || readSession(sessionStorage);
+}
+
+export function setCustomerSession(session: CustomerSession, options: { persist?: boolean } = {}) {
+  const persist = options.persist ?? true;
+  const target = persist ? localStorage : sessionStorage;
+  const other = persist ? sessionStorage : localStorage;
+  other.removeItem(KEY);
+  target.setItem(KEY, JSON.stringify(session));
 }
 
 export function clearCustomerSession() {
   localStorage.removeItem(KEY);
+  sessionStorage.removeItem(KEY);
 }

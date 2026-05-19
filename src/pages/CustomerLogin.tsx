@@ -5,11 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { clearCustomerSession, getCustomerSession, setCustomerSession } from "@/lib/customerSession";
+import { getCustomerSession, setCustomerSession } from "@/lib/customerSession";
 
-type LoginLookupResponse = {
+type CustomerLoginResponse = {
   success?: boolean;
-  requires_verification?: boolean;
   requires_name?: boolean;
   session_token?: string;
   expires_at?: string;
@@ -18,187 +17,99 @@ type LoginLookupResponse = {
   error?: string;
 };
 
-type SendCodeResponse = {
-  success?: boolean;
-  expires_at?: string;
-  error?: string;
-};
-
-type VerifyCodeResponse = {
-  success?: boolean;
-  session_token?: string;
-  expires_at?: string;
-  customer_phone?: string;
-  customer_name?: string;
-  error?: string;
-};
+const PROFILE_HINT_KEY = "washlly_customer_profile_hint_v1";
 
 const normalizePhone = (phone: string) => {
   const western = phone
-    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
-    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+    .replace(/[\u0660-\u0669]/g, (digit) => String(digit.charCodeAt(0) - 0x0660))
+    .replace(/[\u06f0-\u06f9]/g, (digit) => String(digit.charCodeAt(0) - 0x06f0));
   const cleaned = western.replace(/[^\d+]/g, "").replace(/^\+/, "");
   if (/^07\d{9}$/.test(cleaned)) return `964${cleaned.substring(1)}`;
   return cleaned;
 };
 
-const normalizeCode = (value: string) =>
-  value
-    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
-    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
-    .replace(/\D/g, "")
-    .trim();
+function loadProfileHint() {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILE_HINT_KEY) || "{}") as {
+      customerName?: string;
+      customerPhone?: string;
+    };
+  } catch {
+    return {};
+  }
+}
+
+function saveProfileHint(customerName: string, customerPhone: string) {
+  localStorage.setItem(PROFILE_HINT_KEY, JSON.stringify({ customerName, customerPhone }));
+}
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<"entry" | "send" | "verify">("entry");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
-  const [checking, setChecking] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [verifying, setVerifying] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const existingSession = getCustomerSession();
     if (existingSession) {
       navigate("/map", { replace: true });
+      return;
     }
+
+    const hint = loadProfileHint();
+    setName(hint.customerName || "");
+    setPhone(hint.customerPhone || "");
   }, [navigate]);
 
-  const requestCode = async (customerName: string, normalizedPhone: string) => {
-    setCode("");
-    setSending(true);
-    const { data, error } = await supabase.functions.invoke<SendCodeResponse>("customer-send-login-code", {
-      body: { customer_name: customerName.trim(), customer_phone: normalizedPhone },
-    });
-    setSending(false);
+  const startLogin = async () => {
+    const normalizedPhone = normalizePhone(phone);
+    const trimmedName = name.trim();
 
-    if (error || data?.error) {
+    if (!normalizedPhone) {
+      toast({ title: "أدخل رقم الهاتف", variant: "destructive" });
+      return;
+    }
+
+    setSubmitting(true);
+    const { data, error } = await supabase.functions.invoke<CustomerLoginResponse>("customer-login-by-phone", {
+      body: {
+        customer_phone: normalizedPhone,
+        customer_name: trimmedName || undefined,
+      },
+    });
+    setSubmitting(false);
+
+    if (data?.requires_name) {
       toast({
-        title: "تعذر إرسال الرمز",
-        description: data?.error || error?.message,
+        title: "أدخل الاسم",
+        description: "هذا الرقم غير مسجل بعد. اكتب اسمك مرة واحدة ثم اضغط دخول.",
         variant: "destructive",
       });
-      return false;
-    }
-
-    toast({
-      title: "تم إرسال الرمز",
-      description: "تحقق من واتساب وأدخل رمز التحقق خلال 10 دقائق.",
-    });
-    setStep("verify");
-    return true;
-  };
-
-  const startLogin = async () => {
-    if (!phone.trim()) {
-      toast({ title: "أدخل رقم الواتساب", variant: "destructive" });
       return;
     }
 
-    const normalized = normalizePhone(phone);
-    const existingSession = getCustomerSession();
-    if (existingSession?.customerPhone === normalized) {
-      navigate("/map", { replace: true });
-      return;
-    }
-
-    setChecking(true);
-    const { data, error } = await supabase.functions.invoke<LoginLookupResponse>("customer-login-by-phone", {
-      body: { customer_phone: normalized },
-    });
-    setChecking(false);
-
-    if (error || data?.error) {
+    if (error || data?.error || !data?.session_token || !data.customer_phone || !data.expires_at) {
       toast({
         title: "تعذر تسجيل الدخول",
-        description: data?.error || error?.message,
+        description: data?.error || error?.message || "حاول مرة أخرى.",
         variant: "destructive",
       });
       return;
     }
 
-    if (data?.session_token && data.customer_phone && data.expires_at) {
-      setCustomerSession({
-        customerName: data.customer_name || "Customer",
+    const customerName = data.customer_name || trimmedName || "Customer";
+    setCustomerSession(
+      {
+        customerName,
         customerPhone: data.customer_phone,
         sessionToken: data.session_token,
         expiresAt: data.expires_at,
-      });
-      navigate("/map", { replace: true });
-      return;
-    }
-
-    const savedName = String(data?.customer_name || "").trim();
-    if (data?.requires_name || !savedName) {
-      setName(savedName);
-      setStep("send");
-      toast({
-        title: "تفعيل الرقم",
-        description: "اكتب الاسم ثم سنرسل رمز تحقق إلى نفس رقم الواتساب.",
-      });
-      return;
-    }
-
-    setName(savedName);
-    await requestCode(savedName, normalized);
-  };
-
-  const sendCode = async () => {
-    if (!name.trim() || !phone.trim()) {
-      toast({
-        title: "أكمل البيانات",
-        description: "اكتب الاسم ورقم الواتساب.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    await requestCode(name.trim(), normalizePhone(phone));
-  };
-
-  const verifyCode = async () => {
-    const normalizedCode = normalizeCode(code);
-    if (!normalizedCode) {
-      toast({ title: "أدخل الرمز", variant: "destructive" });
-      return;
-    }
-
-    setVerifying(true);
-    const normalized = normalizePhone(phone);
-    const { data, error } = await supabase.functions.invoke<VerifyCodeResponse>("customer-verify-login-code", {
-      body: { customer_phone: normalized, code: normalizedCode },
-    });
-    setVerifying(false);
-
-    if (error || data?.error || !data?.session_token || !data?.customer_phone || !data?.expires_at) {
-      toast({
-        title: "رمز غير صحيح",
-        description: data?.error || error?.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setCustomerSession({
-      customerName: data.customer_name || "Customer",
-      customerPhone: data.customer_phone,
-      sessionToken: data.session_token,
-      expiresAt: data.expires_at,
-    });
+      },
+      { persist: remember },
+    );
+    saveProfileHint(customerName, data.customer_phone);
     navigate("/map", { replace: true });
-  };
-
-  const replacePhone = () => {
-    clearCustomerSession();
-    setStep("entry");
-    setName("");
-    setPhone("");
-    setCode("");
-    setChecking(false);
-    setSending(false);
-    setVerifying(false);
   };
 
   return (
@@ -207,59 +118,38 @@ export default function CustomerLogin() {
         <CardHeader>
           <CardTitle>دخول الزبون</CardTitle>
           <CardDescription>
-            يتم إرسال رمز تحقق إلى واتساب قبل فتح حساب الزبون.
+            الدخول مباشر بدون رمز تحقق. في أول مرة اكتب الاسم ورقم الهاتف، وبعدها يكفي رقم الهاتف فقط.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {(step === "send" || step === "verify") && (
-            <Input
-              placeholder="الاسم"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              disabled={step === "verify"}
-            />
-          )}
           <Input
-            placeholder="رقم الواتساب"
+            placeholder="الاسم"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            autoComplete="name"
+          />
+          <Input
+            placeholder="رقم الهاتف"
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
             dir="ltr"
-            disabled={step === "verify"}
+            inputMode="tel"
+            autoComplete="tel"
           />
-          {step === "verify" && (
-            <Input
-              placeholder="رمز التحقق"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              dir="ltr"
-              inputMode="numeric"
-              maxLength={6}
-            />
-          )}
 
-          {step === "entry" ? (
-            <Button className="w-full" onClick={startLogin} disabled={checking || sending}>
-              {checking || sending ? "جاري إرسال الرمز..." : "دخول برقم الواتساب"}
-            </Button>
-          ) : step === "send" ? (
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" onClick={replacePhone} disabled={sending}>
-                استبدال الرقم
-              </Button>
-              <Button onClick={sendCode} disabled={sending}>
-                {sending ? "جاري الإرسال..." : "إرسال رمز التحقق"}
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" onClick={replacePhone} disabled={verifying}>
-                استبدال الرقم
-              </Button>
-              <Button onClick={verifyCode} disabled={verifying}>
-                {verifying ? "جاري التحقق..." : "تفعيل الدخول"}
-              </Button>
-            </div>
-          )}
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(event) => setRemember(event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            حفظ الدخول على هذا الجهاز
+          </label>
+
+          <Button className="w-full" onClick={startLogin} disabled={submitting}>
+            {submitting ? "جاري الدخول..." : "دخول مباشر"}
+          </Button>
         </CardContent>
       </Card>
     </div>
