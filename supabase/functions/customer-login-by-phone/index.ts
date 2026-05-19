@@ -14,6 +14,10 @@ function normalizePhone(phone: string) {
   return cleaned;
 }
 
+function randomToken() {
+  return `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") {
@@ -55,6 +59,57 @@ Deno.serve(async (req) => {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    let wasVerifiedBefore = false;
+    if (profile?.customer_name) {
+      const { data: existingSession } = await supabase
+        .from("customer_web_sessions")
+        .select("id")
+        .eq("customer_phone", customerPhone)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingSession) {
+        wasVerifiedBefore = true;
+      } else {
+        const { data: verifiedCode } = await supabase
+          .from("customer_login_codes")
+          .select("id")
+          .eq("customer_phone", customerPhone)
+          .not("verified_at", "is", null)
+          .limit(1)
+          .maybeSingle();
+        wasVerifiedBefore = Boolean(verifiedCode);
+      }
+    }
+
+    if (profile?.customer_name && wasVerifiedBefore) {
+      const token = randomToken();
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      await supabase.from("customer_web_sessions").insert({
+        customer_phone: customerPhone,
+        customer_name: profile.customer_name,
+        session_token: token,
+        expires_at: expiresAt,
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          requires_verification: false,
+          requires_name: false,
+          session_token: token,
+          expires_at: expiresAt,
+          customer_phone: customerPhone,
+          customer_name: profile.customer_name,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     return new Response(

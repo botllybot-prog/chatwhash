@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { clearCustomerSession, setCustomerSession } from "@/lib/customerSession";
+import { clearCustomerSession, getCustomerSession, setCustomerSession } from "@/lib/customerSession";
 
 type LoginLookupResponse = {
   success?: boolean;
   requires_verification?: boolean;
   requires_name?: boolean;
+  session_token?: string;
+  expires_at?: string;
   customer_phone?: string;
   customer_name?: string;
   error?: string;
@@ -57,6 +59,13 @@ export default function CustomerLogin() {
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
 
+  useEffect(() => {
+    const existingSession = getCustomerSession();
+    if (existingSession) {
+      navigate("/map", { replace: true });
+    }
+  }, [navigate]);
+
   const requestCode = async (customerName: string, normalizedPhone: string) => {
     setCode("");
     setSending(true);
@@ -88,8 +97,13 @@ export default function CustomerLogin() {
       return;
     }
 
-    clearCustomerSession();
     const normalized = normalizePhone(phone);
+    const existingSession = getCustomerSession();
+    if (existingSession?.customerPhone === normalized) {
+      navigate("/map", { replace: true });
+      return;
+    }
+
     setChecking(true);
     const { data, error } = await supabase.functions.invoke<LoginLookupResponse>("customer-login-by-phone", {
       body: { customer_phone: normalized },
@@ -102,6 +116,17 @@ export default function CustomerLogin() {
         description: data?.error || error?.message,
         variant: "destructive",
       });
+      return;
+    }
+
+    if (data?.session_token && data.customer_phone && data.expires_at) {
+      setCustomerSession({
+        customerName: data.customer_name || "Customer",
+        customerPhone: data.customer_phone,
+        sessionToken: data.session_token,
+        expiresAt: data.expires_at,
+      });
+      navigate("/map", { replace: true });
       return;
     }
 
