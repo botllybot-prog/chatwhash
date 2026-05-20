@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "f1f76df9-4c6f-4b5e-9af5-d3fd8de8d889",
     "name": "Washlly Website API - Latest",
-    "description": "Updated: 2026-05-18.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nBooking actions now happen inside the app/web inbox. WhatsApp remains for OTP, subscription/package notices, and admin broadcasts.\nUse customer login requests first; customer-login-by-phone only checks the phone and OTP verification creates customerSessionToken. Use Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
+    "description": "Updated: 2026-05-20.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nCustomer access is direct by name/phone without OTP; customer-login-by-phone creates or resumes the web session and returns customerSessionToken.\nQuick booking targets eligible stations within 15 km in deterministic nearest-distance order.\nBooking actions now happen inside the app/web inbox. WhatsApp remains for subscriptions, suspension/package notices, and admin broadcasts.\nUse Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -45,10 +45,6 @@
     {
       "key": "customerName",
       "value": "Mustafa"
-    },
-    {
-      "key": "otpCode",
-      "value": "123456"
     },
     {
       "key": "stationId",
@@ -124,7 +120,7 @@
       "name": "01 - Customer Login and Session",
       "item": [
         {
-          "name": "customer-login-by-phone",
+          "name": "customer-login-by-phone - direct login",
           "request": {
             "method": "POST",
             "header": [
@@ -141,10 +137,10 @@
                 "value": "Bearer {{anonKey}}"
               }
             ],
-            "description": "Looks up the customer phone and tells the client whether a name is needed. This endpoint does not create a session; send and verify OTP next.",
+            "description": "Creates or resumes a direct customer web session without OTP. If the phone has no saved name and customer_name is omitted, the response returns requires_name=true.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customer_phone\": \"{{customerPhone}}\"\n}",
+              "raw": "{\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"customer_name\": \"{{customerName}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -160,88 +156,15 @@
                 "type": "text/javascript",
                 "exec": [
                   "const data = pm.response.json();",
-                  "if (data.customer_phone) pm.collectionVariables.set(\"customerPhoneNormalized\", data.customer_phone);",
-                  "if (data.customer_name) pm.collectionVariables.set(\"customerName\", data.customer_name);",
-                  "pm.test(\"OTP is required before session creation\", function () {",
-                  "  pm.expect(data.requires_verification).to.eql(true);",
-                  "  pm.expect(data.session_token).to.be.undefined;",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "customer-send-login-code",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "apikey",
-                "value": "{{anonKey}}"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{anonKey}}"
-              }
-            ],
-            "description": "Sends WhatsApp OTP to customer phone.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"customer_name\": \"{{customerName}}\",\n  \"customer_phone\": \"{{customerPhone}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": "{{functionsBase}}/customer-send-login-code"
-          }
-        },
-        {
-          "name": "customer-verify-login-code",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "apikey",
-                "value": "{{anonKey}}"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{anonKey}}"
-              }
-            ],
-            "description": "Verifies OTP and stores customerSessionToken automatically when successful.",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"code\": \"{{otpCode}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": "{{functionsBase}}/customer-verify-login-code"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const data = pm.response.json();",
+                  "pm.test(\"Direct customer login response is successful\", function () {",
+                  "  pm.expect(data.success).to.eql(true);",
+                  "});",
                   "if (data.session_token) pm.collectionVariables.set(\"customerSessionToken\", data.session_token);",
                   "if (data.customer_phone) pm.collectionVariables.set(\"customerPhoneNormalized\", data.customer_phone);",
-                  "if (data.customer_name) pm.collectionVariables.set(\"customerName\", data.customer_name);"
+                  "if (data.customer_name) pm.collectionVariables.set(\"customerName\", data.customer_name);",
+                  "pm.test(\"OTP is not required for the current customer flow\", function () {",
+                  "  pm.expect(data.requires_verification).to.not.eql(true);",
+                  "});"
                 ]
               }
             }
@@ -265,7 +188,7 @@
                 "value": "Bearer {{anonKey}}"
               }
             ],
-            "description": "Updates customer display name. Phone change requires a fresh OTP flow.",
+            "description": "Updates the saved customer display name for an active direct customer session.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"session_token\": \"{{customerSessionToken}}\",\n  \"customer_name\": \"{{customerName}}\"\n}",
@@ -278,7 +201,8 @@
             "url": "{{functionsBase}}/customer-update-profile"
           }
         }
-      ]
+      ],
+      "description": "Direct customer login. First login needs name and phone; later login can use the phone only if a profile already exists."
     },
     {
       "name": "02 - Customer Inbox and Booking Actions",
@@ -655,7 +579,7 @@
                 "value": "Bearer {{anonKey}}"
               }
             ],
-            "description": "Targets nearest eligible stations within 15 km, limited by customer active booking slots.",
+            "description": "Targets up to the nearest eligible stations within 15 km in deterministic distance order, while respecting active booking slots and excluded/currently targeted stations.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"customer_name\": \"{{customerName}}\",\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"booking_date\": \"{{bookingDate}}\",\n  \"booking_time\": \"{{bookingTime}}\",\n  \"service_kind\": \"quick\",\n  \"language\": \"ar\",\n  \"customer_lat\": \"{{customerLat}}\",\n  \"customer_lng\": \"{{customerLng}}\",\n  \"exclude_station_ids\": []\n}",
@@ -1159,7 +1083,7 @@
                 "value": "Bearer {{anonKey}}"
               }
             ],
-            "description": "Audits inbound messages only. Booking flow is disabled.",
+            "description": "Audits inbound messages only. Booking flow and customer OTP login are disabled.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"sample-entry\",\n      \"changes\": [\n        {\n          \"value\": {\n            \"messages\": [\n              {\n                \"from\": \"{{customerPhoneNormalized}}\",\n                \"id\": \"wamid.sample\",\n                \"type\": \"text\",\n                \"text\": {\n                  \"body\": \"Test inbound message\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",

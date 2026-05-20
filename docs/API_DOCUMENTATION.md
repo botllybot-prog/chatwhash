@@ -1,6 +1,6 @@
 # Washlly Website API Documentation
 
-Last updated: 2026-05-18
+Last updated: 2026-05-20
 
 ## Overview
 
@@ -16,7 +16,7 @@ Washlly uses Supabase for database, authentication, REST access, realtime data, 
 Current booking direction:
 
 - Customer and station booking actions now happen inside the website/app inbox.
-- WhatsApp is kept for OTP, subscriptions, suspension/package notices, and admin broadcasts.
+- WhatsApp is kept for subscriptions, suspension/package notices, and admin broadcasts.
 - The WhatsApp webhook no longer confirms, rejects, cancels, postpones, or rates bookings.
 
 ## Common Headers
@@ -43,7 +43,7 @@ Authorization: Bearer <USER_ACCESS_TOKEN or SUPABASE_ANON_KEY>
 | --- | --- |
 | `/` | Landing page |
 | `/map` | Customer portal, inbox, quick booking, regular booking, map, install button |
-| `/customer-login` | Customer login and OTP verification |
+| `/customer-login` | Direct customer login with name/phone |
 | `/stations-list` | Public station list |
 | `/owner` | Owner registration/login |
 | `/login` | Admin/employee/station owner login |
@@ -51,74 +51,9 @@ Authorization: Bearer <USER_ACCESS_TOKEN or SUPABASE_ANON_KEY>
 
 ## Customer Login and Session APIs
 
-### `customer-send-login-code`
-
-Sends an OTP code to the customer WhatsApp number. The customer web session is created only after this OTP is verified.
-
-```http
-POST /functions/v1/customer-send-login-code
-```
-
-Request:
-
-```json
-{
-  "customer_name": "Mustafa",
-  "customer_phone": "07736635435"
-}
-```
-
-Success:
-
-```json
-{
-  "success": true,
-  "expires_at": "2026-05-17T12:10:00.000Z"
-}
-```
-
-Common errors:
-
-| Status | Error |
-| --- | --- |
-| 400 | `Missing required fields` |
-| 403 | `Customer account is blocked` |
-| 500 | `Failed to send WhatsApp code` |
-
-### `customer-verify-login-code`
-
-Verifies the OTP and creates a persistent customer web session.
-
-```http
-POST /functions/v1/customer-verify-login-code
-```
-
-Request:
-
-```json
-{
-  "customer_phone": "07736635435",
-  "code": "123456"
-}
-```
-
-Success:
-
-```json
-{
-  "success": true,
-  "session_token": "customer-session-token",
-  "expires_at": "2026-06-16T12:00:00.000Z",
-  "customer_phone": "9647736635435",
-  "customer_name": "Mustafa"
-}
-```
-
-Common errors: `No active code found`, `Code expired`, `Invalid code`, `Too many attempts`, `Customer account is blocked`.
-
 ### `customer-login-by-phone`
 
-Looks up a customer phone before sending OTP. This endpoint never creates a customer session by itself.
+Creates or resumes a direct customer web session by phone number. No OTP is required. On first use, the customer must provide a name; later logins can use the phone number only.
 
 ```http
 POST /functions/v1/customer-login-by-phone
@@ -128,37 +63,39 @@ Request:
 
 ```json
 {
-  "customer_phone": "07736635435"
+  "customer_phone": "07736635435",
+  "customer_name": "Mustafa"
 }
 ```
 
-Success when a saved customer name exists:
+Success:
 
 ```json
 {
   "success": true,
-  "requires_verification": true,
+  "requires_verification": false,
   "requires_name": false,
+  "session_token": "customer-session-token",
+  "expires_at": "2027-05-20T12:00:00.000Z",
   "customer_phone": "9647736635435",
   "customer_name": "Mustafa"
 }
 ```
 
-Success when the phone needs a name before OTP sending:
+Success when the phone needs a name:
 
 ```json
 {
   "success": true,
-  "requires_verification": true,
+  "requires_verification": false,
   "requires_name": true,
-  "customer_phone": "9647736635435",
-  "customer_name": ""
+  "customer_phone": "9647736635435"
 }
 ```
 
 ### `customer-update-profile`
 
-Updates the customer display name. Phone changes should use OTP verification instead.
+Updates the customer display name for an existing customer session. Phone changes should be handled as a new direct login with the new phone number.
 
 ```http
 POST /functions/v1/customer-update-profile
@@ -540,6 +477,7 @@ Success:
 Behavior:
 
 - Searches only within `15 km`.
+- Sorts all eligible stations by exact customer-to-station distance, then by station name and id as stable tie-breakers, before creating up to 3 booking targets.
 - Does not filter by service name; it uses the first active service for each station.
 - Requires an active station owner with `user_id`.
 - Allows up to 3 active bookings per customer total.
@@ -817,7 +755,7 @@ curl "https://yhklvtzonvgzkodysawu.supabase.co/rest/v1/stations?select=id,name,r
 | `quick_booking_requests` | Parent quick booking request |
 | `quick_booking_targets` | Stations targeted by quick booking |
 | `customer_profiles` | Customer name, phone, blocked status |
-| `customer_login_codes` | OTP codes for first verification or phone changes |
+| `customer_login_codes` | Legacy OTP table, not used by the current direct customer login flow |
 | `customer_web_sessions` | Persistent customer web sessions |
 | `customer_notifications` | Customer inbox notifications |
 | `notifications` | Owner/admin in-app notifications |
@@ -941,9 +879,7 @@ npx supabase db push
 Deploy booking/customer functions:
 
 ```bash
-npx supabase functions deploy customer-send-login-code
 npx supabase functions deploy customer-login-by-phone
-npx supabase functions deploy customer-verify-login-code
 npx supabase functions deploy customer-update-profile
 npx supabase functions deploy customer-get-inbox
 npx supabase functions deploy customer-mark-notification-read
@@ -980,11 +916,10 @@ Important: if the remote database already has old migrations manually applied, `
 ## Minimal Mobile Integration Flow
 
 1. Customer opens app.
-2. Call `customer-login-by-phone`.
-3. If `requires_verification` is true, call `customer-send-login-code`, then `customer-verify-login-code`.
-4. Store `customer_phone`, `customer_name`, and `session_token` locally.
-5. Use `customer-get-inbox` to render inbox, booking status, notification count, and bell sound trigger.
-6. For regular booking, call `spin-booking-discount`, then `create-map-booking`.
-7. For quick booking, call `create-quick-booking`.
-8. For customer actions, call `customer-manage-booking`.
-9. After a confirmed job is completed, call `customer-submit-rating`.
+2. Call `customer-login-by-phone` with `customer_phone` and, on first use, `customer_name`.
+3. Store `customer_phone`, `customer_name`, and `session_token` locally.
+4. Use `customer-get-inbox` to render inbox, booking status, notification count, and bell sound trigger.
+5. For regular booking, call `spin-booking-discount`, then `create-map-booking`.
+6. For quick booking, call `create-quick-booking`; it targets the nearest eligible stations within 15 km in deterministic distance order.
+7. For customer actions, call `customer-manage-booking`.
+8. After a confirmed job is completed, call `customer-submit-rating`.
