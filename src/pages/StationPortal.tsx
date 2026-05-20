@@ -884,12 +884,25 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
   );
 };
 
+type BookingActivityRow = {
+  id?: string | null;
+  status?: string | null;
+  booking_date?: string | null;
+  booking_time?: string | null;
+  booking_number?: number | string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+};
+
+type BookingActivitySnapshot = Record<string, { status: string; date: string; time: string; number: string; customer: string }>;
+
 const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalTexts }) => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState("all");
   const [bookingEdits, setBookingEdits] = useState<Record<string, { date: string; time: string }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
-  const bookingActivityRef = useRef("");
+  const bookingActivityRef = useRef<BookingActivitySnapshot>({});
+  const suppressedOwnerActionRef = useRef<Record<string, number>>({});
   const [ownerNotificationPermission, setOwnerNotificationPermission] = useState<NotificationPermission | "unsupported">(
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported",
   );
@@ -902,6 +915,83 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
     cancelled: t.cancelled,
   };
   const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = { pending: "secondary", confirmed: "default", completed: "outline", cancelled: "destructive" };
+
+  const buildBookingActivitySnapshot = useCallback((rows: BookingActivityRow[]) => {
+    const snapshot: BookingActivitySnapshot = {};
+    for (const row of rows) {
+      const id = String(row?.id || "");
+      if (!id) continue;
+      snapshot[id] = {
+        status: String(row?.status || ""),
+        date: String(row?.booking_date || ""),
+        time: String(row?.booking_time || "").slice(0, 5),
+        number: row?.booking_number ? `#${row.booking_number}` : `#${id.slice(0, 8)}`,
+        customer: String(row?.customer_name || row?.customer_phone || t.customer),
+      };
+    }
+    return snapshot;
+  }, [t.customer]);
+
+  const getBookingActivityNotice = useCallback((
+    currentRows: BookingActivityRow[],
+    previous: BookingActivitySnapshot,
+  ) => {
+    const now = Date.now();
+    for (const row of currentRows) {
+      const id = String(row?.id || "");
+      if (!id) continue;
+      const suppressedUntil = suppressedOwnerActionRef.current[id] || 0;
+      if (suppressedUntil > now) continue;
+      if (suppressedUntil) delete suppressedOwnerActionRef.current[id];
+      const current = {
+        status: String(row?.status || ""),
+        date: String(row?.booking_date || ""),
+        time: String(row?.booking_time || "").slice(0, 5),
+        number: row?.booking_number ? `#${row.booking_number}` : `#${id.slice(0, 8)}`,
+        customer: String(row?.customer_name || row?.customer_phone || t.customer),
+      };
+      const old = previous[id];
+      if (!old) {
+        return {
+          title: t.newBooking,
+          body: `${current.number} - ${current.customer} - ${current.date} ${current.time}`,
+        };
+      }
+      if (old.status !== current.status) {
+        if (current.status === "cancelled") {
+          return {
+            title: "تم إلغاء الحجز",
+            body: `${current.number} - ${current.customer} ألغى الحجز أو تم إلغاؤه من النظام.`,
+          };
+        }
+        if (current.status === "confirmed") {
+          return {
+            title: "تم تأكيد الحجز",
+            body: `${current.number} - ${current.customer} أصبح مؤكداً.`,
+          };
+        }
+        if (current.status === "pending_customer_approval") {
+          return {
+            title: "تم اقتراح موعد جديد",
+            body: `${current.number} - ${current.customer} بانتظار موافقة الزبون.`,
+          };
+        }
+        if (current.status === "pending_owner_approval") {
+          return {
+            title: "طلب تعديل من الزبون",
+            body: `${current.number} - ${current.customer} ينتظر موافقتك.`,
+          };
+        }
+      }
+      if (old.date !== current.date || old.time !== current.time) {
+        return {
+          title: "تم تعديل موعد الحجز",
+          body: `${current.number} - ${current.customer} إلى ${current.date} ${current.time}`,
+        };
+      }
+    }
+    return null;
+  }, [t.customer, t.newBooking]);
 
   const playOwnerBell = useCallback(() => {
     try {
@@ -966,12 +1056,12 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
     if (filterStatus !== "all") q = q.eq("status", filterStatus as any);
     const { data } = await q;
     if (data) {
-      const fingerprint = data.map((row) => `${row.id}:${row.status}:${row.booking_date}:${row.booking_time || ""}`).join("|");
-      if (notifyOnChange && bookingActivityRef.current && fingerprint !== bookingActivityRef.current) {
+      const notice = notifyOnChange ? getBookingActivityNotice(data, bookingActivityRef.current) : null;
+      if (notice) {
         playOwnerBell();
-        showOwnerScreenNotice(t.newBooking, t.bookingReceived);
+        showOwnerScreenNotice(notice.title, notice.body);
       }
-      bookingActivityRef.current = fingerprint;
+      bookingActivityRef.current = buildBookingActivitySnapshot(data);
       setBookings(data);
       setBookingEdits((prev) => {
         const next = { ...prev };
@@ -986,7 +1076,7 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
         return next;
       });
     }
-  }, [stationId, filterStatus, playOwnerBell, showOwnerScreenNotice, t]);
+  }, [stationId, filterStatus, playOwnerBell, showOwnerScreenNotice, getBookingActivityNotice, buildBookingActivitySnapshot]);
 
   useEffect(() => { load(false); }, [load]);
 
@@ -1004,6 +1094,7 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
 
   const manageBooking = async (id: string, action: "confirm" | "reject" | "postpone") => {
     setSavingId(id);
+    suppressedOwnerActionRef.current[id] = Date.now() + 15000;
     const edit = bookingEdits[id];
     const body: Record<string, unknown> = { booking_id: id, action };
     if (action === "postpone") {
@@ -1013,6 +1104,7 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
     const { data, error } = await supabase.functions.invoke("owner-manage-booking", { body });
     setSavingId(null);
     if (error || (data as any)?.error) {
+      delete suppressedOwnerActionRef.current[id];
       toast({ title: "تعذر تحديث الحجز", description: (data as any)?.error || error?.message, variant: "destructive" });
       return;
     }

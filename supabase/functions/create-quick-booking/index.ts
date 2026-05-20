@@ -289,8 +289,14 @@ Deno.serve(async (req) => {
         .select("id,name,latitude,longitude,is_active")
         .eq("is_active", true)
         .not("latitude", "is", null)
-        .not("longitude", "is", null),
-      supabase.from("services").select("id,station_id,name,is_active").eq("is_active", true),
+        .not("longitude", "is", null)
+        .order("name", { ascending: true }),
+      supabase
+        .from("services")
+        .select("id,station_id,name,is_active")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true }),
       getSettings(supabase),
       getStationOwnerInfoMap(supabase),
     ]);
@@ -367,7 +373,13 @@ Deno.serve(async (req) => {
         };
       })
       .filter(Boolean)
-      .sort((a: any, b: any) => a.distance - b.distance) as {
+      .sort((a: any, b: any) => {
+        const distanceDelta = a.distance - b.distance;
+        if (Math.abs(distanceDelta) > 0.000001) return distanceDelta;
+        const nameDelta = String(a.station.name || "").localeCompare(String(b.station.name || ""), "ar");
+        if (nameDelta !== 0) return nameDelta;
+        return String(a.station.id || "").localeCompare(String(b.station.id || ""));
+      }) as {
         station: StationRow; service: ServiceRow; distance: number; ownerPhone: string; ownerUserId: string | null
       }[];
 

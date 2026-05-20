@@ -20,6 +20,7 @@ Format: `## [YYYY-MM-DD] — Title`
 - Disabled customer OTP login and switched customer access to direct name/phone login with saved customer profile sessions.
 - Kept booking notifications and actions inside the web app, while cleaning the WhatsApp webhook so it no longer handles booking confirmation, cancellation, or rating flows.
 - Removed obsolete Expo mobile app code and the `/mobile-map` web route.
+- Made quick booking station targeting deterministic by nearest distance, with stable tie-breaking, and corrected owner booking bell messages for cancellation, confirmation, and time-change events.
 
 ## [2026-05-09] - Mobile Owner Portal & Quick Booking
 
