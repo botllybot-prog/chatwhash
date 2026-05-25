@@ -16,6 +16,8 @@ import StationsMap from "./pages/StationsMap";
 import Login from "./pages/Login";
 import OwnerAccess from "./pages/OwnerAccess";
 import NotFound from "./pages/NotFound";
+import More from "./pages/More";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminLayout from "./components/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminStations from "./pages/admin/AdminStations";
@@ -87,6 +89,8 @@ const App = () => (
               <Route path="/" element={<LandingPage />} />
               <Route path="/stations-list" element={<StationsList />} />
               <Route path="/map" element={<CustomerMapGuard><StationsMap /></CustomerMapGuard>} />
+              <Route path="/more" element={<More />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             </Route>
             <Route path="/customer-login" element={<CustomerLogin />} />
             <Route path="/login" element={<Login />} />

@@ -22,6 +22,7 @@ Format: `## [YYYY-MM-DD] — Title`
 - Removed obsolete Expo mobile app code and the `/mobile-map` web route.
 - Made quick booking station targeting deterministic by nearest distance, with stable tie-breaking, and corrected owner booking bell messages for cancellation, confirmation, and time-change events.
 - Updated the API documentation and Postman collection for direct customer name/phone login without OTP and the deterministic quick-booking targeting behavior.
+- Added the `/more` and `/privacy-policy` public pages, replaced the bottom WhatsApp shortcut with More/Map/Stations navigation, and verified the API collection smoke test after deploying `customer-list-bookings`.
 
 ## [2026-05-09] - Mobile Owner Portal & Quick Booking
 
