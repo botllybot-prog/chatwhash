@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { Banknote, Clock, Globe, Pencil, Percent, Plus, Trash2 } from "lucide-react";
+import { Clock, Globe, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAppLanguage } from "@/lib/language";
 
 const emptyForm = {
@@ -160,25 +160,25 @@ const AdminServices = () => {
   const { language, isRtl } = useAppLanguage();
   const t = texts[language];
   const [services, setServices] = useState<any[]>([]);
-  const [stations, setStations] = useState<any[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ ...emptyForm });
 
   const load = useCallback(async () => {
-    const [{ data: svc }, { data: st }] = await Promise.all([
-      supabase.from("services").select("*").order("sort_order"),
-      supabase.from("stations").select("id, name").order("created_at"),
-    ]);
+    const { data: svc } = await supabase
+      .from("services")
+      .select("*")
+      .is("station_id", null)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
     if (svc) setServices(svc);
-    if (st) setStations(st);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const openAdd = (stationId: string | null) => {
+  const openAdd = () => {
     setEditing(null);
-    setForm({ ...emptyForm, station_id: stationId });
+    setForm({ ...emptyForm, station_id: null, price: 0, customer_discount: "" });
     setDialogOpen(true);
   };
 
@@ -186,12 +186,12 @@ const AdminServices = () => {
     setEditing(service);
     setForm({
       name: service.name,
-      price: service.price,
+      price: 0,
       duration_minutes: service.duration_minutes,
-      station_id: service.station_id,
+      station_id: null,
       is_active: service.is_active,
       sort_order: service.sort_order,
-      customer_discount: service.customer_discount || "",
+      customer_discount: "",
     });
     setDialogOpen(true);
   };
@@ -209,11 +209,13 @@ const AdminServices = () => {
     }
 
     const payload = {
-      ...form,
-      price: Number(form.price),
+      name: form.name.trim(),
+      station_id: null,
+      price: 0,
       duration_minutes: Number(form.duration_minutes),
+      is_active: form.is_active,
       sort_order: Number(form.sort_order),
-      customer_discount: form.customer_discount.trim() || null,
+      customer_discount: null,
     };
 
     const wasEditing = editing;
@@ -242,8 +244,7 @@ const AdminServices = () => {
     toast({ title: t.deleted });
   };
 
-  const globalServices = services.filter((service) => !service.station_id);
-  const stationName = (id: string) => stations.find((station) => station.id === id)?.name ?? id;
+  const globalServices = services;
 
   const ServiceCard = ({ service }: { service: any }) => (
     <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3">
@@ -254,14 +255,8 @@ const AdminServices = () => {
             {!service.is_active && <Badge variant="outline" className="text-xs">{t.disabled}</Badge>}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><Banknote className="h-3 w-3" />{Number(service.price).toLocaleString()}</span>
+            <span>{t.sharedForAll}</span>
             <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{service.duration_minutes}</span>
-            {service.customer_discount && (
-              <span className="flex items-center gap-1 text-emerald-600">
-                <Percent className="h-3 w-3" />
-                {service.customer_discount}
-              </span>
-            )}
           </div>
         </div>
       </div>
@@ -280,7 +275,7 @@ const AdminServices = () => {
     <div className="space-y-4" dir={isRtl ? "rtl" : "ltr"}>
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-foreground">{t.title}</h3>
-        <Button size="sm" variant="outline" onClick={() => openAdd(null)}>
+        <Button size="sm" variant="outline" onClick={openAdd}>
           <Globe className="ml-1 h-4 w-4" />
           {t.globalForAll}
         </Button>
@@ -294,7 +289,7 @@ const AdminServices = () => {
               {t.sharedServices}
               <Badge variant="secondary" className="text-xs">{globalServices.length}</Badge>
             </CardTitle>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openAdd(null)}>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={openAdd}>
               <Plus className="ml-1 h-3.5 w-3.5" />
               {t.add}
             </Button>
@@ -309,47 +304,12 @@ const AdminServices = () => {
         </CardContent>
       </Card>
 
-      {stations.length === 0 && (
-        <p className="py-4 text-center text-sm text-muted-foreground">{t.noStations}</p>
-      )}
-
-      {stations.map((station) => {
-        const stationServices = services.filter((service) => service.station_id === station.id);
-        return (
-          <Card key={station.id}>
-            <CardHeader className="px-4 pb-3 pt-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  {station.name}
-                  <Badge variant="secondary" className="text-xs">{stationServices.length} {t.serviceCount}</Badge>
-                </CardTitle>
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => openAdd(station.id)}>
-                  <Plus className="ml-1 h-3.5 w-3.5" />
-                  {t.add}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2 px-4 pb-4">
-              {stationServices.length === 0 ? (
-                <p className="py-3 text-center text-xs text-muted-foreground">{t.noPrivate}</p>
-              ) : (
-                stationServices.map((service) => <ServiceCard key={service.id} service={service} />)
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
-
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
         <DialogContent dir={isRtl ? "rtl" : "ltr"} className="max-w-sm">
           <DialogHeader>
             <DialogTitle>{editing ? t.editService : t.addService}</DialogTitle>
             <DialogDescription className="sr-only">{editing ? t.editServiceDesc : t.addServiceDesc}</DialogDescription>
-            {form.station_id ? (
-              <p className="text-sm text-muted-foreground">{t.station}: <span className="font-medium text-foreground">{stationName(form.station_id)}</span></p>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t.sharedForAll}</p>
-            )}
+            <p className="text-sm text-muted-foreground">{t.sharedForAll}</p>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -358,20 +318,9 @@ const AdminServices = () => {
               <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder={t.servicePlaceholder} autoFocus />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>{t.price}</Label>
-                <Input type="number" value={form.price} onChange={(event) => setForm({ ...form, price: Number(event.target.value) })} />
-              </div>
-              <div>
-                <Label>{t.duration}</Label>
-                <Input type="number" value={form.duration_minutes} onChange={(event) => setForm({ ...form, duration_minutes: Number(event.target.value) })} />
-              </div>
-            </div>
-
             <div>
-              <Label>{t.customerDiscount}</Label>
-              <Input value={form.customer_discount} onChange={(event) => setForm({ ...form, customer_discount: event.target.value })} placeholder={t.discountPlaceholder} />
+              <Label>{t.duration}</Label>
+              <Input type="number" value={form.duration_minutes} onChange={(event) => setForm({ ...form, duration_minutes: Number(event.target.value) })} />
             </div>
 
             <div className="flex items-center justify-between rounded-lg border px-3 py-2">

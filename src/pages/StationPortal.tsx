@@ -676,7 +676,7 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
   const [stationServices, setStationServices] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [edits, setEdits] = useState<Record<string, { price: string; duration: string }>>({});
+  const [edits, setEdits] = useState<Record<string, { price: string }>>({});
 
   const load = useCallback(async () => {
     const [{ data: catalog }, { data: own }] = await Promise.all([
@@ -700,12 +700,11 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
     setCatalogServices(catalogRows);
     setStationServices(ownRows);
     setEdits((prev) => {
-      const next: Record<string, { price: string; duration: string }> = { ...prev };
+      const next: Record<string, { price: string }> = { ...prev };
       for (const catalogRow of catalogRows) {
         const ownRow = ownRows.find((row) => row.name === catalogRow.name);
         next[catalogRow.id] = {
           price: next[catalogRow.id]?.price ?? String(ownRow?.price ?? catalogRow.price ?? 0),
-          duration: next[catalogRow.id]?.duration ?? String(ownRow?.duration_minutes ?? catalogRow.duration_minutes ?? 30),
         };
       }
       return next;
@@ -722,16 +721,11 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
   const validateEdit = (catalogService: any) => {
     const edit = edits[catalogService.id] || {};
     const price = Number(edit.price ?? catalogService.price ?? 0);
-    const duration = Number(edit.duration ?? catalogService.duration_minutes ?? 30);
     if (!Number.isFinite(price) || price < 0) {
       toast({ title: "أدخل سعراً صحيحاً", variant: "destructive" });
       return null;
     }
-    if (!Number.isFinite(duration) || duration <= 0) {
-      toast({ title: "أدخل مدة صحيحة", variant: "destructive" });
-      return null;
-    }
-    return { price, duration };
+    return { price, duration: Number(catalogService.duration_minutes ?? 30) || 30 };
   };
 
   const setServiceChecked = async (catalogService: any, checked: boolean) => {
@@ -743,7 +737,7 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
     const request = existing
       ? supabase
           .from("services")
-          .update({
+        .update({
             price: values.price,
             duration_minutes: values.duration,
             is_active: checked,
@@ -753,7 +747,7 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
           .eq("station_id", stationId)
       : supabase
           .from("services")
-          .insert({
+        .insert({
             station_id: stationId,
             name: catalogService.name,
             price: values.price,
@@ -811,18 +805,17 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
       <h3 className="text-lg font-semibold text-foreground">{t.stationServices}</h3>
       <Card>
         <CardContent className="space-y-2 pt-5 text-sm text-muted-foreground">
-          اختر الخدمات التي تقدمها محطتك من القائمة التي يضيفها الأدمن، ثم ضع السعر والمدة لكل خدمة مفعّلة.
+          اختر الخدمات التي تقدمها محطتك من القائمة التي يضيفها الأدمن، ثم ضع السعر مقابل كل خدمة مفعّلة.
         </CardContent>
       </Card>
       <Table>
-        <TableHeader><TableRow><TableHead>اختيار</TableHead><TableHead>{t.service}</TableHead><TableHead>{t.price}</TableHead><TableHead>{t.duration}</TableHead><TableHead>{t.action}</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>اختيار</TableHead><TableHead>{t.service}</TableHead><TableHead>{t.price}</TableHead><TableHead>{t.action}</TableHead></TableRow></TableHeader>
         <TableBody>
           {catalogServices.map((catalogService) => {
             const ownService = getStationService(catalogService);
             const checked = Boolean(ownService?.is_active);
             const edit = edits[catalogService.id] || {
               price: String(ownService?.price ?? catalogService.price ?? 0),
-              duration: String(ownService?.duration_minutes ?? catalogService.duration_minutes ?? 30),
             };
             return (
               <TableRow key={catalogService.id} className={!checked ? "opacity-75" : ""}>
@@ -846,14 +839,6 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
                   />
                 </TableCell>
                 <TableCell>
-                  <Input
-                    type="number"
-                    value={edit.duration}
-                    disabled={!checked}
-                    onChange={(e) => setEdits((prev) => ({ ...prev, [catalogService.id]: { ...edit, duration: e.target.value } }))}
-                  />
-                </TableCell>
-                <TableCell>
                   <Button size="sm" onClick={() => saveCatalogService(catalogService)} disabled={!checked || saving}>
                     حفظ السعر
                   </Button>
@@ -866,7 +851,6 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
               <TableCell><Badge variant="outline">قديمة</Badge></TableCell>
               <TableCell className="font-medium">{service.name}</TableCell>
               <TableCell>{service.price} د.ع</TableCell>
-              <TableCell>{service.duration_minutes} {t.minutes}</TableCell>
               <TableCell>
                 <Button size="sm" variant="destructive" onClick={() => setServiceChecked(service, false)}>
                   إخفاء
@@ -874,7 +858,7 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
               </TableCell>
             </TableRow>
           ))}
-          {catalogServices.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">لا توجد خدمات مضافة من الأدمن حالياً</TableCell></TableRow>}
+          {catalogServices.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">لا توجد خدمات مضافة من الأدمن حالياً</TableCell></TableRow>}
         </TableBody>
       </Table>
     </div>
