@@ -75,16 +75,6 @@ Deno.serve(async (req) => {
     const password = payload.password;
     const stationName = payload.station?.name?.trim();
     const rawServices = Array.isArray(payload.services) ? payload.services : [];
-    const validServices = rawServices
-      .filter((service) => service?.name?.trim() && Number(service.price) > 0)
-      .map((service, index) => ({
-        name: service.name!.trim(),
-        price: Number(service.price),
-        duration_minutes: Number(service.duration_minutes) || 30,
-        customer_discount: service.customer_discount?.trim() || null,
-        sort_order: Number(service.sort_order ?? index),
-        is_active: true,
-      }));
 
     if (!ownerName || !ownerPhone || !password || !stationName) {
       return json({ error: "Missing required fields" }, 400);
@@ -93,6 +83,34 @@ Deno.serve(async (req) => {
     if (password.length < 6) {
       return json({ error: "Password must be at least 6 characters" }, 400);
     }
+
+    const { data: catalogServices, error: catalogError } = await supabaseAdmin
+      .from("services")
+      .select("name, duration_minutes, sort_order")
+      .is("station_id", null)
+      .eq("is_active", true);
+
+    if (catalogError) {
+      throw catalogError;
+    }
+
+    const catalogByName = new Map(
+      (catalogServices || []).map((service) => [String(service.name || "").trim(), service]),
+    );
+
+    const validServices = rawServices
+      .filter((service) => service?.name?.trim() && Number(service.price) > 0 && catalogByName.has(service.name.trim()))
+      .map((service, index) => {
+        const catalogService = catalogByName.get(service.name!.trim());
+        return {
+          name: service.name!.trim(),
+          price: Number(service.price),
+          duration_minutes: Number(catalogService?.duration_minutes) || 30,
+          customer_discount: null,
+          sort_order: Number(catalogService?.sort_order ?? service.sort_order ?? index),
+          is_active: true,
+        };
+      });
 
     if (validServices.length === 0) {
       return json({ error: "At least one service is required" }, 400);

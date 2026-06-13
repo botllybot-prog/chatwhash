@@ -11,6 +11,7 @@ Format: `## [YYYY-MM-DD] — Title`
 - Changed customer-facing station service loading to show only services explicitly enabled by that station.
 - Tightened map-booking service validation so bookings use station-specific services instead of global catalog services.
 - Simplified admin services into shared service names only, leaving station owners to enable each shared service and set its price.
+- Updated owner self-registration to choose services from the shared admin catalog and enter only station-specific prices.
 
 ## [2026-05-17] - Customer Inbox Ratings and Booking Bot Cleanup
 

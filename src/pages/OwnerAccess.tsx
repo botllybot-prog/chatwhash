@@ -37,15 +37,11 @@ type AccessView = "entry" | "signin" | "signup";
 type ServiceDraft = {
   name: string;
   price: string;
-  duration_minutes: string;
-  customer_discount: string;
 };
 
 const emptyService = (): ServiceDraft => ({
   name: "",
   price: "",
-  duration_minutes: "30",
-  customer_discount: "",
 });
 
 const texts = {
@@ -453,6 +449,7 @@ const OwnerAccess = () => {
   const [slotDuration, setSlotDuration] = useState("30");
   const [location, setLocation] = useState(DEFAULT_CENTER);
   const [services, setServices] = useState<ServiceDraft[]>([emptyService()]);
+  const [serviceCatalog, setServiceCatalog] = useState<any[]>([]);
   const [categorySettings, setCategorySettings] = useState<Record<string, string>>({});
   const visibleStationCategories = getVisibleStationCategories(categorySettings);
 
@@ -468,6 +465,31 @@ const OwnerAccess = () => {
     };
     loadCategorySettings();
   }, []);
+
+  useEffect(() => {
+    const loadServiceCatalog = async () => {
+      const { data, error } = await supabase
+        .from("services")
+        .select("id, name, duration_minutes, sort_order")
+        .is("station_id", null)
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true });
+
+      if (error) {
+        toast({ title: t.accountFailed, description: error.message, variant: "destructive" });
+        return;
+      }
+
+      setServiceCatalog(data || []);
+      setServices((current) => {
+        if (current.length !== 1 || current[0].name || current[0].price || !data?.[0]?.name) return current;
+        return [{ ...current[0], name: data[0].name }];
+      });
+    };
+
+    loadServiceCatalog();
+  }, [t.accountFailed]);
 
   const getUserRole = async (userId: string) => {
     const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).limit(1).maybeSingle();
@@ -621,8 +643,8 @@ const OwnerAccess = () => {
       services: validServices.map((service, index) => ({
         name: service.name.trim(),
         price: Number(service.price),
-        duration_minutes: Number(service.duration_minutes) || 30,
-        customer_discount: service.customer_discount.trim() || null,
+        duration_minutes: Number(serviceCatalog.find((item) => item.name === service.name.trim())?.duration_minutes) || 30,
+        customer_discount: null,
         sort_order: index,
       })),
     };
@@ -928,7 +950,7 @@ const OwnerAccess = () => {
                       <Wrench className="h-5 w-5 text-primary" />
                       {t.services}
                     </CardTitle>
-                    <CardDescription>{t.servicesDesc}</CardDescription>
+                    <CardDescription>اختر الخدمة من الخدمات المشتركة التي يضيفها الأدمن، ثم اكتب السعر فقط.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {services.map((service, index) => (
@@ -945,19 +967,22 @@ const OwnerAccess = () => {
                         <div className="grid gap-4 md:grid-cols-2">
                           <div className="space-y-2 md:col-span-2">
                             <Label>{t.serviceName}</Label>
-                            <Input value={service.name} onChange={(e) => updateService(index, "name", e.target.value)} placeholder={t.placeholders.serviceName} />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>{t.price}</Label>
-                            <Input type="number" min={0} value={service.price} onChange={(e) => updateService(index, "price", e.target.value)} placeholder={t.placeholders.price} />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>{t.duration}</Label>
-                            <Input type="number" min={5} step={5} value={service.duration_minutes} onChange={(e) => updateService(index, "duration_minutes", e.target.value)} />
+                            <Select value={service.name} onValueChange={(value) => updateService(index, "name", value)}>
+                              <SelectTrigger>
+                                <SelectValue placeholder={t.serviceName} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {serviceCatalog.map((catalogService) => (
+                                  <SelectItem key={catalogService.id} value={catalogService.name}>
+                                    {catalogService.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div className="space-y-2 md:col-span-2">
-                            <Label>{t.customerDiscount}</Label>
-                            <Input value={service.customer_discount} onChange={(e) => updateService(index, "customer_discount", e.target.value)} placeholder={t.placeholders.discount} />
+                            <Label>{t.price}</Label>
+                            <Input type="number" min={0} value={service.price} onChange={(e) => updateService(index, "price", e.target.value)} placeholder={t.placeholders.price} />
                           </div>
                         </div>
                       </div>
