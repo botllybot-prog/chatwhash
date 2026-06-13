@@ -45,3 +45,9 @@ verify_jwt = false
 [functions.cancel-all-map-bookings]
 verify_jwt = false
 
+[functions.send-notification]
+verify_jwt = false
+
+[functions.notify-on-booking-change]
+verify_jwt = false
+
