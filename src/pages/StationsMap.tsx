@@ -857,7 +857,7 @@ function StationCard({
       const { data, error } = await supabase
         .from("services")
         .select("id, name, price, duration_minutes, station_id")
-        .or(`station_id.eq.${station.id},station_id.is.null`)
+        .eq("station_id", station.id)
         .eq("is_active", true)
         .order("sort_order");
 

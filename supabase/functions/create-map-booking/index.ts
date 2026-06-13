@@ -338,7 +338,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!service || (service.station_id && service.station_id !== stationId)) {
+    if (!service || service.station_id !== stationId) {
       return new Response(JSON.stringify({ error: tt.errors.serviceMismatch }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

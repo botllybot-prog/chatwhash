@@ -69,7 +69,7 @@ const StationDetailSheet = ({ station, onClose }: Props) => {
     if (!station) return;
     setLoadingSlots(true);
     const load = async () => {
-      const { data: svc } = await supabase.from("services").select("*").or(`station_id.eq.${station.id},station_id.is.null`).eq("is_active", true).order("sort_order");
+      const { data: svc } = await supabase.from("services").select("*").eq("station_id", station.id).eq("is_active", true).order("sort_order");
       if (svc) setServices(svc);
       if (station.scheduling_type === "slots") {
         const today = new Date().toISOString().split("T")[0];

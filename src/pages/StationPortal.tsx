@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Store, CalendarCheck, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key, CreditCard, AlertTriangle, Wallet, Sparkles, Gift } from "lucide-react";
@@ -671,109 +672,128 @@ const StationInfoTab = ({ stationId, t }: { stationId: string; t: PortalTexts })
 };
 
 const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalTexts }) => {
-  const [services, setServices] = useState<any[]>([]);
-  const [selectedServiceName, setSelectedServiceName] = useState("");
-  const [customServiceName, setCustomServiceName] = useState("");
-  const [newPrice, setNewPrice] = useState("");
-  const [newDuration, setNewDuration] = useState("30");
+  const [catalogServices, setCatalogServices] = useState<any[]>([]);
+  const [stationServices, setStationServices] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
-  const [edits, setEdits] = useState<Record<string, { price: string; duration: string; name: string }>>({});
-
-  const predefinedServices = [
-    "غسل عام",
-    "غسل سطحي",
-    "غسل جك",
-    "حمام داخلي",
-    "حمام ناشف",
-    "بولش",
-    "تكحيل",
-    "تبديل دهن",
-    "فحص سريع فقط",
-    "خدمة أخرى",
-  ];
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [edits, setEdits] = useState<Record<string, { price: string; duration: string }>>({});
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from("services")
-      .select("*")
-      .or(`station_id.eq.${stationId},station_id.is.null`)
-      .eq("is_active", true)
-      .order("sort_order");
-    if (data) {
-      setServices(data);
-      setEdits((prev) => {
-        const next = { ...prev };
-        for (const row of data) {
-          if (!next[row.id]) {
-            next[row.id] = {
-              name: row.name || "",
-              price: String(row.price ?? 0),
-              duration: String(row.duration_minutes ?? 30),
-            };
-          }
-        }
-        return next;
-      });
-    }
+    const [{ data: catalog }, { data: own }] = await Promise.all([
+      supabase
+        .from("services")
+        .select("*")
+        .is("station_id", null)
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true }),
+      supabase
+        .from("services")
+        .select("*")
+        .eq("station_id", stationId)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true }),
+    ]);
+
+    const catalogRows = catalog || [];
+    const ownRows = own || [];
+    setCatalogServices(catalogRows);
+    setStationServices(ownRows);
+    setEdits((prev) => {
+      const next: Record<string, { price: string; duration: string }> = { ...prev };
+      for (const catalogRow of catalogRows) {
+        const ownRow = ownRows.find((row) => row.name === catalogRow.name);
+        next[catalogRow.id] = {
+          price: next[catalogRow.id]?.price ?? String(ownRow?.price ?? catalogRow.price ?? 0),
+          duration: next[catalogRow.id]?.duration ?? String(ownRow?.duration_minutes ?? catalogRow.duration_minutes ?? 30),
+        };
+      }
+      return next;
+    });
   }, [stationId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const addService = async () => {
-    const name = selectedServiceName === "خدمة أخرى" ? customServiceName.trim() : selectedServiceName.trim();
-    const price = Number(newPrice);
-    const duration = Number(newDuration || 30);
+  const getStationService = (catalogService: any) =>
+    stationServices.find((row) => row.name === catalogService.name);
 
-    if (!name) {
-      toast({ title: "أدخل اسم الخدمة", variant: "destructive" });
-      return;
-    }
+  const validateEdit = (catalogService: any) => {
+    const edit = edits[catalogService.id] || {};
+    const price = Number(edit.price ?? catalogService.price ?? 0);
+    const duration = Number(edit.duration ?? catalogService.duration_minutes ?? 30);
     if (!Number.isFinite(price) || price < 0) {
       toast({ title: "أدخل سعراً صحيحاً", variant: "destructive" });
-      return;
+      return null;
     }
-    setSaving(true);
-    const { error } = await supabase.from("services").insert({
-      station_id: stationId,
-      name,
-      price,
-      duration_minutes: duration > 0 ? duration : 30,
-      is_active: true,
-      sort_order: 0,
-    } as any);
-    setSaving(false);
+    if (!Number.isFinite(duration) || duration <= 0) {
+      toast({ title: "أدخل مدة صحيحة", variant: "destructive" });
+      return null;
+    }
+    return { price, duration };
+  };
+
+  const setServiceChecked = async (catalogService: any, checked: boolean) => {
+    const existing = getStationService(catalogService);
+    const values = validateEdit(catalogService);
+    if (!values) return;
+
+    setSavingId(catalogService.id);
+    const request = existing
+      ? supabase
+          .from("services")
+          .update({
+            price: values.price,
+            duration_minutes: values.duration,
+            is_active: checked,
+            sort_order: catalogService.sort_order ?? existing.sort_order ?? 0,
+          } as any)
+          .eq("id", existing.id)
+          .eq("station_id", stationId)
+      : supabase
+          .from("services")
+          .insert({
+            station_id: stationId,
+            name: catalogService.name,
+            price: values.price,
+            duration_minutes: values.duration,
+            is_active: checked,
+            sort_order: catalogService.sort_order ?? 0,
+            customer_discount: catalogService.customer_discount ?? null,
+          } as any);
+
+    const { error } = await request;
+    setSavingId(null);
     if (error) {
-      toast({ title: "تعذر إضافة الخدمة", description: error.message, variant: "destructive" });
+      toast({ title: "تعذر تحديث الخدمة", description: error.message, variant: "destructive" });
       return;
     }
-    toast({ title: "تمت إضافة الخدمة" });
-    setSelectedServiceName("");
-    setCustomServiceName("");
-    setNewPrice("");
-    setNewDuration("30");
+    toast({ title: checked ? "تم تفعيل الخدمة" : "تم إخفاء الخدمة" });
     await load();
   };
 
-  const saveRow = async (serviceId: string) => {
-    const edit = edits[serviceId];
-    if (!edit) return;
-    const price = Number(edit.price);
-    const duration = Number(edit.duration);
-    if (!edit.name.trim() || !Number.isFinite(price) || price < 0) {
-      toast({ title: "تحقق من الاسم والسعر", variant: "destructive" });
+  const saveCatalogService = async (catalogService: any) => {
+    const values = validateEdit(catalogService);
+    if (!values) return;
+    const existing = getStationService(catalogService);
+    if (!existing) {
+      toast({ title: "اختر الخدمة أولاً", description: "فعّل المربع بجانب الخدمة ثم احفظ السعر.", variant: "destructive" });
       return;
     }
+
+    setSaving(true);
     const { error } = await supabase
       .from("services")
       .update({
-        name: edit.name.trim(),
-        price,
-        duration_minutes: duration > 0 ? duration : 30,
+        price: values.price,
+        duration_minutes: values.duration,
+        is_active: true,
+        sort_order: catalogService.sort_order ?? existing.sort_order ?? 0,
       } as any)
-      .eq("id", serviceId)
+      .eq("id", existing.id)
       .eq("station_id", stationId);
+    setSaving(false);
     if (error) {
       toast({ title: "تعذر حفظ الخدمة", description: error.message, variant: "destructive" });
       return;
@@ -782,102 +802,79 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
     await load();
   };
 
-  const deleteRow = async (serviceId: string) => {
-    const { error } = await supabase
-      .from("services")
-      .update({ is_active: false } as any)
-      .eq("id", serviceId)
-      .eq("station_id", stationId);
-    if (error) {
-      toast({ title: "تعذر حذف الخدمة", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "تم حذف الخدمة" });
-    await load();
-  };
-
-  const cloneGlobalService = async (row: any) => {
-    const { error } = await supabase.from("services").insert({
-      station_id: stationId,
-      name: row.name,
-      price: row.price ?? 0,
-      duration_minutes: row.duration_minutes ?? 30,
-      is_active: true,
-      sort_order: row.sort_order ?? 0,
-    } as any);
-    if (error) {
-      toast({ title: "تعذر إضافة الخدمة للمحطة", description: error.message, variant: "destructive" });
-      return;
-    }
-    toast({ title: "تمت إضافة الخدمة للمحطة" });
-    await load();
-  };
+  const orphanStationServices = stationServices.filter(
+    (service) => service.is_active && !catalogServices.some((catalogService) => catalogService.name === service.name),
+  );
 
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-foreground">{t.stationServices}</h3>
       <Card>
-        <CardContent className="space-y-3 pt-5">
-          <div className="grid gap-3 md:grid-cols-4">
-            <Select value={selectedServiceName} onValueChange={setSelectedServiceName}>
-              <SelectTrigger><SelectValue placeholder="اختر خدمة" /></SelectTrigger>
-              <SelectContent>
-                {predefinedServices.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Input placeholder="السعر" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} />
-            <Input placeholder="المدة بالدقائق" value={newDuration} onChange={(e) => setNewDuration(e.target.value)} />
-            <Button onClick={addService} disabled={saving}>{saving ? "جاري الإضافة..." : "إضافة خدمة"}</Button>
-          </div>
-          {selectedServiceName === "خدمة أخرى" && (
-            <Input placeholder="اسم الخدمة الجديدة" value={customServiceName} onChange={(e) => setCustomServiceName(e.target.value)} />
-          )}
+        <CardContent className="space-y-2 pt-5 text-sm text-muted-foreground">
+          اختر الخدمات التي تقدمها محطتك من القائمة التي يضيفها الأدمن، ثم ضع السعر والمدة لكل خدمة مفعّلة.
         </CardContent>
       </Card>
       <Table>
-        <TableHeader><TableRow><TableHead>{t.service}</TableHead><TableHead>{t.price}</TableHead><TableHead>{t.duration}</TableHead><TableHead>{t.scope}</TableHead><TableHead>{t.action}</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>اختيار</TableHead><TableHead>{t.service}</TableHead><TableHead>{t.price}</TableHead><TableHead>{t.duration}</TableHead><TableHead>{t.action}</TableHead></TableRow></TableHeader>
         <TableBody>
-          {services.map((s) => {
-            const isOwn = String(s.station_id || "") === stationId;
-            const edit = edits[s.id] || { name: s.name || "", price: String(s.price ?? 0), duration: String(s.duration_minutes ?? 30) };
+          {catalogServices.map((catalogService) => {
+            const ownService = getStationService(catalogService);
+            const checked = Boolean(ownService?.is_active);
+            const edit = edits[catalogService.id] || {
+              price: String(ownService?.price ?? catalogService.price ?? 0),
+              duration: String(ownService?.duration_minutes ?? catalogService.duration_minutes ?? 30),
+            };
             return (
-              <TableRow key={s.id}>
+              <TableRow key={catalogService.id} className={!checked ? "opacity-75" : ""}>
+                <TableCell>
+                  <Checkbox
+                    checked={checked}
+                    disabled={savingId === catalogService.id}
+                    onCheckedChange={(value) => setServiceChecked(catalogService, Boolean(value))}
+                  />
+                </TableCell>
                 <TableCell className="font-medium">
-                  {isOwn ? (
-                    <Input value={edit.name} onChange={(e) => setEdits((prev) => ({ ...prev, [s.id]: { ...edit, name: e.target.value } }))} />
-                  ) : (
-                    s.name
-                  )}
+                  <div>{catalogService.name}</div>
+                  <div className="text-xs text-muted-foreground">خدمة معرفة من الإدارة</div>
                 </TableCell>
                 <TableCell>
-                  {isOwn ? (
-                    <Input value={edit.price} onChange={(e) => setEdits((prev) => ({ ...prev, [s.id]: { ...edit, price: e.target.value } }))} />
-                  ) : (
-                    `${s.price} د.ع`
-                  )}
+                  <Input
+                    type="number"
+                    value={edit.price}
+                    disabled={!checked}
+                    onChange={(e) => setEdits((prev) => ({ ...prev, [catalogService.id]: { ...edit, price: e.target.value } }))}
+                  />
                 </TableCell>
                 <TableCell>
-                  {isOwn ? (
-                    <Input value={edit.duration} onChange={(e) => setEdits((prev) => ({ ...prev, [s.id]: { ...edit, duration: e.target.value } }))} />
-                  ) : (
-                    `${s.duration_minutes} ${t.minutes}`
-                  )}
+                  <Input
+                    type="number"
+                    value={edit.duration}
+                    disabled={!checked}
+                    onChange={(e) => setEdits((prev) => ({ ...prev, [catalogService.id]: { ...edit, duration: e.target.value } }))}
+                  />
                 </TableCell>
-                <TableCell>{s.station_id ? t.privateScope : t.publicScope}</TableCell>
                 <TableCell>
-                  {isOwn ? (
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => saveRow(s.id)}>حفظ</Button>
-                      <Button size="sm" variant="destructive" onClick={() => deleteRow(s.id)}>حذف</Button>
-                    </div>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={() => cloneGlobalService(s)}>إضافة للمحطة</Button>
-                  )}
+                  <Button size="sm" onClick={() => saveCatalogService(catalogService)} disabled={!checked || saving}>
+                    حفظ السعر
+                  </Button>
                 </TableCell>
               </TableRow>
             );
           })}
-          {services.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">{t.noServices}</TableCell></TableRow>}
+          {orphanStationServices.map((service) => (
+            <TableRow key={service.id}>
+              <TableCell><Badge variant="outline">قديمة</Badge></TableCell>
+              <TableCell className="font-medium">{service.name}</TableCell>
+              <TableCell>{service.price} د.ع</TableCell>
+              <TableCell>{service.duration_minutes} {t.minutes}</TableCell>
+              <TableCell>
+                <Button size="sm" variant="destructive" onClick={() => setServiceChecked(service, false)}>
+                  إخفاء
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+          {catalogServices.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">لا توجد خدمات مضافة من الأدمن حالياً</TableCell></TableRow>}
         </TableBody>
       </Table>
     </div>
