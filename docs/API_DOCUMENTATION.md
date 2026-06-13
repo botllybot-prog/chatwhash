@@ -1,6 +1,6 @@
 # Washlly Website API Documentation
 
-Last updated: 2026-05-20
+Last updated: 2026-06-14
 
 ## Overview
 
@@ -18,6 +18,7 @@ Current booking direction:
 - Customer and station booking actions now happen inside the website/app inbox.
 - WhatsApp is kept for subscriptions, suspension/package notices, and admin broadcasts.
 - The WhatsApp webhook no longer confirms, rejects, cancels, postpones, or rates bookings.
+- Mobile push notifications are sent through Firebase Cloud Messaging (FCM) using Supabase Edge Functions.
 
 ## Common Headers
 
@@ -48,6 +49,141 @@ Authorization: Bearer <USER_ACCESS_TOKEN or SUPABASE_ANON_KEY>
 | `/owner` | Owner registration/login |
 | `/login` | Admin/employee/station owner login |
 | `/app/*` | Protected admin/owner/employee app |
+
+## Push Notifications (FCM)
+
+Washlly stores mobile device FCM tokens in `public.device_tokens`, then sends push notifications from Supabase Edge Functions. Tokens are keyed by normalized phone number, role, and platform.
+
+### `device_tokens` REST table
+
+Stores the latest FCM token for a customer or station owner device.
+
+Columns:
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | uuid | Auto-generated primary key |
+| `phone` | text | Normalized customer or owner phone, e.g. `9647736635435` |
+| `role` | text | `customer` or `owner` |
+| `token` | text | FCM registration token from the mobile app |
+| `platform` | text | `android` or `ios` |
+| `language` | text | `ar`, `en`, or `ku`; defaults to `ar` |
+| `created_at` | timestamptz | Insert timestamp |
+
+The table has RLS enabled. Server-side writes use the service role. Mobile apps should normally register tokens through a secure API wrapper before production public release.
+
+Example service-role REST upsert:
+
+```http
+POST /rest/v1/device_tokens?on_conflict=phone,role,platform
+Prefer: resolution=merge-duplicates
+```
+
+```json
+{
+  "phone": "9647736635435",
+  "role": "customer",
+  "token": "FCM_DEVICE_TOKEN",
+  "platform": "android",
+  "language": "ar"
+}
+```
+
+### `send-notification`
+
+Sends an FCM v1 push notification to every stored device token for a phone/role pair.
+
+```http
+POST /functions/v1/send-notification
+```
+
+Request:
+
+```json
+{
+  "phone": "9647736635435",
+  "role": "customer",
+  "title": "Booking Confirmed",
+  "body": "Your booking has been confirmed",
+  "data": {
+    "booking_id": "booking-uuid",
+    "status": "confirmed"
+  }
+}
+```
+
+Success:
+
+```json
+{
+  "success": true,
+  "sent": 1,
+  "failed": 0,
+  "results": [
+    {
+      "success": true,
+      "token": "FCM_DEVICE_TOKEN",
+      "response": "projects/washlly-96de6/messages/..."
+    }
+  ]
+}
+```
+
+If no token exists for the phone/role pair:
+
+```json
+{
+  "success": true,
+  "sent": 0,
+  "results": []
+}
+```
+
+Required Supabase Edge Function secrets:
+
+- `FCM_PROJECT_ID`
+- `FCM_CLIENT_EMAIL`
+- `FCM_PRIVATE_KEY`
+
+### `notify-on-booking-change`
+
+Receives a Supabase database webhook-compatible payload and sends localized FCM notifications for booking events.
+
+```http
+POST /functions/v1/notify-on-booking-change
+```
+
+The database trigger `trg_notify_booking_change_edge_function` calls this function automatically after booking inserts and after status updates.
+
+Webhook payload:
+
+```json
+{
+  "type": "UPDATE",
+  "record": {
+    "id": "booking-uuid",
+    "customer_phone": "9647736635435",
+    "station_id": "station-uuid",
+    "status": "confirmed"
+  },
+  "old_record": {
+    "status": "pending"
+  }
+}
+```
+
+Behavior:
+
+| Event | Recipient | Lookup | Notification |
+| --- | --- | --- | --- |
+| `INSERT` | Station owner | `station_owners.owner_phone` by `station_id` | New booking at station |
+| `UPDATE status=confirmed` | Customer | `record.customer_phone` | Booking confirmed |
+| `UPDATE status=rejected` | Customer | `record.customer_phone` | Booking rejected |
+| `UPDATE status=cancelled` | Customer | `record.customer_phone` | Booking cancelled |
+| `UPDATE status=pending_customer_approval` | Customer | `record.customer_phone` | Reschedule request |
+| `UPDATE status=completed` | Customer | `record.customer_phone` | Service completed |
+
+The function ignores status updates where the status did not change, and ignores statuses that are not listed above.
 
 ## Customer Login and Session APIs
 

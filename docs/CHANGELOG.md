@@ -5,6 +5,15 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-06-14] - Firebase Cloud Messaging Backend
+
+- Added the `device_tokens` table for storing Android/iOS FCM tokens by customer or station owner phone number.
+- Added the `send-notification` Supabase Edge Function to send FCM v1 push notifications through Firebase service-account secrets.
+- Added the `notify-on-booking-change` Edge Function for booking insert/update push notifications.
+- Added a database trigger on `bookings` so booking creation and status changes call the notification function automatically.
+- Configured and verified the Firebase secrets in Supabase Edge Functions: `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, and `FCM_PRIVATE_KEY`.
+- Updated API documentation and Postman collection with FCM push notification endpoints and REST device token examples.
+
 ## [2026-05-17] - Customer Inbox Ratings and Booking Bot Cleanup
 
 - Added customer in-app booking rating flow, admin ratings view, and station rating summaries on the map.

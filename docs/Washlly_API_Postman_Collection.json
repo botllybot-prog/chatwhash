@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "f1f76df9-4c6f-4b5e-9af5-d3fd8de8d889",
     "name": "Washlly Website API - Latest",
-    "description": "Updated: 2026-05-20.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nCustomer access is direct by name/phone without OTP; customer-login-by-phone creates or resumes the web session and returns customerSessionToken.\nQuick booking targets eligible stations within 15 km in deterministic nearest-distance order.\nBooking actions now happen inside the app/web inbox. WhatsApp remains for subscriptions, suspension/package notices, and admin broadcasts.\nUse Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
+    "description": "Updated: 2026-06-14.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nCustomer access, customer inbox, owner portal booking actions, ratings, quick booking, REST data, WhatsApp utilities, and Firebase Cloud Messaging push notifications are included.\nFCM device tokens are stored in device_tokens; send-notification sends direct pushes; notify-on-booking-change is called by the bookings database trigger/webhook.\nUse Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -113,6 +113,30 @@
     {
       "key": "bookingNumber",
       "value": "PASTE_BOOKING_NUMBER"
+    },
+    {
+      "key": "deviceToken",
+      "value": "PASTE_FCM_DEVICE_TOKEN"
+    },
+    {
+      "key": "platform",
+      "value": "android"
+    },
+    {
+      "key": "pushRole",
+      "value": "customer"
+    },
+    {
+      "key": "pushTitle",
+      "value": "Booking Confirmed"
+    },
+    {
+      "key": "pushBody",
+      "value": "Your booking has been confirmed"
+    },
+    {
+      "key": "ownerPhoneNormalized",
+      "value": "9647836635435"
     }
   ],
   "item": [
@@ -1156,6 +1180,235 @@
               }
             },
             "url": "{{functionsBase}}/send-suspension-notice"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Push Notifications (FCM)",
+      "item": [
+        {
+          "name": "device_tokens - upsert customer token (service role/admin only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Prefer",
+                "value": "resolution=merge-duplicates,return=representation"
+              }
+            ],
+            "url": {
+              "raw": "{{restBase}}/device_tokens?on_conflict=phone,role,platform",
+              "host": [
+                "{{restBase}}"
+              ],
+              "path": [
+                "device_tokens"
+              ],
+              "query": [
+                {
+                  "key": "on_conflict",
+                  "value": "phone,role,platform"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{customerPhoneNormalized}}\",\n  \"role\": \"customer\",\n  \"token\": \"{{deviceToken}}\",\n  \"platform\": \"{{platform}}\",\n  \"language\": \"ar\"\n}"
+            },
+            "description": "Stores or updates the latest FCM token for a customer device. In production, call this from a secure backend wrapper or service-role context."
+          }
+        },
+        {
+          "name": "device_tokens - upsert owner token (service role/admin only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Prefer",
+                "value": "resolution=merge-duplicates,return=representation"
+              }
+            ],
+            "url": {
+              "raw": "{{restBase}}/device_tokens?on_conflict=phone,role,platform",
+              "host": [
+                "{{restBase}}"
+              ],
+              "path": [
+                "device_tokens"
+              ],
+              "query": [
+                {
+                  "key": "on_conflict",
+                  "value": "phone,role,platform"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{ownerPhoneNormalized}}\",\n  \"role\": \"owner\",\n  \"token\": \"{{deviceToken}}\",\n  \"platform\": \"{{platform}}\",\n  \"language\": \"ar\"\n}"
+            },
+            "description": "Stores or updates the latest FCM token for a station owner device."
+          }
+        },
+        {
+          "name": "send-notification - customer push",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{anonKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{functionsBase}}/send-notification",
+              "host": [
+                "{{functionsBase}}"
+              ],
+              "path": [
+                "send-notification"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{customerPhoneNormalized}}\",\n  \"role\": \"customer\",\n  \"title\": \"{{pushTitle}}\",\n  \"body\": \"{{pushBody}}\",\n  \"data\": {\n    \"booking_id\": \"{{bookingId}}\",\n    \"status\": \"confirmed\"\n  }\n}"
+            },
+            "description": "Sends an FCM v1 push notification to all stored customer tokens for the phone number."
+          }
+        },
+        {
+          "name": "send-notification - owner push",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{anonKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{functionsBase}}/send-notification",
+              "host": [
+                "{{functionsBase}}"
+              ],
+              "path": [
+                "send-notification"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{ownerPhoneNormalized}}\",\n  \"role\": \"owner\",\n  \"title\": \"New Booking\",\n  \"body\": \"You have a new booking at your station\",\n  \"data\": {\n    \"booking_id\": \"{{bookingId}}\",\n    \"station_id\": \"{{stationId}}\"\n  }\n}"
+            },
+            "description": "Sends an FCM v1 push notification to all stored station owner tokens for the phone number."
+          }
+        },
+        {
+          "name": "notify-on-booking-change - insert sample",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{anonKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{functionsBase}}/notify-on-booking-change",
+              "host": [
+                "{{functionsBase}}"
+              ],
+              "path": [
+                "notify-on-booking-change"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"INSERT\",\n  \"record\": {\n    \"id\": \"{{bookingId}}\",\n    \"station_id\": \"{{stationId}}\",\n    \"customer_phone\": \"{{customerPhoneNormalized}}\",\n    \"status\": \"pending\"\n  },\n  \"old_record\": null\n}"
+            },
+            "description": "Database webhook-compatible sample for a new booking. The DB trigger normally calls this automatically."
+          }
+        },
+        {
+          "name": "notify-on-booking-change - status update sample",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{anonKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{functionsBase}}/notify-on-booking-change",
+              "host": [
+                "{{functionsBase}}"
+              ],
+              "path": [
+                "notify-on-booking-change"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"UPDATE\",\n  \"record\": {\n    \"id\": \"{{bookingId}}\",\n    \"station_id\": \"{{stationId}}\",\n    \"customer_phone\": \"{{customerPhoneNormalized}}\",\n    \"status\": \"confirmed\"\n  },\n  \"old_record\": {\n    \"status\": \"pending\"\n  }\n}"
+            },
+            "description": "Database webhook-compatible sample for a booking status change. Notifies the customer for supported statuses."
           }
         }
       ]
