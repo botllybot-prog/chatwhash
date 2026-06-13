@@ -5,6 +5,12 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-06-13] - Station Service Catalog Selection
+
+- Updated the station portal so owners choose admin-defined services with checkboxes and set only their station price and duration.
+- Changed customer-facing station service loading to show only services explicitly enabled by that station.
+- Tightened map-booking service validation so bookings use station-specific services instead of global catalog services.
+
 ## [2026-05-17] - Customer Inbox Ratings and Booking Bot Cleanup
 
 - Added customer in-app booking rating flow, admin ratings view, and station rating summaries on the map.
