@@ -149,6 +149,17 @@ function normalizeServiceKind(value: string): ServiceKind {
   return "surface";
 }
 
+function normalizeServiceName(value: string): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function matchesServiceName(serviceName: string, requestedName: string): boolean {
+  const service = normalizeServiceName(serviceName);
+  const requested = normalizeServiceName(requestedName);
+  if (!service || !requested) return false;
+  return service === requested || service.includes(requested) || requested.includes(service);
+}
+
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -223,7 +234,10 @@ Deno.serve(async (req) => {
 
     const customerName = String(body.customer_name || "").trim();
     const customerPhone = normalizePhone(String(body.customer_phone || ""));
-    const serviceKind = normalizeServiceKind(String(body.service_kind || ""));
+    const rawServiceKind = String(body.service_kind || "").trim();
+    const serviceFilterName = rawServiceKind && normalizeServiceName(rawServiceKind) !== "quick"
+      ? normalizeServiceName(rawServiceKind)
+      : "";
     const bookingDate = String(body.booking_date || "").trim();
     const bookingTime = String(body.booking_time || "").trim();
     const customerLat = Number(body.customer_lat);
@@ -350,8 +364,10 @@ Deno.serve(async (req) => {
           return null;
         }
         const stationServices = serviceRows.filter((svc) => svc.is_active && svc.station_id === station.id);
-        const firstService = stationServices[0];
-        if (!firstService) {
+        const selectedService = serviceFilterName
+          ? stationServices.find((svc) => matchesServiceName(svc.name, serviceFilterName))
+          : stationServices[0];
+        if (!selectedService) {
           skippedStations.push({ station_id: station.id, station_name: station.name, reason: "service_mismatch_or_missing" });
           return null;
         }
@@ -366,7 +382,7 @@ Deno.serve(async (req) => {
         }
         return {
           station,
-          service: firstService,
+          service: selectedService,
           ownerPhone: ownerInfo.ownerPhone,
           ownerUserId: ownerInfo.userId,
           distance,
@@ -396,7 +412,7 @@ Deno.serve(async (req) => {
     const requestPayload = {
       customer_name: customerName,
       customer_phone: customerPhone,
-      service_kind: serviceKind,
+      service_kind: serviceFilterName || "quick",
       language,
       booking_date: bookingDate,
       booking_time: bookingTime,

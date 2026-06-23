@@ -661,7 +661,7 @@ Behavior:
 
 - Searches only within `15 km`.
 - Sorts all eligible stations by exact customer-to-station distance, then by station name and id as stable tie-breakers, before creating up to 3 booking targets.
-- Does not filter by service name; it uses the first active service for each station.
+- When `service_kind` is a specific service name, not `quick` or empty, only stations that offer a matching active service are included, and that matching service is used for the booking. When `service_kind` is omitted, empty, or `quick`, no service filtering is applied and the first active service per station is used.
 - Requires an active station owner with `user_id`.
 - Allows up to 3 active bookings per customer total.
 - Excludes stations already targeted in pending quick requests.
