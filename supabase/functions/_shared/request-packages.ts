@@ -5,7 +5,7 @@ export const PACKAGE_DEFINITIONS = {
     code: "starter_20",
     title_ar: "باقة 20 طلب",
     title_en: "20 Request Pack",
-    title_ku: "پاکێجی 20 داوا",
+    title_ku: "پاكێجی 20 داوا",
     title_tr: "20 Talep Paketi",
     price_usd: 5,
     request_limit: 20,
@@ -15,7 +15,7 @@ export const PACKAGE_DEFINITIONS = {
     code: "growth_50",
     title_ar: "باقة 50 طلب",
     title_en: "50 Request Pack",
-    title_ku: "پاکێجی 50 داوا",
+    title_ku: "پاكێجی 50 داوا",
     title_tr: "50 Talep Paketi",
     price_usd: 10,
     request_limit: 50,
@@ -25,7 +25,7 @@ export const PACKAGE_DEFINITIONS = {
     code: "scale_110",
     title_ar: "باقة 110 طلب",
     title_en: "110 Request Pack",
-    title_ku: "پاکێجی 110 داوا",
+    title_ku: "پاكێجی 110 داوا",
     title_tr: "110 Talep Paketi",
     price_usd: 20,
     request_limit: 110,
@@ -35,7 +35,7 @@ export const PACKAGE_DEFINITIONS = {
     code: "unlimited_30",
     title_ar: "باقة غير محدودة",
     title_en: "Unlimited Pack",
-    title_ku: "پاکێجی بێ سنوور",
+    title_ku: "پاكێجی بێ سنوور",
     title_tr: "Sınırsız Paket",
     price_usd: 50,
     request_limit: null,
@@ -57,9 +57,7 @@ function normalizePhone(phone: string | null | undefined) {
 export async function loadAppSettings(supabase: SupabaseClient) {
   const { data } = await supabase.from("app_settings").select("key, value");
   const settings: Record<string, string> = {};
-  for (const row of data || []) {
-    settings[row.key] = row.value;
-  }
+  for (const row of data || []) settings[row.key] = row.value;
   return settings;
 }
 
@@ -108,6 +106,37 @@ type ConsumeQuotaResult =
       message: string;
     };
 
+async function callSuspensionNotice(ownerId: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) return false;
+
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/send-suspension-notice`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        owner_id: ownerId,
+        reason: "free_quota_exhausted",
+        source: "request-quota",
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("send-suspension-notice failed", await response.text().catch(() => ""));
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("send-suspension-notice invoke error", error);
+    return false;
+  }
+}
+
 export async function consumeStationRequestQuota({
   supabase,
   settings,
@@ -116,7 +145,7 @@ export async function consumeStationRequestQuota({
   const nowIso = new Date().toISOString();
   const today = nowIso.split("T")[0];
 
-  const [{ data: station }, { data: owner }, { data: activeSubscription }] = await Promise.all([
+  const [{ data: station }, { data: owner }, { data: unlimitedSubscription }] = await Promise.all([
     supabase
       .from("stations")
       .select("id, name, is_active, suspension_reason")
@@ -129,9 +158,10 @@ export async function consumeStationRequestQuota({
       .maybeSingle(),
     supabase
       .from("subscriptions")
-      .select("id, package_code, request_limit, requests_used, status, warning_sent_at, exhausted_notified_at, end_date")
+      .select("id, package_code, request_limit, requests_used, status, end_date")
       .eq("station_id", stationId)
       .in("status", ["active", "trial"])
+      .is("request_limit", null)
       .gte("end_date", today)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -140,11 +170,8 @@ export async function consumeStationRequestQuota({
 
   const stationName = station?.name || "المحطة";
   const ownerPhone = owner?.owner_phone || null;
-  const contactAdminLine = `\n\nللاستمرار بالظهور على الخريطة واستقبال الزبائن، تواصل مع الإدارة على واتساب: ${ADMIN_CONTACT_PHONE}`;
-
-  const warnOwner = async (body: string) => {
-    await sendWhatsAppText(ownerPhone, body, settings);
-  };
+  const contactAdminLine =
+    `\n\nللاستمرار بالظهور على الخريطة واستقبال الزبائن، تواصل مع الإدارة على واتساب: ${ADMIN_CONTACT_PHONE}`;
 
   const hideStation = async (
     reason: "free_quota_exhausted" | "package_exhausted" | "subscription_expired",
@@ -159,29 +186,39 @@ export async function consumeStationRequestQuota({
       .eq("id", stationId);
   };
 
-  const freeQuota = Number(owner?.free_requests_quota ?? 0);
-  const freeUsed = Number(owner?.free_requests_used ?? 0);
+  const notifySuspension = async () => {
+    if (owner?.id && await callSuspensionNotice(owner.id)) return;
+    await sendWhatsAppText(
+      ownerPhone,
+      `مرحبا، انتهى رصيد الطلبات لمحطة ${stationName} وتم إيقاف ظهورها مؤقتا على الخريطة.${contactAdminLine}`,
+      settings,
+    );
+  };
 
-  if (freeQuota > freeUsed) {
-    const nextUsed = freeUsed + 1;
-    const remaining = Math.max(0, freeQuota - nextUsed);
+  const freeQuota = Math.max(0, Number(owner?.free_requests_quota ?? 0));
+  const freeUsed = Math.max(0, Number(owner?.free_requests_used ?? 0));
 
+  if (freeQuota > 0) {
+    const remaining = freeQuota - 1;
     await supabase
       .from("station_owners")
-      .update({ free_requests_used: nextUsed })
+      .update({
+        free_requests_quota: remaining,
+        free_requests_used: freeUsed + 1,
+      })
       .eq("id", owner?.id);
 
     if (remaining === 5) {
-      await warnOwner(
-        `مرحباً، باقة الطلبات المجانية في محطة ${stationName} شارفت على الانتهاء، والمتبقي 5 طلبات فقط.${contactAdminLine}`,
+      await sendWhatsAppText(
+        ownerPhone,
+        `مرحبا، رصيد طلبات محطة ${stationName} شارف على الانتهاء، والمتبقي 5 طلبات فقط.${contactAdminLine}`,
+        settings,
       );
     }
 
-    if (remaining === 0 && !activeSubscription) {
+    if (remaining === 0) {
       await hideStation("free_quota_exhausted");
-      await warnOwner(
-        `مرحباً، انتهت الطلبات المجانية الخاصة بمحطة ${stationName}.\nتم إيقاف ظهور المحطة مؤقتاً إلى حين تفعيل طلبات جديدة.${contactAdminLine}`,
-      );
+      await notifySuspension();
     }
 
     return {
@@ -192,102 +229,29 @@ export async function consumeStationRequestQuota({
     };
   }
 
-  if (activeSubscription) {
-    const currentUsed = Number(activeSubscription.requests_used ?? 0);
-    const requestLimit =
-      activeSubscription.request_limit === null
-        ? null
-        : Number(activeSubscription.request_limit);
-
-    if (requestLimit === null) {
-      await supabase
-        .from("subscriptions")
-        .update({
-          requests_used: currentUsed + 1,
-          updated_at: nowIso,
-        })
-        .eq("id", activeSubscription.id);
-
-      return {
-        allowed: true,
-        source: "subscription",
-        remaining: null,
-        packageCode: activeSubscription.package_code || "unlimited_30",
-      };
-    }
-
-    if (currentUsed >= requestLimit) {
-      await hideStation("package_exhausted");
-
-      if (!activeSubscription.exhausted_notified_at) {
-        await supabase
-          .from("subscriptions")
-          .update({
-            status: "expired",
-            exhausted_notified_at: nowIso,
-            updated_at: nowIso,
-          })
-          .eq("id", activeSubscription.id);
-
-        await warnOwner(
-          `مرحباً، انتهت باقة الطلبات الخاصة بمحطة ${stationName} وتم إيقاف ظهورها على الخريطة مؤقتاً.${contactAdminLine}`,
-        );
-      }
-
-      return {
-        allowed: false,
-        reason: "package_exhausted",
-        message: "هذه المحطة متوقفة مؤقتاً إلى حين تحديث الباقة.",
-      };
-    }
-
-    const nextUsed = currentUsed + 1;
-    const remaining = requestLimit - nextUsed;
-
+  if (unlimitedSubscription) {
     await supabase
       .from("subscriptions")
       .update({
-        requests_used: nextUsed,
-        warning_sent_at:
-          remaining === 5 && !activeSubscription.warning_sent_at
-            ? nowIso
-            : activeSubscription.warning_sent_at,
-        status: remaining <= 0 ? "expired" : activeSubscription.status,
-        exhausted_notified_at:
-          remaining <= 0 ? nowIso : activeSubscription.exhausted_notified_at,
+        requests_used: Number(unlimitedSubscription.requests_used ?? 0) + 1,
         updated_at: nowIso,
       })
-      .eq("id", activeSubscription.id);
-
-    if (remaining === 5 && !activeSubscription.warning_sent_at) {
-      await warnOwner(
-        `مرحباً، باقتك الحالية في محطة ${stationName} شارفت على الانتهاء، والمتبقي 5 طلبات فقط.${contactAdminLine}`,
-      );
-    }
-
-    if (remaining <= 0) {
-      await hideStation("package_exhausted");
-      await warnOwner(
-        `مرحباً، انتهت باقتك الحالية في محطة ${stationName} بعد استهلاك جميع الطلبات.\nتم إيقاف ظهور المحطة مؤقتاً إلى حين التجديد.${contactAdminLine}`,
-      );
-    }
+      .eq("id", unlimitedSubscription.id);
 
     return {
       allowed: true,
       source: "subscription",
-      remaining: Math.max(0, remaining),
-      packageCode: activeSubscription.package_code || null,
+      remaining: null,
+      packageCode: unlimitedSubscription.package_code || "unlimited_30",
     };
   }
 
   await hideStation("free_quota_exhausted");
-  await warnOwner(
-    `مرحباً، لا توجد طلبات مجانية متبقية لمحطة ${stationName} ولا توجد باقة فعالة حالياً.\nتم إيقاف ظهور المحطة مؤقتاً إلى حين التحديث.${contactAdminLine}`,
-  );
+  await notifySuspension();
 
   return {
     allowed: false,
     reason: "subscription_required",
-    message: "هذه المحطة متوقفة مؤقتاً إلى حين تفعيل الباقة.",
+    message: "هذه المحطة متوقفة مؤقتا إلى حين تفعيل رصيد طلبات جديد.",
   };
 }

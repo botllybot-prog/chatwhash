@@ -795,6 +795,48 @@ Notes:
 - Default free quota is `20`.
 - If a stale Auth user exists without an active `station_owners` row, the function can delete the orphan and allow registration again.
 
+### Station Credit and Suspension
+
+Washlly uses `station_owners.free_requests_quota` as the unified remaining request counter shown in the owner app/portal.
+
+Lifecycle:
+
+1. Owner registration creates the station with `stations.is_active = true` and `station_owners.free_requests_quota = 20` by default.
+2. `create-map-booking` consumes one request from the selected station.
+3. `create-quick-booking` consumes one request from each targeted station, up to the nearest eligible 3 stations.
+4. Each consumed request decrements `station_owners.free_requests_quota` by `1` and increments `free_requests_used` for audit/history.
+5. When `free_requests_quota` reaches `0`, the station is updated to:
+
+```json
+{
+  "is_active": false,
+  "suspension_reason": "free_quota_exhausted",
+  "suspended_at": "timestamp"
+}
+```
+
+6. Inactive stations are excluded from customer map and quick-booking station queries because all public station queries filter by `stations.is_active = true`.
+7. When quota reaches zero, the backend calls `send-suspension-notice` for the station owner. If the internal function call is unavailable, it falls back to a WhatsApp text notice.
+8. On successful package payment, `payment-callback` adds the package request count to `station_owners.free_requests_quota`, clears `outstanding_debt`, and reactivates the station.
+9. `check-subscriptions` runs on schedule to expire old subscription rows and fix edge cases where a station still appears active while `free_requests_quota <= 0`.
+
+Subscription top-up behavior:
+
+| Package | Added to `free_requests_quota` |
+|---|---:|
+| `starter_20` | 20 |
+| `growth_50` | 50 |
+| `scale_110` | 110 |
+| `unlimited_30` | Large operational credit; the active subscription is also tracked with `request_limit = null` |
+
+Relevant columns:
+
+| Table | Columns |
+|---|---|
+| `station_owners` | `free_requests_quota`, `free_requests_used`, `is_active`, `outstanding_debt`, `station_id` |
+| `stations` | `is_active`, `suspension_reason`, `suspended_at` |
+| `subscriptions` | `station_id`, `package_code`, `request_limit`, `requests_used`, `status`, `start_date`, `end_date`, `paid_at` |
+
 ### `owner-login-lookup`
 
 Finds the hidden Supabase Auth email for station owner login by phone or owner name.

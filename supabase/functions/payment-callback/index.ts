@@ -274,6 +274,15 @@ Deno.serve(async (req) => {
           payment_date: now.toISOString(),
         });
 
+        const requestCreditToAdd = packageDef.requestLimit ?? 999999;
+        const { data: ownerRow } = await (supabase as any)
+          .from("station_owners")
+          .select("id, free_requests_quota")
+          .eq("station_id", subscription.station_id)
+          .maybeSingle();
+        const nextQuota =
+          Math.max(0, Number(ownerRow?.free_requests_quota ?? 0)) + requestCreditToAdd;
+
         await Promise.all([
           (supabase as any)
             .from("stations")
@@ -288,6 +297,7 @@ Deno.serve(async (req) => {
             .update({
               is_active: true,
               outstanding_debt: 0,
+              free_requests_quota: nextQuota,
             })
             .eq("station_id", subscription.station_id),
         ]);

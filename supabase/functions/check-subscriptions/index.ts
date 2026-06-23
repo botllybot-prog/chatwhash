@@ -107,20 +107,22 @@ Deno.serve(async (req) => {
         })
         .eq("id", sub.id);
 
-      await supabase
-        .from("stations")
-        .update({
-          is_active: false,
-          suspension_reason: "subscription_expired",
-          suspended_at: new Date().toISOString(),
-        })
-        .eq("id", sub.station_id);
-
       const { data: owner } = await supabase
         .from("station_owners")
-        .select("owner_phone, stations(name)")
+        .select("owner_phone, free_requests_quota, stations(name)")
         .eq("station_id", sub.station_id)
         .maybeSingle();
+
+      if (Number(owner?.free_requests_quota || 0) <= 0) {
+        await supabase
+          .from("stations")
+          .update({
+            is_active: false,
+            suspension_reason: "subscription_expired",
+            suspended_at: new Date().toISOString(),
+          })
+          .eq("id", sub.station_id);
+      }
 
       const ownerPhone = normalizePhone(owner?.owner_phone);
       if (ownerPhone && accessToken && phoneNumberId) {
@@ -142,26 +144,18 @@ Deno.serve(async (req) => {
       .from("station_owners")
       .select("station_id, owner_name, owner_phone, free_requests_quota, free_requests_used");
 
-    const { data: activeSubsForVisibility } = await supabase
-      .from("subscriptions")
-      .select("station_id")
-      .in("status", ["active", "trial"])
-      .gte("end_date", today);
-
-    const activeStationIds = new Set((activeSubsForVisibility || []).map((row) => row.station_id));
     const ownerByStation = new Map((allOwners || []).map((owner) => [owner.station_id, owner]));
 
     for (const station of allStations || []) {
       const owner = ownerByStation.get(station.id);
-      const hasFreeQuota = Number(owner?.free_requests_quota || 0) > Number(owner?.free_requests_used || 0);
-      const hasActivePackage = activeStationIds.has(station.id);
+      const hasFreeQuota = Number(owner?.free_requests_quota || 0) > 0;
       const hiddenByQuota = station.suspension_reason === "free_quota_exhausted";
       const manuallyHidden = station.suspension_reason === "manual";
       const hiddenByOtherSubscriptionReason =
         station.suspension_reason === "package_exhausted" ||
         station.suspension_reason === "subscription_expired";
 
-      if (!hasFreeQuota && !hasActivePackage) {
+      if (!hasFreeQuota) {
         if (manuallyHidden || hiddenByOtherSubscriptionReason) {
           continue;
         }
@@ -194,7 +188,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      if (hiddenByQuota && (hasFreeQuota || hasActivePackage)) {
+      if (hiddenByQuota && hasFreeQuota) {
         await supabase
           .from("stations")
           .update({

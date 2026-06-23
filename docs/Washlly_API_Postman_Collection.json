@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "f1f76df9-4c6f-4b5e-9af5-d3fd8de8d889",
     "name": "Washlly Website API - Latest",
-    "description": "Updated: 2026-06-14.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nCustomer access, customer inbox, owner portal booking actions, ratings, quick booking, REST data, WhatsApp utilities, and Firebase Cloud Messaging push notifications are included.\nFCM device tokens are stored in device_tokens; send-notification sends direct pushes; notify-on-booking-change is called by the bookings database trigger/webhook.\nUse Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
+    "description": "Updated: 2026-06-23.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nCustomer access, customer inbox, owner portal booking actions, ratings, quick booking, REST data, WhatsApp utilities, Firebase Cloud Messaging push notifications, and station credit/suspension lifecycle are included.\nStation credit uses station_owners.free_requests_quota as the unified remaining request counter: map booking consumes one request from the selected station, quick booking consumes one request per targeted station, payment-callback tops up quota, and check-subscriptions hides stations with zero quota.\nUse Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -559,7 +559,7 @@
                 "value": "Bearer {{anonKey}}"
               }
             ],
-            "description": "Creates regular booking and in-app owner/customer notifications. Does not send WhatsApp booking actions.",
+            "description": "Creates a regular map booking. Consumes 1 request from station_owners.free_requests_quota for the selected station; when quota reaches 0, the station is suspended and hidden from the map.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"station_id\": \"{{stationId}}\",\n  \"service_id\": \"{{serviceId}}\",\n  \"customer_name\": \"{{customerName}}\",\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"booking_date\": \"{{bookingDate}}\",\n  \"booking_time\": \"{{bookingTime}}\",\n  \"spin_discount_percent\": \"{{spinDiscountPercent}}\",\n  \"spin_token\": \"{{spinToken}}\",\n  \"language\": \"ar\"\n}",
@@ -603,7 +603,7 @@
                 "value": "Bearer {{anonKey}}"
               }
             ],
-            "description": "Targets up to the nearest eligible stations within 15 km in deterministic distance order, while respecting active booking slots and excluded/currently targeted stations.",
+            "description": "Creates quick bookings for the nearest eligible stations. Consumes 1 request per targeted station from station_owners.free_requests_quota; service_kind filters matching active services when provided.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"customer_name\": \"{{customerName}}\",\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"booking_date\": \"{{bookingDate}}\",\n  \"booking_time\": \"{{bookingTime}}\",\n  \"service_kind\": \"quick\",\n  \"language\": \"ar\",\n  \"customer_lat\": \"{{customerLat}}\",\n  \"customer_lng\": \"{{customerLng}}\",\n  \"exclude_station_ids\": []\n}",
@@ -853,6 +853,34 @@
             },
             "url": "{{functionsBase}}/owner-manage-booking"
           }
+        },
+        {
+          "name": "payment-callback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Payment provider callback. On paid status, creates/updates a subscription, adds the package request count to station_owners.free_requests_quota, clears outstanding_debt, and reactivates the station.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"station_id\": \"{{stationId}}\",\n  \"package_code\": \"starter_20\",\n  \"status\": \"paid\",\n  \"amount\": 5,\n  \"transaction_id\": \"TEST-REFERENCE\",\n  \"response\": \"json\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{functionsBase}}/payment-callback?response=json"
+          },
+          "response": []
         }
       ]
     },
@@ -1138,7 +1166,7 @@
                 "value": "Bearer {{anonKey}}"
               }
             ],
-            "description": "Scheduled/admin utility for subscription and quota checks.",
+            "description": "Scheduled/admin utility for subscription expiry and station credit visibility. Expires old subscription rows and hides active stations whose free_requests_quota is 0 or less.",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -1169,7 +1197,7 @@
                 "value": "Bearer {{anonKey}}"
               }
             ],
-            "description": "Sends owner suspension/quota/package notice. Requires project function permissions/settings.",
+            "description": "Sends owner suspension/quota/package notice. Admin/employee calls require an access token; internal Edge Function calls may use the service role token.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"owner_id\": \"{{ownerId}}\"\n}",
