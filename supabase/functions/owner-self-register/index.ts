@@ -84,38 +84,6 @@ Deno.serve(async (req) => {
       return json({ error: "Password must be at least 6 characters" }, 400);
     }
 
-    const { data: catalogServices, error: catalogError } = await supabaseAdmin
-      .from("services")
-      .select("name, duration_minutes, sort_order")
-      .is("station_id", null)
-      .eq("is_active", true);
-
-    if (catalogError) {
-      throw catalogError;
-    }
-
-    const catalogByName = new Map(
-      (catalogServices || []).map((service) => [String(service.name || "").trim(), service]),
-    );
-
-    const validServices = rawServices
-      .filter((service) => service?.name?.trim() && Number(service.price) > 0 && catalogByName.has(service.name.trim()))
-      .map((service, index) => {
-        const catalogService = catalogByName.get(service.name!.trim());
-        return {
-          name: service.name!.trim(),
-          price: Number(service.price),
-          duration_minutes: Number(catalogService?.duration_minutes) || 30,
-          customer_discount: null,
-          sort_order: Number(catalogService?.sort_order ?? service.sort_order ?? index),
-          is_active: true,
-        };
-      });
-
-    if (validServices.length === 0) {
-      return json({ error: "At least one service is required" }, 400);
-    }
-
     const authEmail = buildOwnerEmail(ownerPhone, payload.email);
 
     let createdBy: string | null = null;
@@ -235,17 +203,29 @@ Deno.serve(async (req) => {
       throw ownerError;
     }
 
-    const servicesPayload = validServices.map((service) => ({
-      ...service,
-      station_id: createdStationId,
-    }));
+    const servicesPayload = rawServices
+      .filter((service) => service?.name?.trim())
+      .map((service) => ({
+        station_id: createdStationId,
+        name: service.name!.trim(),
+        price: Number(service.price) || 0,
+        duration_minutes: Number(service.duration_minutes) || 30,
+        customer_discount: service.customer_discount ?? null,
+        sort_order: Number(service.sort_order) || 0,
+        is_active: true,
+      }));
 
-    const { error: servicesError } = await supabaseAdmin
-      .from("services")
-      .insert(servicesPayload);
+    if (servicesPayload.length > 0) {
+      const { error: servicesError } = await supabaseAdmin
+        .from("services")
+        .insert(servicesPayload);
 
-    if (servicesError) {
-      throw servicesError;
+      if (servicesError) {
+        console.error("owner-self-register service insert error", {
+          station_id: createdStationId,
+          error: servicesError,
+        });
+      }
     }
 
     return json({
