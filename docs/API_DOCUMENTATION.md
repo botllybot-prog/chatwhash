@@ -89,6 +89,53 @@ Prefer: resolution=merge-duplicates
 }
 ```
 
+### `register-device-token`
+
+Used by the mobile app to save or remove a device FCM token. This Edge Function uses the service role key internally to bypass the RLS policy on `device_tokens`, so the mobile app can use the public anon key.
+
+```http
+POST /functions/v1/register-device-token
+```
+
+Save a token, usually after login:
+
+```json
+{
+  "action": "save",
+  "phone": "9647736635435",
+  "role": "customer",
+  "token": "FCM_DEVICE_TOKEN",
+  "platform": "android",
+  "language": "ar"
+}
+```
+
+Delete a token, usually on logout:
+
+```json
+{
+  "action": "delete",
+  "phone": "9647736635435",
+  "role": "customer",
+  "token": "FCM_DEVICE_TOKEN",
+  "platform": "android"
+}
+```
+
+Success:
+
+```json
+{ "success": true }
+```
+
+Fields:
+
+- `role`: `customer` or `owner`
+- `platform`: `android` or `ios`
+- `language`: `ar`, `en`, or `ku`
+- On `save`: upserts the token, keyed by `phone + role + platform`
+- On `delete`: removes the matching token row
+
 ### `send-notification`
 
 Sends an FCM v1 push notification to every stored device token for a phone/role pair.
@@ -1039,6 +1086,7 @@ npx supabase functions deploy create-station-owner
 npx supabase functions deploy delete-station-owner
 npx supabase functions deploy create-employee
 npx supabase functions deploy delete-employee
+npx supabase functions deploy register-device-token
 npx supabase functions deploy whatsapp-webhook
 npx supabase functions deploy whatsapp-send
 npx supabase functions deploy booking-reminders
