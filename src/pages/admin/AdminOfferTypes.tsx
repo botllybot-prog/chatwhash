@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Edit, Loader2, Plus, Search, Tags, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAppLanguage } from "@/lib/language";
+import { adminOffersTexts } from "@/lib/adminOffersTranslations";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,140 +27,9 @@ type OfferType = {
   name: string;
 };
 
-const texts = {
-  ar: {
-    title: "أنواع العروض",
-    subtitle: "إدارة التصنيفات الرئيسية التي ترتبط بها العروض.",
-    search: "ابحث باسم نوع العرض...",
-    add: "إضافة نوع عرض",
-    edit: "تعديل",
-    delete: "حذف",
-    name: "اسم النوع",
-    id: "المعرف",
-    actions: "إجراءات",
-    noRows: "لا توجد أنواع عروض حاليا.",
-    noMatches: "لا توجد نتائج مطابقة للبحث.",
-    addTitle: "إضافة نوع عرض جديد",
-    editTitle: "تعديل نوع العرض",
-    formDesc: "أدخل اسما واضحا لنوع العرض حتى يظهر ضمن إدارة العروض.",
-    namePlaceholder: "مثال: عروض موسمية",
-    save: "حفظ",
-    update: "تحديث",
-    cancel: "إلغاء",
-    required: "اسم نوع العرض مطلوب",
-    added: "تمت إضافة نوع العرض",
-    updated: "تم تحديث نوع العرض",
-    deleted: "تم حذف نوع العرض",
-    loadError: "تعذر تحميل أنواع العروض",
-    saveError: "تعذر حفظ نوع العرض",
-    deleteError: "تعذر حذف نوع العرض",
-    confirmTitle: "حذف نوع العرض؟",
-    confirmBody: "سيتم حذف هذا النوع وأي عروض مرتبطة به بسبب علاقة ON DELETE CASCADE.",
-    confirmDelete: "حذف",
-    loading: "جاري التحميل...",
-    count: "العدد",
-  },
-  en: {
-    title: "Offer types",
-    subtitle: "Manage the primary categories used by offers.",
-    search: "Search offer type name...",
-    add: "Add New Offer Type",
-    edit: "Edit",
-    delete: "Delete",
-    name: "Name",
-    id: "ID",
-    actions: "Actions",
-    noRows: "No offer types yet.",
-    noMatches: "No matching offer types.",
-    addTitle: "Add new offer type",
-    editTitle: "Edit offer type",
-    formDesc: "Enter a clear type name to use in offers management.",
-    namePlaceholder: "Example: Seasonal offers",
-    save: "Save",
-    update: "Update",
-    cancel: "Cancel",
-    required: "Offer type name is required",
-    added: "Offer type added",
-    updated: "Offer type updated",
-    deleted: "Offer type deleted",
-    loadError: "Unable to load offer types",
-    saveError: "Unable to save offer type",
-    deleteError: "Unable to delete offer type",
-    confirmTitle: "Delete offer type?",
-    confirmBody: "This will delete the type and any linked offers because of the ON DELETE CASCADE relationship.",
-    confirmDelete: "Delete",
-    loading: "Loading...",
-    count: "Count",
-  },
-  ku: {
-    title: "جۆرەکانی ئۆفەر",
-    subtitle: "جۆرە سەرەکییەکانی ئۆفەرەکان بەڕێوە ببە.",
-    search: "گەڕان بە ناوی جۆری ئۆفەر...",
-    add: "زیادکردنی جۆری ئۆفەر",
-    edit: "دەستکاری",
-    delete: "سڕینەوە",
-    name: "ناو",
-    id: "ناسنامە",
-    actions: "کردارەکان",
-    noRows: "هیچ جۆری ئۆفەرێک نییە.",
-    noMatches: "هیچ ئەنجامێکی گونجاو نییە.",
-    addTitle: "زیادکردنی جۆری ئۆفەری نوێ",
-    editTitle: "دەستکاریکردنی جۆری ئۆفەر",
-    formDesc: "ناوێکی ڕوون بنووسە بۆ بەکارهێنان لە بەڕێوەبردنی ئۆفەرەکان.",
-    namePlaceholder: "نموونە: ئۆفەری وەرزی",
-    save: "پاشەکەوت",
-    update: "نوێکردنەوە",
-    cancel: "هەڵوەشاندنەوە",
-    required: "ناوی جۆری ئۆفەر پێویستە",
-    added: "جۆری ئۆفەر زیاد کرا",
-    updated: "جۆری ئۆفەر نوێ کرایەوە",
-    deleted: "جۆری ئۆفەر سڕایەوە",
-    loadError: "بارکردنی جۆرەکانی ئۆفەر سەرکەوتوو نەبوو",
-    saveError: "پاشەکەوتکردنی جۆری ئۆفەر سەرکەوتوو نەبوو",
-    deleteError: "سڕینەوەی جۆری ئۆفەر سەرکەوتوو نەبوو",
-    confirmTitle: "جۆری ئۆفەر بسڕدرێتەوە؟",
-    confirmBody: "ئەمە جۆرەکە و هەر ئۆفەرێکی پەیوەست پێوەیە دەسڕێتەوە.",
-    confirmDelete: "سڕینەوە",
-    loading: "باردەکرێت...",
-    count: "ژمارە",
-  },
-  tr: {
-    title: "Teklif türleri",
-    subtitle: "Tekliflerde kullanılan ana kategorileri yönetin.",
-    search: "Teklif türü adına göre ara...",
-    add: "Yeni teklif türü ekle",
-    edit: "Düzenle",
-    delete: "Sil",
-    name: "Ad",
-    id: "ID",
-    actions: "İşlemler",
-    noRows: "Henüz teklif türü yok.",
-    noMatches: "Eşleşen teklif türü yok.",
-    addTitle: "Yeni teklif türü ekle",
-    editTitle: "Teklif türünü düzenle",
-    formDesc: "Teklif yönetiminde kullanmak için açık bir tür adı girin.",
-    namePlaceholder: "Örnek: Sezon teklifleri",
-    save: "Kaydet",
-    update: "Güncelle",
-    cancel: "İptal",
-    required: "Teklif türü adı gerekli",
-    added: "Teklif türü eklendi",
-    updated: "Teklif türü güncellendi",
-    deleted: "Teklif türü silindi",
-    loadError: "Teklif türleri yüklenemedi",
-    saveError: "Teklif türü kaydedilemedi",
-    deleteError: "Teklif türü silinemedi",
-    confirmTitle: "Teklif türü silinsin mi?",
-    confirmBody: "ON DELETE CASCADE ilişkisi nedeniyle bu tür ve bağlı teklifler silinir.",
-    confirmDelete: "Sil",
-    loading: "Yükleniyor...",
-    count: "Sayı",
-  },
-} as const;
-
 const AdminOfferTypes = () => {
   const { language, isRtl } = useAppLanguage();
-  const t = texts[language];
+  const t = adminOffersTexts[language].offerTypes;
   const [rows, setRows] = useState<OfferType[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -243,7 +113,8 @@ const AdminOfferTypes = () => {
   const handleDelete = async () => {
     if (!deleting) return;
     setDeleteLoading(true);
-    const { error } = await (supabase as any).from("offer_types").delete().eq("id", deleting.id);
+    const targetId = deleting.id;
+    const { error } = await (supabase as any).from("offer_types").delete().eq("id", targetId);
     setDeleteLoading(false);
 
     if (error) {
@@ -253,7 +124,7 @@ const AdminOfferTypes = () => {
 
     toast({ title: t.deleted });
     setDeleting(null);
-    setRows((current) => current.filter((row) => row.id !== deleting.id));
+    setRows((current) => current.filter((row) => row.id !== targetId));
   };
 
   return (
@@ -277,12 +148,7 @@ const AdminOfferTypes = () => {
           </CardTitle>
           <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={t.search}
-              className="ps-9"
-            />
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t.search} className="ps-9" />
           </div>
         </CardHeader>
         <CardContent>
@@ -303,9 +169,15 @@ const AdminOfferTypes = () => {
                 {loading ? (
                   Array.from({ length: 4 }).map((_, index) => (
                     <TableRow key={index}>
-                      <TableCell><Skeleton className="h-5 w-48" /></TableCell>
-                      <TableCell className="hidden md:table-cell"><Skeleton className="h-5 w-72" /></TableCell>
-                      <TableCell><Skeleton className="mx-auto h-8 w-24" /></TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-48" />
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <Skeleton className="h-5 w-72" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="mx-auto h-8 w-24" />
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : filteredRows.length === 0 ? (
@@ -362,7 +234,9 @@ const AdminOfferTypes = () => {
               />
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={closeDialog} disabled={saving}>{t.cancel}</Button>
+              <Button variant="outline" onClick={closeDialog} disabled={saving}>
+                {t.cancel}
+              </Button>
               <Button onClick={() => void handleSave()} disabled={saving}>
                 {saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
                 {editing ? t.update : t.save}

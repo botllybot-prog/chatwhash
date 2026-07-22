@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "f1f76df9-4c6f-4b5e-9af5-d3fd8de8d889",
     "name": "Washlly Website API - Latest",
-    "description": "Updated: 2026-06-23.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nCustomer access, customer inbox, owner portal booking actions, ratings, quick booking, REST data, WhatsApp utilities, Firebase Cloud Messaging push notifications, and station credit/suspension lifecycle are included.\nStation credit uses station_owners.free_requests_quota as the unified remaining request counter: map booking consumes one request from the selected station, quick booking consumes one request per targeted station, payment-callback tops up quota, and check-subscriptions hides stations with zero quota.\nUse Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
+    "description": "Updated: 2026-07-22.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nCustomer access, customer inbox, owner portal booking actions, ratings, quick booking, REST data, WhatsApp utilities, Firebase Cloud Messaging push notifications, and station credit/suspension lifecycle are included.\nStation credit uses station_owners.free_requests_quota as the unified remaining request counter: map booking consumes one request from the selected station, quick booking consumes one request per targeted station, payment-callback tops up quota, and check-subscriptions hides stations with zero quota.\nUse Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -137,6 +137,14 @@
     {
       "key": "ownerPhoneNormalized",
       "value": "9647836635435"
+    },
+    {
+      "key": "baseUrl",
+      "value": "https://washlly.com"
+    },
+    {
+      "key": "customerCity",
+      "value": "Erbil"
     }
   ],
   "item": [
@@ -887,6 +895,54 @@
     {
       "name": "05 - REST Public and Protected Data",
       "item": [
+        {
+          "name": "Get Offers (Hybrid Auth)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerSessionToken}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Optional. Enable for authenticated customer city filtering."
+              }
+            ],
+            "description": "Hybrid public/authenticated offers endpoint. Without auth, returns offers tagged All. With a customer session token or Supabase user token, returns All plus the customer city offers.",
+            "url": "{{baseUrl}}/api/v1/offers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has success true and data array\", function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json).to.have.property(\"success\", true);",
+                  "  pm.expect(json).to.have.property(\"data\");",
+                  "  pm.expect(json.data).to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"Offer items include expected shape when present\", function () {",
+                  "  const json = pm.response.json();",
+                  "  if (json.data.length === 0) return;",
+                  "  const offer = json.data[0];",
+                  "  pm.expect(offer).to.have.property(\"id\");",
+                  "  pm.expect(offer).to.have.property(\"title\");",
+                  "  pm.expect(offer).to.have.property(\"type\");",
+                  "  pm.expect(offer.cities).to.be.an(\"array\");",
+                  "  pm.expect(offer.details).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
         {
           "name": "stations - active",
           "request": {

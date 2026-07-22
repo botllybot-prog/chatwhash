@@ -3,6 +3,12 @@
   publish = "dist"
 
 [[redirects]]
+  from = "/api/v1/offers"
+  to = "https://yhklvtzonvgzkodysawu.supabase.co/functions/v1/get-offers"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

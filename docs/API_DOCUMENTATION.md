@@ -1,6 +1,6 @@
 # Washlly Website API Documentation
 
-Last updated: 2026-06-14
+Last updated: 2026-07-22
 
 ## Overview
 
@@ -49,6 +49,86 @@ Authorization: Bearer <USER_ACCESS_TOKEN or SUPABASE_ANON_KEY>
 | `/owner` | Owner registration/login |
 | `/login` | Admin/employee/station owner login |
 | `/app/*` | Protected admin/owner/employee app |
+
+## Public Offers API
+
+### `GET /api/v1/offers`
+
+Returns active offer records with their type, ordered details, and linked station information. This public website route is proxied to the Supabase Edge Function:
+
+```http
+GET /functions/v1/get-offers
+```
+
+Authentication is optional.
+
+- Unauthenticated requests return only offers whose `cities` includes `All`.
+- Authenticated customer requests may pass `Authorization: Bearer <customer_session_token>` or `x-customer-session-token: <customer_session_token>`. The function reads the customer's saved `customer_profiles.city` and returns offers for that city plus `All`.
+- Supabase Auth bearer tokens are also accepted; when present, the function attempts to read `user_metadata.city`.
+- If no city is available from the authenticated context, only `All` offers are returned.
+
+Headers:
+
+```http
+Authorization: Bearer <optional_customer_session_or_user_token>
+x-customer-session-token: <optional_customer_session_token>
+```
+
+Query parameters: none.
+
+Status codes:
+
+| Status | Meaning |
+| --- | --- |
+| `200 OK` | Offers loaded successfully |
+| `405 Method Not Allowed` | Method other than `GET` |
+| `500 Internal Error` | Unexpected database or function error |
+
+Example unauthenticated request:
+
+```bash
+curl "https://washlly.com/api/v1/offers"
+```
+
+Example authenticated request:
+
+```bash
+curl "https://washlly.com/api/v1/offers" \
+  -H "Authorization: Bearer <CUSTOMER_SESSION_TOKEN>"
+```
+
+Example response:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-1283-...",
+      "title": "Summer Promotion",
+      "type": {
+        "id": "uuid-...",
+        "name": "Slider"
+      },
+      "cities": ["All", "Erbil"],
+      "details": [
+        {
+          "id": "uuid-...",
+          "title": "Detail Title",
+          "body": "Detail Body",
+          "url_type": "Inside",
+          "url": "/station/123",
+          "station": {
+            "id": "uuid-...",
+            "name": "Station A"
+          },
+          "sort": 1
+        }
+      ]
+    }
+  ]
+}
+```
 
 ## Push Notifications (FCM)
 
@@ -992,6 +1072,9 @@ curl "https://yhklvtzonvgzkodysawu.supabase.co/rest/v1/stations?select=id,name,r
 | `employees` | Employee accounts and permissions |
 | `user_roles` | User role mapping |
 | `edit_requests` | Legacy owner requested profile edits |
+| `offer_types` | Admin-managed offer type names such as Single or Slider |
+| `offers` | Offer header records with comma-separated city targeting |
+| `offer_details` | Ordered offer content, links, and optional station references |
 
 ## Common REST Examples
 
@@ -1117,6 +1200,7 @@ npx supabase functions deploy create-quick-booking
 npx supabase functions deploy cancel-map-booking
 npx supabase functions deploy cancel-all-map-bookings
 npx supabase functions deploy spin-booking-discount
+npx supabase functions deploy get-offers
 ```
 
 Deploy owner/admin/WhatsApp functions:

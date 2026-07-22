@@ -22,6 +22,7 @@ import AdminLayout from "./components/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminStations from "./pages/admin/AdminStations";
 import AdminServices from "./pages/admin/AdminServices";
+import AdminOffers from "./pages/admin/AdminOffers";
 import AdminOfferTypes from "./pages/admin/AdminOfferTypes";
 import AdminBookings from "./pages/admin/AdminBookings";
 import AdminOwners from "./pages/admin/AdminOwners";
@@ -50,6 +51,7 @@ const ProtectedRoutes = () => (
         <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="stations" element={<AdminStations />} />
         <Route path="services" element={<AdminServices />} />
+        <Route path="offers" element={<AdminOffers />} />
         <Route path="offer-types" element={<AdminOfferTypes />} />
         <Route path="bookings" element={<AdminBookings />} />
         <Route path="owners" element={<AdminOwners />} />

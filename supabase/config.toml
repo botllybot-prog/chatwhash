@@ -51,3 +51,6 @@ verify_jwt = false
 [functions.notify-on-booking-change]
 verify_jwt = false
 
+[functions.get-offers]
+verify_jwt = false
+
