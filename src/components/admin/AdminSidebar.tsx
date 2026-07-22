@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Store, Wrench, CalendarCheck, Users, FileEdit,
   CreditCard, BarChart3, Settings, MessageCircle, LogOut, Car, LayoutDashboard, UserCheck, Briefcase, Megaphone,
-  Star,
+  Star, Tags,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -106,6 +106,7 @@ export function AdminSidebar() {
     { title: t.dashboard, url: "/app/admin/dashboard", icon: LayoutDashboard, badgeKey: null },
     { title: t.stations, url: "/app/admin/stations", icon: Store, badgeKey: null },
     { title: t.services, url: "/app/admin/services", icon: Wrench, badgeKey: null },
+    { title: language === "en" ? "Offer types" : language === "tr" ? "Teklif türleri" : language === "ku" ? "جۆرەکانی ئۆفەر" : "أنواع العروض", url: "/app/admin/offer-types", icon: Tags, badgeKey: null },
     { title: t.bookings, url: "/app/admin/bookings", icon: CalendarCheck, badgeKey: "bookings" as const },
     { title: t.owners, url: "/app/admin/owners", icon: Users, badgeKey: null },
     { title: t.customers, url: "/app/admin/customers", icon: UserCheck, badgeKey: null },
