@@ -42,10 +42,17 @@ function json(body: Record<string, unknown>, status = 200) {
 }
 
 function parseCities(value: string) {
+  const seen = new Set<string>();
   return value
     .split(",")
     .map((city) => city.trim())
-    .filter(Boolean);
+    .filter((city) => {
+      if (!city) return false;
+      const key = city.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 function citiesMatch(offerCities: string[], customerCity: string | null) {

@@ -906,9 +906,16 @@
                 "type": "text",
                 "disabled": true,
                 "description": "Optional. Enable for authenticated customer city filtering."
+              },
+              {
+                "key": "x-customer-session-token",
+                "value": "{{customerSessionToken}}",
+                "type": "text",
+                "disabled": true,
+                "description": "Optional alternative to Authorization for authenticated customer city filtering."
               }
             ],
-            "description": "Hybrid public/authenticated offers endpoint. Without auth, returns offers tagged All. With a customer session token or Supabase user token, returns All plus the customer city offers.",
+            "description": "Hybrid public/authenticated offers endpoint. Offers are stored with comma-separated cities and returned as a cities array. Without auth, returns offers tagged All. With a customer session token or Supabase user token, returns All plus offers matching the customer's saved city.",
             "url": "{{baseUrl}}/api/v1/offers"
           },
           "event": [
@@ -936,6 +943,7 @@
                   "  pm.expect(offer).to.have.property(\"title\");",
                   "  pm.expect(offer).to.have.property(\"type\");",
                   "  pm.expect(offer.cities).to.be.an(\"array\");",
+                  "  offer.cities.forEach((city) => pm.expect(city).to.be.a(\"string\"));",
                   "  pm.expect(offer.details).to.be.an(\"array\");",
                   "});"
                 ]

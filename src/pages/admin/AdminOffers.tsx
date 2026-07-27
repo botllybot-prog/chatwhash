@@ -91,6 +91,8 @@ type DetailForm = {
   fileName: string;
 };
 
+const DEFAULT_OFFER_TYPE_NAMES = ["Single", "Slider"] as const;
+
 const emptyDetail = (sort = 1): DetailForm => ({
   title: "",
   body: "",
@@ -113,6 +115,19 @@ const normalizeDetailsSort = (details: DetailForm[]) =>
     ...detail,
     sort: index + 1,
   }));
+
+const offerTypeRank = (name: string) => {
+  const normalized = name.trim().toLowerCase();
+  if (normalized === "single" || normalized.includes("single")) return 0;
+  if (normalized === "slider" || normalized.includes("slider")) return 1;
+  return 2;
+};
+
+const normalizeOfferTypes = (rows: OfferTypeRow[]) =>
+  [...rows].sort((a, b) => {
+    const rankDiff = offerTypeRank(a.name) - offerTypeRank(b.name);
+    return rankDiff || a.name.localeCompare(b.name);
+  });
 
 const AdminOffers = () => {
   const { language, isRtl } = useAppLanguage();
@@ -139,6 +154,34 @@ const AdminOffers = () => {
   const selectedTypeKind = selectedTypeName.toLowerCase().includes("slider") ? "Slider" : "Single";
   const isSlider = selectedTypeKind === "Slider";
 
+  const ensureDefaultOfferTypes = useCallback(async (currentTypes: OfferTypeRow[]) => {
+    const lowerNames = new Set(currentTypes.map((type) => type.name.trim().toLowerCase()));
+    const missingNames = DEFAULT_OFFER_TYPE_NAMES.filter((name) => !lowerNames.has(name.toLowerCase()));
+
+    if (missingNames.length === 0) return normalizeOfferTypes(currentTypes);
+
+    const { error } = await (supabase as any)
+      .from("offer_types")
+      .insert(missingNames.map((name) => ({ name })));
+
+    if (error) {
+      toast({ title: t.loadError, description: error.message, variant: "destructive" });
+      return normalizeOfferTypes(currentTypes);
+    }
+
+    const { data, error: reloadError } = await (supabase as any)
+      .from("offer_types")
+      .select("id, name")
+      .order("name", { ascending: true });
+
+    if (reloadError) {
+      toast({ title: t.loadError, description: reloadError.message, variant: "destructive" });
+      return normalizeOfferTypes(currentTypes);
+    }
+
+    return normalizeOfferTypes((data || []) as OfferTypeRow[]);
+  }, [t.loadError]);
+
   const load = useCallback(async () => {
     setLoading(true);
     const [offersResult, typesResult, stationsResult] = await Promise.all([
@@ -157,10 +200,17 @@ const AdminOffers = () => {
       return;
     }
 
+    const normalizedTypes = await ensureDefaultOfferTypes((typesResult.data || []) as OfferTypeRow[]);
     setOffers((offersResult.data || []) as OfferRow[]);
-    setOfferTypes((typesResult.data || []) as OfferTypeRow[]);
+    setOfferTypes(normalizedTypes);
     setStations((stationsResult.data || []) as StationRow[]);
-  }, [t.loadError]);
+  }, [ensureDefaultOfferTypes, t.loadError]);
+
+  useEffect(() => {
+    if (typeId || offerTypes.length === 0) return;
+    const singleType = offerTypes.find((type) => offerTypeRank(type.name) === 0);
+    setTypeId(singleType?.id || offerTypes[0].id);
+  }, [offerTypes, typeId]);
 
   useEffect(() => {
     void load();
@@ -184,7 +234,8 @@ const AdminOffers = () => {
   const resetForm = () => {
     setSelectedOfferId(null);
     setTitle("");
-    setTypeId("");
+    const singleType = offerTypes.find((type) => offerTypeRank(type.name) === 0);
+    setTypeId(singleType?.id || offerTypes[0]?.id || "");
     setCities(["All"]);
     setDetails([emptyDetail()]);
   };
@@ -458,7 +509,7 @@ const AdminOffers = () => {
                     <SelectValue placeholder={t.typePlaceholder} />
                   </SelectTrigger>
                   <SelectContent>
-                    {offerTypes.map((type) => (
+                    {normalizeOfferTypes(offerTypes).map((type) => (
                       <SelectItem key={type.id} value={type.id}>
                         {localizeOfferTypeName(type.name, language)}
                       </SelectItem>

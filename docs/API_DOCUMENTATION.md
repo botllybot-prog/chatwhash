@@ -1,6 +1,6 @@
 # Washlly Website API Documentation
 
-Last updated: 2026-07-22
+Last updated: 2026-07-27
 
 ## Overview
 
@@ -62,8 +62,9 @@ GET /functions/v1/get-offers
 
 Authentication is optional.
 
-- Unauthenticated requests return only offers whose `cities` includes `All`.
-- Authenticated customer requests may pass `Authorization: Bearer <customer_session_token>` or `x-customer-session-token: <customer_session_token>`. The function reads the customer's saved `customer_profiles.city` and returns offers for that city plus `All`.
+- Offers are assigned to one or more cities from the admin multi-select. They are stored in `offers.cities` as comma-separated text, for example `All,Erbil,Baghdad`, and returned by this endpoint as a `cities` array.
+- Unauthenticated requests return only offers whose parsed `cities` array includes `All`.
+- Authenticated customer requests may pass `Authorization: Bearer <customer_session_token>` or `x-customer-session-token: <customer_session_token>`. The function reads the customer's saved `customer_profiles.city` and returns offers where the parsed `cities` array includes the customer's city or `All`.
 - Supabase Auth bearer tokens are also accepted; when present, the function attempts to read `user_metadata.city`.
 - If no city is available from the authenticated context, only `All` offers are returned.
 
@@ -75,6 +76,12 @@ x-customer-session-token: <optional_customer_session_token>
 ```
 
 Query parameters: none.
+
+Filtering notes:
+
+- City matching is case-insensitive after splitting `offers.cities` by comma.
+- `All` makes the offer visible to every request.
+- Customer-specific city filtering requires either a valid customer web session token or a Supabase Auth bearer token with city metadata.
 
 Status codes:
 
