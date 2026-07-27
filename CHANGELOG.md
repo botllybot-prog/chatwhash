@@ -5,6 +5,13 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-07-27] - Offers Admin Form and Public Offers API
+
+- Fixed the admin offers form so `Single` and `Slider` offer types are always available and sorted predictably.
+- Kept city selection as a multi-select flow that stores comma-separated city values and reloads them as selected options while editing.
+- Seeded default offer types in Supabase and tightened public offers API city parsing for multi-city filtering.
+- Updated API documentation and the Postman collection for the hybrid `/api/v1/offers` endpoint and multi-city response shape.
+
 ## [2026-06-13] - Station Service Catalog Selection
 
 - Updated the station portal so owners choose admin-defined services with checkboxes and set only their station price and duration.
