@@ -27,6 +27,10 @@ type OfferDetailRow = {
   url: string | null;
   station_id: string | null;
   sort: number;
+  media_key: string | null;
+  media_url: string | null;
+  media_type: string | null;
+  media_name: string | null;
 };
 
 type StationRow = {
@@ -127,7 +131,7 @@ Deno.serve(async (req) => {
       offerIds.length
         ? supabase
             .from("offer_details")
-            .select("id, offer_id, title, body, url_type, url, station_id, sort")
+            .select("id, offer_id, title, body, url_type, url, station_id, sort, media_key, media_url, media_type, media_name")
             .in("offer_id", offerIds)
             .order("sort", { ascending: true })
         : Promise.resolve({ data: [], error: null }),
@@ -167,6 +171,13 @@ Deno.serve(async (req) => {
         url: detail.url,
         station: detail.station_id ? stationById.get(detail.station_id) || null : null,
         sort: detail.sort,
+        media: detail.media_url
+          ? {
+              url: detail.media_url,
+              type: detail.media_type,
+              name: detail.media_name,
+            }
+          : null,
       })),
     }));
 
