@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   BadgePercent,
@@ -107,7 +108,29 @@ type DetailForm = {
   mediaName: string;
 };
 
+type DetailInsertRow = {
+  offer_id: string;
+  title: string | null;
+  body: string | null;
+  url_type: DetailForm["url_type"];
+  url: string | null;
+  station_id: string | null;
+  sort: number;
+  media_key?: string | null;
+  media_url?: string | null;
+  media_type?: string | null;
+  media_name?: string | null;
+};
+
 const DEFAULT_OFFER_TYPE_NAMES = ["Single", "Slider"] as const;
+
+const DETAIL_COLUMNS = "id, offer_id, title, body, url_type, url, station_id, sort";
+const MEDIA_COLUMNS = "media_key, media_url, media_type, media_name";
+
+// Postgres reports an unknown column as 42703. The media columns ship in a
+// separate migration, so the page stays usable when it has not been applied
+// yet instead of failing every load and save.
+const isMissingColumnError = (error: { code?: string } | null) => error?.code === "42703";
 
 const emptyDetail = (sort = 1): DetailForm => ({
   title: "",
@@ -168,6 +191,7 @@ const AdminOffers = () => {
   const [details, setDetails] = useState<DetailForm[]>([emptyDetail()]);
   const [saving, setSaving] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [mediaStorageReady, setMediaStorageReady] = useState(true);
 
   const selectedTypeName = offerTypes.find((type) => type.id === typeId)?.name || "";
   const selectedTypeKind = selectedTypeName.toLowerCase().includes("slider") ? "Slider" : "Single";
@@ -203,15 +227,19 @@ const AdminOffers = () => {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [offersResult, typesResult, stationsResult] = await Promise.all([
+    const [offersResult, typesResult, stationsResult, mediaProbe] = await Promise.all([
       (supabase as any)
         .from("offers")
         .select("id, title, type, cities, offer_types(name)")
         .order("title", { ascending: true }),
       (supabase as any).from("offer_types").select("id, name").order("name", { ascending: true }),
       (supabase as any).from("stations").select("id, name").order("name", { ascending: true }),
+      // Probed up front so the pending-migration warning shows before the admin
+      // spends time filling the form.
+      (supabase as any).from("offer_details").select("media_key").limit(1),
     ]);
     setLoading(false);
+    setMediaStorageReady(!isMissingColumnError(mediaProbe.error));
 
     const firstError = offersResult.error || typesResult.error || stationsResult.error;
     if (firstError) {
@@ -268,18 +296,31 @@ const AdminOffers = () => {
 
     const { data, error } = await (supabase as any)
       .from("offer_details")
-      .select("id, offer_id, title, body, url_type, url, station_id, sort, media_key, media_url, media_type, media_name")
+      .select(`${DETAIL_COLUMNS}, ${MEDIA_COLUMNS}`)
       .eq("offer_id", offer.id)
       .order("sort", { ascending: true });
+
+    // Retried without the media columns so the offer stays editable while the
+    // media migration is still pending.
+    const fallback = isMissingColumnError(error)
+      ? await (supabase as any)
+          .from("offer_details")
+          .select(DETAIL_COLUMNS)
+          .eq("offer_id", offer.id)
+          .order("sort", { ascending: true })
+      : null;
+
+    if (fallback) setMediaStorageReady(false);
+    const detailsResult = fallback || { data, error };
     setDetailsLoading(false);
 
-    if (error) {
-      toast({ title: t.loadError, description: error.message, variant: "destructive" });
+    if (detailsResult.error) {
+      toast({ title: t.loadError, description: detailsResult.error.message, variant: "destructive" });
       setDetails([emptyDetail()]);
       return;
     }
 
-    const rows = (data || []) as OfferDetailRow[];
+    const rows = (detailsResult.data || []) as OfferDetailRow[];
     setDetails(
       rows.length
         ? rows.map((row, index) => ({
@@ -291,9 +332,9 @@ const AdminOffers = () => {
             station_id: row.station_id,
             sort: row.sort || index + 1,
             file: null,
-            mediaKey: row.media_key,
-            mediaUrl: row.media_url,
-            mediaType: row.media_type,
+            mediaKey: row.media_key ?? null,
+            mediaUrl: row.media_url ?? null,
+            mediaType: row.media_type ?? null,
             mediaName: row.media_name || "",
           }))
         : [emptyDetail()],
@@ -403,14 +444,30 @@ const AdminOffers = () => {
     }
 
     const offerId = offerResult.data.id as string;
-    const existingMediaResult = selectedOfferId
+    const existingDetailsQuery = selectedOfferId
       ? await (supabase as any).from("offer_details").select("id, media_key").eq("offer_id", offerId)
       : { data: [], error: null };
+
+    // The media column is dropped from the lookup while the migration is
+    // pending so an existing offer can still be updated.
+    const existingDetailsFallback = isMissingColumnError(existingDetailsQuery.error)
+      ? await (supabase as any).from("offer_details").select("id").eq("offer_id", offerId)
+      : null;
+
+    if (existingDetailsFallback) setMediaStorageReady(false);
+    const existingMediaResult = existingDetailsFallback || existingDetailsQuery;
 
     if (existingMediaResult.error) {
       setSaving(false);
       toast({ title: t.saveError, description: existingMediaResult.error.message, variant: "destructive" });
       return;
+    }
+
+    const mediaStorable = mediaStorageReady && !existingDetailsFallback;
+    const pendingFileCount = details.filter((detail) => detail.file).length;
+
+    if (!mediaStorable && pendingFileCount > 0) {
+      toast({ title: t.mediaStorageTitle, description: t.mediaStorageBody, variant: "destructive" });
     }
 
     const existingMediaKeys = (existingMediaResult.data || [])
@@ -423,7 +480,7 @@ const AdminOffers = () => {
     const normalizedDetails = normalizeDetailsSort(isSlider ? details : [details[0] || emptyDetail()]);
     const uploadedKeys: string[] = [];
     const replacedKeys: string[] = [];
-    let detailRows;
+    let detailRows: DetailInsertRow[];
 
     try {
       detailRows = await Promise.all(normalizedDetails.map(async (detail) => {
@@ -432,7 +489,8 @@ const AdminOffers = () => {
         let mediaType = detail.mediaType;
         let mediaName = detail.mediaName || null;
 
-        if (detail.file) {
+        // Uploading before the column exists would only orphan the blob.
+        if (detail.file && mediaStorable) {
           const uploaded = await uploadOfferMedia(detail.file);
           uploadedKeys.push(uploaded.key);
           if (detail.mediaKey) replacedKeys.push(detail.mediaKey);
@@ -442,7 +500,7 @@ const AdminOffers = () => {
           mediaName = uploaded.name;
         }
 
-        return {
+        const row = {
           offer_id: offerId,
           title: detail.title.trim() || null,
           body: detail.body.trim() || null,
@@ -450,6 +508,12 @@ const AdminOffers = () => {
           url: detail.url.trim() || null,
           station_id: detail.station_id || null,
           sort: detail.sort,
+        };
+
+        if (!mediaStorable) return row;
+
+        return {
+          ...row,
           media_key: mediaKey,
           media_url: mediaUrl,
           media_type: mediaType,
@@ -501,10 +565,12 @@ const AdminOffers = () => {
     setDetails(detailRows.map((row, index) => ({
       ...normalizedDetails[index],
       id: insertedDetails?.[index]?.id,
-      file: null,
-      mediaKey: row.media_key,
-      mediaUrl: row.media_url,
-      mediaType: row.media_type,
+      // A pending pick is kept when media could not be stored, so the preview
+      // stays on screen and the file is not silently dropped.
+      file: mediaStorable ? null : normalizedDetails[index].file,
+      mediaKey: row.media_key ?? null,
+      mediaUrl: row.media_url ?? null,
+      mediaType: row.media_type ?? null,
       mediaName: row.media_name || "",
     })));
     setSaving(false);
@@ -688,6 +754,16 @@ const AdminOffers = () => {
             <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
               {isSlider ? t.sliderHint : t.singleHint}
             </div>
+
+            {!mediaStorageReady && (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div className="space-y-1">
+                  <div className="font-semibold">{t.mediaStorageTitle}</div>
+                  <p className="text-destructive/90">{t.mediaStorageBody}</p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-4 rounded-lg border bg-background p-3">
               <div className="flex items-center justify-between">

@@ -60,18 +60,38 @@ const getContentType = (key: string) => {
   return MIME_TYPES_BY_EXTENSION[extension] || "application/octet-stream";
 };
 
+// The browser bundle already falls back to these values (see
+// src/integrations/supabase/client.ts), so the edge function does the same.
+// Without a fallback every upload is rejected on sites that do not define the
+// Supabase variables in their environment.
+const FALLBACK_SUPABASE_URL = "https://yhklvtzonvgzkodysawu.supabase.co";
+
+const readEnv = (...names: string[]) => {
+  for (const name of names) {
+    const value = Netlify.env.get(name)?.trim();
+    if (value) return value;
+  }
+  return "";
+};
+
 const isAdminRequest = async (request: Request) => {
   const authorization = request.headers.get("authorization");
-  const supabaseUrl = Netlify.env.get("VITE_SUPABASE_URL");
-  const publishableKey = Netlify.env.get("VITE_SUPABASE_PUBLISHABLE_KEY");
+  const supabaseUrl = readEnv("VITE_SUPABASE_URL", "SUPABASE_URL") || FALLBACK_SUPABASE_URL;
+  const publishableKey = readEnv(
+    "VITE_SUPABASE_PUBLISHABLE_KEY",
+    "SUPABASE_PUBLISHABLE_KEY",
+    "SUPABASE_ANON_KEY",
+  );
 
-  if (!authorization?.startsWith("Bearer ") || !supabaseUrl || !publishableKey) return false;
+  if (!authorization?.startsWith("Bearer ") || !supabaseUrl) return false;
 
   const response = await fetch(
     `${supabaseUrl}/rest/v1/user_roles?select=role&role=eq.admin&limit=1`,
     {
       headers: {
-        apikey: publishableKey,
+        // Supabase accepts the caller's signed token as the API key, which keeps
+        // the check working when no publishable key is configured.
+        apikey: publishableKey || authorization.slice("Bearer ".length).trim(),
         Authorization: authorization,
         Accept: "application/json",
       },

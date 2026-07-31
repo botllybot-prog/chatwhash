@@ -127,4 +127,52 @@ describe("offer media edge function", () => {
     expect(response.status).toBe(401);
     expect(blobMocks.set).not.toHaveBeenCalled();
   });
+
+  it("still authorizes when the site defines no Supabase variables", async () => {
+    vi.stubGlobal("Netlify", { env: { get: () => undefined } });
+    const request = new Request("https://preview.example.test/api/offer-media", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer admin-session",
+        "Content-Type": "image/png",
+        "X-File-Name": "offer.png",
+      },
+      body: new Blob(["image-binary"], { type: "image/png" }),
+    });
+
+    const response = await offerMediaHandler(request, {} as never);
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+
+    expect(response.status).toBe(201);
+    expect(url).toContain("/rest/v1/user_roles");
+    // The caller's own token stands in for the missing publishable key.
+    expect((init.headers as Record<string, string>).apikey).toBe("admin-session");
+  });
+  it("accepts the unprefixed Supabase variable names", async () => {
+    vi.stubGlobal("Netlify", {
+      env: {
+        get: (name: string) => {
+          if (name === "SUPABASE_URL") return "https://unprefixed.example.test";
+          if (name === "SUPABASE_ANON_KEY") return "unprefixed-key";
+          return undefined;
+        },
+      },
+    });
+    const request = new Request("https://preview.example.test/api/offer-media", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer admin-session",
+        "Content-Type": "image/png",
+        "X-File-Name": "offer.png",
+      },
+      body: new Blob(["image-binary"], { type: "image/png" }),
+    });
+
+    const response = await offerMediaHandler(request, {} as never);
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+
+    expect(response.status).toBe(201);
+    expect(url).toContain("https://unprefixed.example.test/rest/v1/user_roles");
+    expect((init.headers as Record<string, string>).apikey).toBe("unprefixed-key");
+  });
 });
