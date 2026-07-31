@@ -87,6 +87,15 @@ type OfferTextBundle = {
     chooseFile: string;
     selectedFile: string;
     noFile: string;
+    mediaReview: string;
+    mediaImage: string;
+    mediaVideo: string;
+    mediaPending: string;
+    mediaStored: string;
+    removeFile: string;
+    invalidMediaType: string;
+    mediaTooLarge: string;
+    mediaHint: string;
     moveUp: string;
     moveDown: string;
     removeDetail: string;
@@ -189,6 +198,15 @@ export const adminOffersTexts: Record<AppLanguage, OfferTextBundle> = {
       chooseFile: "اختيار ملف",
       selectedFile: "الملف المختار",
       noFile: "لا يوجد ملف",
+      mediaReview: "مراجعة الملف المرفوع",
+      mediaImage: "صورة",
+      mediaVideo: "فيديو",
+      mediaPending: "بانتظار الحفظ",
+      mediaStored: "ملف محفوظ",
+      removeFile: "إزالة الملف",
+      invalidMediaType: "يُسمح برفع ملفات الصور أو الفيديو فقط.",
+      mediaTooLarge: "حجم الملف يتجاوز الحد الأقصى 100 ميغابايت.",
+      mediaHint: "صور أو فيديو فقط، بحد أقصى 100 ميغابايت.",
       moveUp: "تحريك للأعلى",
       moveDown: "تحريك للأسفل",
       removeDetail: "حذف التفاصيل",
@@ -310,6 +328,15 @@ export const adminOffersTexts: Record<AppLanguage, OfferTextBundle> = {
       chooseFile: "Choose File",
       selectedFile: "Selected file",
       noFile: "No file",
+      mediaReview: "Uploaded file review",
+      mediaImage: "Image",
+      mediaVideo: "Video",
+      mediaPending: "Pending — uploads when you save",
+      mediaStored: "Stored file",
+      removeFile: "Remove file",
+      invalidMediaType: "Only image or video files can be uploaded.",
+      mediaTooLarge: "File exceeds the 100 MB limit.",
+      mediaHint: "Images or videos only, up to 100 MB.",
       moveUp: "Move up",
       moveDown: "Move down",
       removeDetail: "Remove detail",
@@ -431,6 +458,15 @@ export const adminOffersTexts: Record<AppLanguage, OfferTextBundle> = {
       chooseFile: "هەڵبژاردنی فایل",
       selectedFile: "فایلی هەڵبژێردراو",
       noFile: "فایل نییە",
+      mediaReview: "پێداچوونەوەی فایلی بارکراو",
+      mediaImage: "وێنە",
+      mediaVideo: "ڤیدیۆ",
+      mediaPending: "چاوەڕوانی پاشەکەوتکردن",
+      mediaStored: "فایلی پاشەکەوتکراو",
+      removeFile: "سڕینەوەی فایل",
+      invalidMediaType: "تەنها فایلی وێنە یان ڤیدیۆ دەتوانرێت بار بکرێت.",
+      mediaTooLarge: "قەبارەی فایل لە سنووری ١٠٠ مێگابایت زیاترە.",
+      mediaHint: "تەنها وێنە یان ڤیدیۆ، تا ١٠٠ مێگابایت.",
       moveUp: "بردنە سەرەوە",
       moveDown: "بردنە خوارەوە",
       removeDetail: "سڕینەوەی وردەکاری",
@@ -552,6 +588,15 @@ export const adminOffersTexts: Record<AppLanguage, OfferTextBundle> = {
       chooseFile: "Dosya seç",
       selectedFile: "Seçilen dosya",
       noFile: "Dosya yok",
+      mediaReview: "Yüklenen dosya incelemesi",
+      mediaImage: "Görsel",
+      mediaVideo: "Video",
+      mediaPending: "Bekliyor — kaydettiğinizde yüklenir",
+      mediaStored: "Kayıtlı dosya",
+      removeFile: "Dosyayı kaldır",
+      invalidMediaType: "Yalnızca görsel veya video dosyaları yüklenebilir.",
+      mediaTooLarge: "Dosya 100 MB sınırını aşıyor.",
+      mediaHint: "Yalnızca görsel veya video, en fazla 100 MB.",
       moveUp: "Yukarı taşı",
       moveDown: "Aşağı taşı",
       removeDetail: "Detayı kaldır",
