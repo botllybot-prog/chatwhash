@@ -21,6 +21,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { deleteOfferMedia, uploadOfferMedia } from "@/lib/offerMedia";
 import { Button } from "@/components/ui/button";
+import OfferMediaPreview from "@/components/admin/OfferMediaPreview";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -463,6 +464,15 @@ const AdminOffers = () => {
     const retainedKeys = new Set(detailRows.map((detail) => detail.media_key).filter(Boolean));
     const removedKeys = existingMediaKeys.filter((key) => !retainedKeys.has(key));
     await Promise.allSettled([...new Set([...replacedKeys, ...removedKeys])].map(deleteOfferMedia));
+    setDetails(detailRows.map((row, index) => ({
+      ...normalizedDetails[index],
+      id: insertedDetails?.[index]?.id,
+      file: null,
+      fileName: row.media_name || "",
+      mediaKey: row.media_key,
+      mediaUrl: row.media_url,
+      mediaType: row.media_type,
+    })));
     setSaving(false);
 
     toast({ title: t.saved });
@@ -749,6 +759,13 @@ const AdminOffers = () => {
                         onChange={(event) => updateDetail(index, { sort: Number(event.target.value) || index + 1 })}
                       />
                     </div>
+                    <OfferMediaPreview
+                      file={detail.file}
+                      mediaUrl={detail.mediaUrl}
+                      mediaType={detail.mediaType}
+                      fileName={detail.fileName}
+                      label={t.selectedFile}
+                    />
                     <div className="space-y-2">
                       <Label>{t.file}</Label>
                       <label className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-muted/50">
