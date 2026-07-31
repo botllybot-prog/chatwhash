@@ -19,7 +19,9 @@ import {
   localizeUrlType,
 } from "@/lib/adminOffersTranslations";
 import { toast } from "@/hooks/use-toast";
+import { deleteOfferMedia, uploadOfferMedia } from "@/lib/offerMedia";
 import { Button } from "@/components/ui/button";
+import OfferMediaPreview from "@/components/admin/OfferMediaPreview";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,6 +79,10 @@ type OfferDetailRow = {
   url: string | null;
   station_id: string | null;
   sort: number;
+  media_key: string | null;
+  media_url: string | null;
+  media_type: string | null;
+  media_name: string | null;
 };
 
 type DetailForm = {
@@ -89,6 +95,9 @@ type DetailForm = {
   sort: number;
   file: File | null;
   fileName: string;
+  mediaKey: string | null;
+  mediaUrl: string | null;
+  mediaType: string | null;
 };
 
 const DEFAULT_OFFER_TYPE_NAMES = ["Single", "Slider"] as const;
@@ -102,6 +111,9 @@ const emptyDetail = (sort = 1): DetailForm => ({
   sort,
   file: null,
   fileName: "",
+  mediaKey: null,
+  mediaUrl: null,
+  mediaType: null,
 });
 
 const splitCities = (value: string) =>
@@ -249,7 +261,7 @@ const AdminOffers = () => {
 
     const { data, error } = await (supabase as any)
       .from("offer_details")
-      .select("id, offer_id, title, body, url_type, url, station_id, sort")
+      .select("id, offer_id, title, body, url_type, url, station_id, sort, media_key, media_url, media_type, media_name")
       .eq("offer_id", offer.id)
       .order("sort", { ascending: true });
     setDetailsLoading(false);
@@ -272,7 +284,10 @@ const AdminOffers = () => {
             station_id: row.station_id,
             sort: row.sort || index + 1,
             file: null,
-            fileName: "",
+            fileName: row.media_name || "",
+            mediaKey: row.media_key,
+            mediaUrl: row.media_url,
+            mediaType: row.media_type,
           }))
         : [emptyDetail()],
     );
@@ -354,32 +369,111 @@ const AdminOffers = () => {
     }
 
     const offerId = offerResult.data.id as string;
-    if (selectedOfferId) {
-      const { error: deleteError } = await (supabase as any).from("offer_details").delete().eq("offer_id", offerId);
+    const existingMediaResult = selectedOfferId
+      ? await (supabase as any).from("offer_details").select("id, media_key").eq("offer_id", offerId)
+      : { data: [], error: null };
+
+    if (existingMediaResult.error) {
+      setSaving(false);
+      toast({ title: t.saveError, description: existingMediaResult.error.message, variant: "destructive" });
+      return;
+    }
+
+    const existingMediaKeys = (existingMediaResult.data || [])
+      .map((row: { media_key?: string | null }) => row.media_key)
+      .filter((key: string | null | undefined): key is string => Boolean(key));
+    const existingDetailIds = (existingMediaResult.data || [])
+      .map((row: { id?: string }) => row.id)
+      .filter((id: string | undefined): id is string => Boolean(id));
+
+    const normalizedDetails = normalizeDetailsSort(isSlider ? details : [details[0] || emptyDetail()]);
+    const uploadedKeys: string[] = [];
+    const replacedKeys: string[] = [];
+    let detailRows;
+
+    try {
+      detailRows = await Promise.all(normalizedDetails.map(async (detail) => {
+        let mediaKey = detail.mediaKey;
+        let mediaUrl = detail.mediaUrl;
+        let mediaType = detail.mediaType;
+        let mediaName = detail.fileName || null;
+
+        if (detail.file) {
+          const uploaded = await uploadOfferMedia(detail.file);
+          uploadedKeys.push(uploaded.key);
+          if (detail.mediaKey) replacedKeys.push(detail.mediaKey);
+          mediaKey = uploaded.key;
+          mediaUrl = uploaded.url;
+          mediaType = uploaded.type;
+          mediaName = uploaded.name;
+        }
+
+        return {
+          offer_id: offerId,
+          title: detail.title.trim() || null,
+          body: detail.body.trim() || null,
+          url_type: detail.url_type,
+          url: detail.url.trim() || null,
+          station_id: detail.station_id || null,
+          sort: detail.sort,
+          media_key: mediaKey,
+          media_url: mediaUrl,
+          media_type: mediaType,
+          media_name: mediaName,
+        };
+      }));
+    } catch (error) {
+      await Promise.allSettled(uploadedKeys.map(deleteOfferMedia));
+      if (!selectedOfferId) await (supabase as any).from("offers").delete().eq("id", offerId);
+      setSaving(false);
+      toast({ title: t.saveError, description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+      return;
+    }
+
+    const { data: insertedDetails, error: detailsError } = await (supabase as any)
+      .from("offer_details")
+      .insert(detailRows)
+      .select("id");
+
+    if (detailsError) {
+      await Promise.allSettled(uploadedKeys.map(deleteOfferMedia));
+      if (!selectedOfferId) await (supabase as any).from("offers").delete().eq("id", offerId);
+      setSaving(false);
+      toast({ title: t.saveError, description: detailsError.message, variant: "destructive" });
+      return;
+    }
+
+    if (existingDetailIds.length > 0) {
+      const { error: deleteError } = await (supabase as any)
+        .from("offer_details")
+        .delete()
+        .in("id", existingDetailIds);
+
       if (deleteError) {
+        const insertedDetailIds = (insertedDetails || []).map((row: { id: string }) => row.id);
+        if (insertedDetailIds.length > 0) {
+          await (supabase as any).from("offer_details").delete().in("id", insertedDetailIds);
+        }
+        await Promise.allSettled(uploadedKeys.map(deleteOfferMedia));
         setSaving(false);
         toast({ title: t.saveError, description: deleteError.message, variant: "destructive" });
         return;
       }
     }
 
-    const detailRows = normalizeDetailsSort(isSlider ? details : [details[0] || emptyDetail()]).map((detail) => ({
-      offer_id: offerId,
-      title: detail.title.trim() || null,
-      body: detail.body.trim() || null,
-      url_type: detail.url_type,
-      url: detail.url.trim() || null,
-      station_id: detail.station_id || null,
-      sort: detail.sort,
-    }));
-
-    const { error: detailsError } = await (supabase as any).from("offer_details").insert(detailRows);
+    const retainedKeys = new Set(detailRows.map((detail) => detail.media_key).filter(Boolean));
+    const removedKeys = existingMediaKeys.filter((key) => !retainedKeys.has(key));
+    await Promise.allSettled([...new Set([...replacedKeys, ...removedKeys])].map(deleteOfferMedia));
+    setDetails(detailRows.map((row, index) => ({
+      ...normalizedDetails[index],
+      id: insertedDetails?.[index]?.id,
+      file: null,
+      fileName: row.media_name || "",
+      mediaKey: row.media_key,
+      mediaUrl: row.media_url,
+      mediaType: row.media_type,
+    })));
     setSaving(false);
-
-    if (detailsError) {
-      toast({ title: t.saveError, description: detailsError.message, variant: "destructive" });
-      return;
-    }
 
     toast({ title: t.saved });
     setSelectedOfferId(offerId);
@@ -389,6 +483,10 @@ const AdminOffers = () => {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
+    const { data: mediaRows } = await (supabase as any)
+      .from("offer_details")
+      .select("media_key")
+      .eq("offer_id", deleteTarget.id);
     const { error } = await (supabase as any).from("offers").delete().eq("id", deleteTarget.id);
     setDeleting(false);
 
@@ -397,6 +495,12 @@ const AdminOffers = () => {
       return;
     }
 
+    await Promise.allSettled(
+      (mediaRows || [])
+        .map((row: { media_key?: string | null }) => row.media_key)
+        .filter((key: string | null | undefined): key is string => Boolean(key))
+        .map(deleteOfferMedia),
+    );
     toast({ title: t.deleted });
     if (selectedOfferId === deleteTarget.id) resetForm();
     setOffers((current) => current.filter((offer) => offer.id !== deleteTarget.id));
@@ -655,6 +759,13 @@ const AdminOffers = () => {
                         onChange={(event) => updateDetail(index, { sort: Number(event.target.value) || index + 1 })}
                       />
                     </div>
+                    <OfferMediaPreview
+                      file={detail.file}
+                      mediaUrl={detail.mediaUrl}
+                      mediaType={detail.mediaType}
+                      fileName={detail.fileName}
+                      label={t.selectedFile}
+                    />
                     <div className="space-y-2">
                       <Label>{t.file}</Label>
                       <label className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-muted/50">
@@ -662,6 +773,7 @@ const AdminOffers = () => {
                         <span className="truncate">{detail.fileName || t.chooseFile}</span>
                         <input
                           type="file"
+                          accept="image/avif,image/gif,image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
                           className="sr-only"
                           onChange={(event) => {
                             const file = event.target.files?.[0] || null;

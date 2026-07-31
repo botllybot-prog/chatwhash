@@ -54,7 +54,7 @@ Authorization: Bearer <USER_ACCESS_TOKEN or SUPABASE_ANON_KEY>
 
 ### `GET /api/v1/offers`
 
-Returns active offer records with their type, ordered details, and linked station information. This public website route is proxied to the Supabase Edge Function:
+Returns active offer records with their type, ordered details, linked station information, and optional image or video media. This public website route is proxied to the Supabase Edge Function:
 
 ```http
 GET /functions/v1/get-offers
@@ -129,7 +129,12 @@ Example response:
             "id": "uuid-...",
             "name": "Station A"
           },
-          "sort": 1
+          "sort": 1,
+          "media": {
+            "url": "https://washlly.com/api/offer-media/media-key/promotion.webp",
+            "type": "image/webp",
+            "name": "promotion.webp"
+          }
         }
       ]
     }
