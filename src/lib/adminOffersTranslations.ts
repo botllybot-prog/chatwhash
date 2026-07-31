@@ -96,6 +96,8 @@ type OfferTextBundle = {
     invalidMediaType: string;
     mediaTooLarge: string;
     mediaHint: string;
+    mediaStorageTitle: string;
+    mediaStorageBody: string;
     moveUp: string;
     moveDown: string;
     removeDetail: string;
@@ -207,6 +209,9 @@ export const adminOffersTexts: Record<AppLanguage, OfferTextBundle> = {
       invalidMediaType: "يُسمح برفع ملفات الصور أو الفيديو فقط.",
       mediaTooLarge: "حجم الملف يتجاوز الحد الأقصى 100 ميغابايت.",
       mediaHint: "صور أو فيديو فقط، بحد أقصى 100 ميغابايت.",
+      mediaStorageTitle: "تعذّر حفظ الملفات",
+      mediaStorageBody:
+        "أعمدة الوسائط غير موجودة في قاعدة البيانات، لذلك لا يمكن حفظ الصور أو الفيديو بعد. نفّذ الترحيل المعلّق supabase/migrations/20260730090000_add_offer_detail_media.sql ثم أعد المحاولة. تُحفظ بقية حقول العرض بشكل طبيعي.",
       moveUp: "تحريك للأعلى",
       moveDown: "تحريك للأسفل",
       removeDetail: "حذف التفاصيل",
@@ -337,6 +342,9 @@ export const adminOffersTexts: Record<AppLanguage, OfferTextBundle> = {
       invalidMediaType: "Only image or video files can be uploaded.",
       mediaTooLarge: "File exceeds the 100 MB limit.",
       mediaHint: "Images or videos only, up to 100 MB.",
+      mediaStorageTitle: "Media uploads are unavailable",
+      mediaStorageBody:
+        "The offer media columns are missing from the database, so images and videos cannot be stored yet. Apply the pending migration supabase/migrations/20260730090000_add_offer_detail_media.sql and try again. Every other offer field still saves normally.",
       moveUp: "Move up",
       moveDown: "Move down",
       removeDetail: "Remove detail",
@@ -467,6 +475,9 @@ export const adminOffersTexts: Record<AppLanguage, OfferTextBundle> = {
       invalidMediaType: "تەنها فایلی وێنە یان ڤیدیۆ دەتوانرێت بار بکرێت.",
       mediaTooLarge: "قەبارەی فایل لە سنووری ١٠٠ مێگابایت زیاترە.",
       mediaHint: "تەنها وێنە یان ڤیدیۆ، تا ١٠٠ مێگابایت.",
+      mediaStorageTitle: "بارکردنی فایل بەردەست نییە",
+      mediaStorageBody:
+        "ستوونەکانی میدیا لە بنکەی دراوە بوونی نییە، بۆیە وێنە و ڤیدیۆ ناتوانرێت پاشەکەوت بکرێت. ترحیلی چاوەڕوانمان supabase/migrations/20260730090000_add_offer_detail_media.sql جێبەجێ بکە و دووبارە هەوڵ بدە. هەموو خانەکانی تری پێشکەش بە ئاسایی پاشەکەوت دەکرێن.",
       moveUp: "بردنە سەرەوە",
       moveDown: "بردنە خوارەوە",
       removeDetail: "سڕینەوەی وردەکاری",
@@ -597,6 +608,9 @@ export const adminOffersTexts: Record<AppLanguage, OfferTextBundle> = {
       invalidMediaType: "Yalnızca görsel veya video dosyaları yüklenebilir.",
       mediaTooLarge: "Dosya 100 MB sınırını aşıyor.",
       mediaHint: "Yalnızca görsel veya video, en fazla 100 MB.",
+      mediaStorageTitle: "Dosya yükleme kullanılamıyor",
+      mediaStorageBody:
+        "Kampanya medya kolonları veritabanında bulunmadığı için görsel ve videolar henüz saklanamıyor. Bekleyen supabase/migrations/20260730090000_add_offer_detail_media.sql taşımasını uygulayıp yeniden deneyin. Diğer tüm kampanya alanları normal şekilde kaydedilir.",
       moveUp: "Yukarı taşı",
       moveDown: "Aşağı taşı",
       removeDetail: "Detayı kaldır",

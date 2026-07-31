@@ -5,6 +5,14 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-07-31] - Offer Media Delivery Fixes
+
+- Fixed offer media uploads always failing authorization when the site environment does not define the Supabase variables, which had been rejecting every upload with `401 Unauthorized`.
+- Accepted the unprefixed `SUPABASE_URL` and `SUPABASE_ANON_KEY` names in the media endpoint alongside the `VITE_` variants.
+- Kept the admin offers page usable when the offer media columns are missing from the database, loading and saving every other field instead of failing outright.
+- Added a warning on the offers page naming the pending migration whenever media columns are unavailable, replacing the raw Postgres error that surfaced before.
+- Preserved a picked file in the form when media cannot be stored yet, so the preview stays on screen rather than disappearing on save.
+
 ## [2026-07-31] - Offer Media Review and Upload Restrictions
 
 - Added a media review section to each offer detail in the admin offers page, previewing the attached image or video with its kind, size, and whether it is stored or still pending.
