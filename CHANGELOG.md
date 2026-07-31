@@ -5,6 +5,13 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-07-31] - Offer Media Review and Upload Restrictions
+
+- Added a media review section to each offer detail in the admin offers page, previewing the attached image or video with its kind, size, and whether it is stored or still pending.
+- Allowed removing an attached file from the review section, where clearing a newly picked file restores the previously stored media.
+- Restricted offer uploads to image and video files only, validated on selection with a clear message and enforced again on the upload endpoint.
+- Widened accepted media to images and videos of any extension, including formats browsers leave untyped such as HEIC and MKV, and served stored media back with the exact type it was uploaded with.
+
 ## [2026-07-27] - Offers Admin Form and Public Offers API
 
 - Fixed the admin offers form so `Single` and `Slider` offer types are always available and sorted predictably.

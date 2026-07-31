@@ -4,17 +4,10 @@ import type { Config, Context } from "@netlify/edge-functions";
 const STORE_NAME = "offer-media";
 const ROUTE_PREFIX = "/api/offer-media";
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
-const ALLOWED_MEDIA_TYPES = new Set([
-  "image/avif",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "video/mp4",
-  "video/quicktime",
-  "video/webm",
-]);
+const MEDIA_TYPE_PATTERN = /^(image|video)\/[a-z0-9][a-z0-9.+-]*$/;
 
+// Legacy keys were stored without a media-type segment, so their type is
+// recovered from the file extension.
 const MIME_TYPES_BY_EXTENSION: Record<string, string> = {
   avif: "image/avif",
   gif: "image/gif",
@@ -26,6 +19,8 @@ const MIME_TYPES_BY_EXTENSION: Record<string, string> = {
   webm: "video/webm",
   webp: "image/webp",
 };
+
+const isMediaType = (value: string) => MEDIA_TYPE_PATTERN.test(value);
 
 const json = (body: unknown, status = 200) =>
   Response.json(body, {
@@ -53,6 +48,14 @@ const decodeFileName = (value: string) => {
 };
 
 const getContentType = (key: string) => {
+  // Keys are stored as `<id>/<media~type>/<file name>` so any image or video
+  // type can be served back with the exact type it was uploaded with.
+  const segments = key.split("/");
+  if (segments.length >= 3) {
+    const declared = segments[1].replace("~", "/").toLowerCase();
+    if (isMediaType(declared)) return declared;
+  }
+
   const extension = key.split(".").pop()?.toLowerCase() || "";
   return MIME_TYPES_BY_EXTENSION[extension] || "application/octet-stream";
 };
@@ -94,6 +97,9 @@ export default async (request: Request, _context: Context) => {
       headers: {
         "Cache-Control": "public, max-age=31536000, immutable",
         "Content-Type": getContentType(key),
+        // Media is user-uploaded, so scripting is blocked for formats that can
+        // carry it (such as SVG) when the file is opened directly.
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
         "X-Content-Type-Options": "nosniff",
       },
     });
@@ -113,12 +119,12 @@ export default async (request: Request, _context: Context) => {
     return new Response(null, { status: 204 });
   }
 
-  const contentType = request.headers.get("content-type")?.split(";")[0].trim() || "";
+  const contentType = request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() || "";
   const fileName = decodeFileName(request.headers.get("x-file-name") || "media");
   const contentLength = Number(request.headers.get("content-length") || 0);
 
-  if (!ALLOWED_MEDIA_TYPES.has(contentType)) {
-    return json({ error: "Only supported image and video files can be uploaded" }, 415);
+  if (!isMediaType(contentType)) {
+    return json({ error: "Only image or video files can be uploaded" }, 415);
   }
   if (contentLength > MAX_FILE_SIZE) {
     return json({ error: "File exceeds the 100 MB limit" }, 413);
@@ -129,7 +135,7 @@ export default async (request: Request, _context: Context) => {
   if (content.byteLength > MAX_FILE_SIZE) return json({ error: "File exceeds the 100 MB limit" }, 413);
 
   const safeFileName = sanitizeFileName(fileName);
-  const mediaKey = `${crypto.randomUUID()}/${safeFileName}`;
+  const mediaKey = `${crypto.randomUUID()}/${contentType.replace("/", "~")}/${safeFileName}`;
   const mediaPath = `${ROUTE_PREFIX}/${mediaKey.split("/").map(encodeURIComponent).join("/")}`;
   await store.set(mediaKey, content);
 

@@ -19,7 +19,14 @@ import {
   localizeUrlType,
 } from "@/lib/adminOffersTranslations";
 import { toast } from "@/hooks/use-toast";
-import { deleteOfferMedia, uploadOfferMedia } from "@/lib/offerMedia";
+import {
+  MAX_OFFER_MEDIA_SIZE,
+  OFFER_MEDIA_ACCEPT,
+  deleteOfferMedia,
+  getOfferMediaKind,
+  resolveOfferMediaType,
+  uploadOfferMedia,
+} from "@/lib/offerMedia";
 import { Button } from "@/components/ui/button";
 import OfferMediaPreview from "@/components/admin/OfferMediaPreview";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -94,10 +101,10 @@ type DetailForm = {
   station_id: string | null;
   sort: number;
   file: File | null;
-  fileName: string;
   mediaKey: string | null;
   mediaUrl: string | null;
   mediaType: string | null;
+  mediaName: string;
 };
 
 const DEFAULT_OFFER_TYPE_NAMES = ["Single", "Slider"] as const;
@@ -110,10 +117,10 @@ const emptyDetail = (sort = 1): DetailForm => ({
   station_id: null,
   sort,
   file: null,
-  fileName: "",
   mediaKey: null,
   mediaUrl: null,
   mediaType: null,
+  mediaName: "",
 });
 
 const splitCities = (value: string) =>
@@ -284,10 +291,10 @@ const AdminOffers = () => {
             station_id: row.station_id,
             sort: row.sort || index + 1,
             file: null,
-            fileName: row.media_name || "",
             mediaKey: row.media_key,
             mediaUrl: row.media_url,
             mediaType: row.media_type,
+            mediaName: row.media_name || "",
           }))
         : [emptyDetail()],
     );
@@ -315,6 +322,33 @@ const AdminOffers = () => {
     setDetails((current) =>
       current.map((detail, detailIndex) => (detailIndex === index ? { ...detail, ...patch } : detail)),
     );
+  };
+
+  const handleFileSelect = (index: number, input: HTMLInputElement) => {
+    const file = input.files?.[0] || null;
+    input.value = "";
+    if (!file) return;
+
+    if (!getOfferMediaKind(resolveOfferMediaType(file), file.name)) {
+      toast({ title: t.invalidMediaType, variant: "destructive" });
+      return;
+    }
+    if (file.size > MAX_OFFER_MEDIA_SIZE) {
+      toast({ title: t.mediaTooLarge, variant: "destructive" });
+      return;
+    }
+
+    updateDetail(index, { file });
+  };
+
+  const clearDetailMedia = (index: number) => {
+    const detail = details[index];
+    if (!detail) return;
+
+    // Clearing a pending pick keeps the already stored media in place.
+    updateDetail(index, detail.file
+      ? { file: null }
+      : { file: null, mediaKey: null, mediaUrl: null, mediaType: null, mediaName: "" });
   };
 
   const addDetail = () => {
@@ -396,7 +430,7 @@ const AdminOffers = () => {
         let mediaKey = detail.mediaKey;
         let mediaUrl = detail.mediaUrl;
         let mediaType = detail.mediaType;
-        let mediaName = detail.fileName || null;
+        let mediaName = detail.mediaName || null;
 
         if (detail.file) {
           const uploaded = await uploadOfferMedia(detail.file);
@@ -468,10 +502,10 @@ const AdminOffers = () => {
       ...normalizedDetails[index],
       id: insertedDetails?.[index]?.id,
       file: null,
-      fileName: row.media_name || "",
       mediaKey: row.media_key,
       mediaUrl: row.media_url,
       mediaType: row.media_type,
+      mediaName: row.media_name || "",
     })));
     setSaving(false);
 
@@ -759,29 +793,34 @@ const AdminOffers = () => {
                         onChange={(event) => updateDetail(index, { sort: Number(event.target.value) || index + 1 })}
                       />
                     </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>{t.file}</Label>
+                      <label className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-muted/50">
+                        <FileUp className="h-4 w-4" />
+                        <span className="truncate">
+                          {detail.file?.name || detail.mediaName || t.chooseFile}
+                        </span>
+                        <input
+                          type="file"
+                          accept={OFFER_MEDIA_ACCEPT}
+                          className="sr-only"
+                          onChange={(event) => handleFileSelect(index, event.target)}
+                        />
+                      </label>
+                      <p className="text-xs text-muted-foreground">{t.mediaHint}</p>
+                    </div>
                     <OfferMediaPreview
                       file={detail.file}
                       mediaUrl={detail.mediaUrl}
                       mediaType={detail.mediaType}
-                      fileName={detail.fileName}
-                      label={t.selectedFile}
+                      fileName={detail.mediaName}
+                      label={t.mediaReview}
+                      kindLabels={{ image: t.mediaImage, video: t.mediaVideo }}
+                      statusLabels={{ pending: t.mediaPending, stored: t.mediaStored }}
+                      emptyLabel={t.noFile}
+                      removeLabel={t.removeFile}
+                      onRemove={() => clearDetailMedia(index)}
                     />
-                    <div className="space-y-2">
-                      <Label>{t.file}</Label>
-                      <label className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-muted/50">
-                        <FileUp className="h-4 w-4" />
-                        <span className="truncate">{detail.fileName || t.chooseFile}</span>
-                        <input
-                          type="file"
-                          accept="image/avif,image/gif,image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
-                          className="sr-only"
-                          onChange={(event) => {
-                            const file = event.target.files?.[0] || null;
-                            updateDetail(index, { file, fileName: file?.name || "" });
-                          }}
-                        />
-                      </label>
-                    </div>
                   </div>
                 </div>
               ))}
