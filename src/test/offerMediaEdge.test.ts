@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const blobMocks = vi.hoisted(() => ({
   set: vi.fn(),
+  setJSON: vi.fn(),
   get: vi.fn(),
   delete: vi.fn(),
 }));
@@ -174,5 +175,121 @@ describe("offer media edge function", () => {
     expect(response.status).toBe(201);
     expect(url).toContain("https://unprefixed.example.test/rest/v1/user_roles");
     expect((init.headers as Record<string, string>).apikey).toBe("unprefixed-key");
+  });
+
+  describe("offer media index", () => {
+    const OFFER_ID = "11111111-2222-3333-4444-555555555555";
+    const INDEX_URL = `https://preview.example.test/api/offer-media-index/${OFFER_ID}`;
+    const entry = {
+      key: "abc-123/image~webp/offer.webp",
+      url: "https://preview.example.test/api/offer-media/abc-123/image~webp/offer.webp",
+      type: "image/webp",
+      name: "offer.webp",
+    };
+
+    it("stores the media of an offer for an admin", async () => {
+      const request = new Request(INDEX_URL, {
+        method: "PUT",
+        headers: { Authorization: "Bearer admin-session", "Content-Type": "application/json" },
+        body: JSON.stringify({ entries: { 1: entry } }),
+      });
+
+      const response = await offerMediaHandler(request, {} as never);
+      const body = await response.json() as { entries: Record<string, typeof entry> };
+
+      expect(response.status).toBe(200);
+      expect(blobMocks.setJSON).toHaveBeenCalledWith(OFFER_ID, { 1: entry });
+      expect(body.entries["1"]).toEqual(entry);
+    });
+
+    it("reads the media of an offer without a session", async () => {
+      blobMocks.get.mockResolvedValueOnce({ 1: entry });
+      const response = await offerMediaHandler(new Request(INDEX_URL), {} as never);
+      const body = await response.json() as { entries: Record<string, typeof entry> };
+
+      expect(response.status).toBe(200);
+      expect(body.entries["1"]).toEqual(entry);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("returns an empty index for an offer that has no media", async () => {
+      blobMocks.get.mockResolvedValueOnce(null);
+      const response = await offerMediaHandler(new Request(INDEX_URL), {} as never);
+      const body = await response.json() as { entries: Record<string, unknown> };
+
+      expect(response.status).toBe(200);
+      expect(body.entries).toEqual({});
+    });
+
+    it("clears the record when an offer keeps no media", async () => {
+      const request = new Request(INDEX_URL, {
+        method: "PUT",
+        headers: { Authorization: "Bearer admin-session", "Content-Type": "application/json" },
+        body: JSON.stringify({ entries: {} }),
+      });
+
+      const response = await offerMediaHandler(request, {} as never);
+
+      expect(response.status).toBe(200);
+      expect(blobMocks.delete).toHaveBeenCalledWith(OFFER_ID);
+      expect(blobMocks.setJSON).not.toHaveBeenCalled();
+    });
+
+    it("rejects entries that do not describe stored media", async () => {
+      const invalidEntries = [
+        { 1: { ...entry, type: "application/pdf" } },
+        { 1: { ...entry, key: "" } },
+        { 0: entry },
+        { first: entry },
+      ];
+
+      for (const entries of invalidEntries) {
+        const request = new Request(INDEX_URL, {
+          method: "PUT",
+          headers: { Authorization: "Bearer admin-session", "Content-Type": "application/json" },
+          body: JSON.stringify({ entries }),
+        });
+
+        expect((await offerMediaHandler(request, {} as never)).status).toBe(400);
+      }
+
+      expect(blobMocks.setJSON).not.toHaveBeenCalled();
+    });
+
+    it("rejects writes without an admin session", async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(Response.json([]));
+      const request = new Request(INDEX_URL, {
+        method: "PUT",
+        headers: { Authorization: "Bearer non-admin-session", "Content-Type": "application/json" },
+        body: JSON.stringify({ entries: { 1: entry } }),
+      });
+
+      const response = await offerMediaHandler(request, {} as never);
+
+      expect(response.status).toBe(401);
+      expect(blobMocks.setJSON).not.toHaveBeenCalled();
+    });
+
+    it("deletes the record of an offer for an admin", async () => {
+      const request = new Request(INDEX_URL, {
+        method: "DELETE",
+        headers: { Authorization: "Bearer admin-session" },
+      });
+
+      const response = await offerMediaHandler(request, {} as never);
+
+      expect(response.status).toBe(204);
+      expect(blobMocks.delete).toHaveBeenCalledWith(OFFER_ID);
+    });
+
+    it("rejects a request without a valid offer id", async () => {
+      const response = await offerMediaHandler(
+        new Request("https://preview.example.test/api/offer-media-index/not-an-offer"),
+        {} as never,
+      );
+
+      expect(response.status).toBe(400);
+      expect(blobMocks.get).not.toHaveBeenCalled();
+    });
   });
 });

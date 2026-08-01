@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
   ArrowDown,
   ArrowUp,
   BadgePercent,
@@ -28,6 +27,13 @@ import {
   resolveOfferMediaType,
   uploadOfferMedia,
 } from "@/lib/offerMedia";
+import {
+  type OfferMediaIndex,
+  collectOfferMediaKeys,
+  deleteOfferMediaIndex,
+  fetchOfferMediaIndex,
+  saveOfferMediaIndex,
+} from "@/lib/offerMediaIndex";
 import { Button } from "@/components/ui/button";
 import OfferMediaPreview from "@/components/admin/OfferMediaPreview";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,10 +133,22 @@ const DEFAULT_OFFER_TYPE_NAMES = ["Single", "Slider"] as const;
 const DETAIL_COLUMNS = "id, offer_id, title, body, url_type, url, station_id, sort";
 const MEDIA_COLUMNS = "media_key, media_url, media_type, media_name";
 
-// Postgres reports an unknown column as 42703. The media columns ship in a
-// separate migration, so the page stays usable when it has not been applied
-// yet instead of failing every load and save.
+// Postgres reports an unknown column as 42703. Offer media is stored in Netlify
+// Blobs, so the media columns are only an optional mirror: they are written when
+// the pending migration has been applied and skipped when it has not.
 const isMissingColumnError = (error: { code?: string } | null) => error?.code === "42703";
+
+const buildMediaIndex = (details: DetailForm[]): OfferMediaIndex =>
+  details.reduce<OfferMediaIndex>((index, detail) => {
+    if (!detail.mediaKey || !detail.mediaUrl || !detail.mediaType) return index;
+    index[String(detail.sort)] = {
+      key: detail.mediaKey,
+      url: detail.mediaUrl,
+      type: detail.mediaType,
+      name: detail.mediaName || "",
+    };
+    return index;
+  }, {});
 
 const emptyDetail = (sort = 1): DetailForm => ({
   title: "",
@@ -191,7 +209,7 @@ const AdminOffers = () => {
   const [details, setDetails] = useState<DetailForm[]>([emptyDetail()]);
   const [saving, setSaving] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
-  const [mediaStorageReady, setMediaStorageReady] = useState(true);
+  const [mediaColumnsReady, setMediaColumnsReady] = useState(true);
 
   const selectedTypeName = offerTypes.find((type) => type.id === typeId)?.name || "";
   const selectedTypeKind = selectedTypeName.toLowerCase().includes("slider") ? "Slider" : "Single";
@@ -234,12 +252,12 @@ const AdminOffers = () => {
         .order("title", { ascending: true }),
       (supabase as any).from("offer_types").select("id, name").order("name", { ascending: true }),
       (supabase as any).from("stations").select("id, name").order("name", { ascending: true }),
-      // Probed up front so the pending-migration warning shows before the admin
-      // spends time filling the form.
+      // Probed so the media columns are only written when the optional migration
+      // has been applied. Media itself is stored outside Postgres either way.
       (supabase as any).from("offer_details").select("media_key").limit(1),
     ]);
     setLoading(false);
-    setMediaStorageReady(!isMissingColumnError(mediaProbe.error));
+    setMediaColumnsReady(!isMissingColumnError(mediaProbe.error));
 
     const firstError = offersResult.error || typesResult.error || stationsResult.error;
     if (firstError) {
@@ -300,8 +318,8 @@ const AdminOffers = () => {
       .eq("offer_id", offer.id)
       .order("sort", { ascending: true });
 
-    // Retried without the media columns so the offer stays editable while the
-    // media migration is still pending.
+    // Retried without the media columns when the optional migration has not been
+    // applied. The stored media is read from the media index either way.
     const fallback = isMissingColumnError(error)
       ? await (supabase as any)
           .from("offer_details")
@@ -310,8 +328,9 @@ const AdminOffers = () => {
           .order("sort", { ascending: true })
       : null;
 
-    if (fallback) setMediaStorageReady(false);
+    if (fallback) setMediaColumnsReady(false);
     const detailsResult = fallback || { data, error };
+    const mediaIndex = await fetchOfferMediaIndex(offer.id);
     setDetailsLoading(false);
 
     if (detailsResult.error) {
@@ -323,20 +342,25 @@ const AdminOffers = () => {
     const rows = (detailsResult.data || []) as OfferDetailRow[];
     setDetails(
       rows.length
-        ? rows.map((row, index) => ({
-            id: row.id,
-            title: row.title || "",
-            body: row.body || "",
-            url_type: URL_TYPE_VALUES.includes(row.url_type) ? row.url_type : "None",
-            url: row.url || "",
-            station_id: row.station_id,
-            sort: row.sort || index + 1,
-            file: null,
-            mediaKey: row.media_key ?? null,
-            mediaUrl: row.media_url ?? null,
-            mediaType: row.media_type ?? null,
-            mediaName: row.media_name || "",
-          }))
+        ? rows.map((row, index) => {
+            const sort = row.sort || index + 1;
+            const media = mediaIndex[String(sort)];
+
+            return {
+              id: row.id,
+              title: row.title || "",
+              body: row.body || "",
+              url_type: URL_TYPE_VALUES.includes(row.url_type) ? row.url_type : "None",
+              url: row.url || "",
+              station_id: row.station_id,
+              sort,
+              file: null,
+              mediaKey: media?.key ?? row.media_key ?? null,
+              mediaUrl: media?.url ?? row.media_url ?? null,
+              mediaType: media?.type ?? row.media_type ?? null,
+              mediaName: media?.name || row.media_name || "",
+            };
+          })
         : [emptyDetail()],
     );
   };
@@ -448,13 +472,13 @@ const AdminOffers = () => {
       ? await (supabase as any).from("offer_details").select("id, media_key").eq("offer_id", offerId)
       : { data: [], error: null };
 
-    // The media column is dropped from the lookup while the migration is
-    // pending so an existing offer can still be updated.
+    // The media column is dropped from the lookup when the optional migration has
+    // not been applied so an existing offer can still be updated.
     const existingDetailsFallback = isMissingColumnError(existingDetailsQuery.error)
       ? await (supabase as any).from("offer_details").select("id").eq("offer_id", offerId)
       : null;
 
-    if (existingDetailsFallback) setMediaStorageReady(false);
+    if (existingDetailsFallback) setMediaColumnsReady(false);
     const existingMediaResult = existingDetailsFallback || existingDetailsQuery;
 
     if (existingMediaResult.error) {
@@ -463,16 +487,19 @@ const AdminOffers = () => {
       return;
     }
 
-    const mediaStorable = mediaStorageReady && !existingDetailsFallback;
-    const pendingFileCount = details.filter((detail) => detail.file).length;
+    // The offer_details columns are only a mirror of the media index, so they are
+    // written when they exist and skipped when they do not.
+    const mediaColumnsWritable = mediaColumnsReady && !existingDetailsFallback;
+    const previousMediaIndex = selectedOfferId ? await fetchOfferMediaIndex(offerId) : {};
 
-    if (!mediaStorable && pendingFileCount > 0) {
-      toast({ title: t.mediaStorageTitle, description: t.mediaStorageBody, variant: "destructive" });
-    }
-
-    const existingMediaKeys = (existingMediaResult.data || [])
-      .map((row: { media_key?: string | null }) => row.media_key)
-      .filter((key: string | null | undefined): key is string => Boolean(key));
+    const existingMediaKeys = [
+      ...new Set([
+        ...(existingMediaResult.data || [])
+          .map((row: { media_key?: string | null }) => row.media_key)
+          .filter((key: string | null | undefined): key is string => Boolean(key)),
+        ...collectOfferMediaKeys(previousMediaIndex),
+      ]),
+    ];
     const existingDetailIds = (existingMediaResult.data || [])
       .map((row: { id?: string }) => row.id)
       .filter((id: string | undefined): id is string => Boolean(id));
@@ -480,44 +507,25 @@ const AdminOffers = () => {
     const normalizedDetails = normalizeDetailsSort(isSlider ? details : [details[0] || emptyDetail()]);
     const uploadedKeys: string[] = [];
     const replacedKeys: string[] = [];
-    let detailRows: DetailInsertRow[];
+    let savedDetails: DetailForm[];
 
     try {
-      detailRows = await Promise.all(normalizedDetails.map(async (detail) => {
-        let mediaKey = detail.mediaKey;
-        let mediaUrl = detail.mediaUrl;
-        let mediaType = detail.mediaType;
-        let mediaName = detail.mediaName || null;
+      savedDetails = await Promise.all(normalizedDetails.map(async (detail) => {
+        // Media lives in Netlify Blobs, so a pending pick uploads regardless of
+        // the offer_details table shape.
+        if (!detail.file) return detail;
 
-        // Uploading before the column exists would only orphan the blob.
-        if (detail.file && mediaStorable) {
-          const uploaded = await uploadOfferMedia(detail.file);
-          uploadedKeys.push(uploaded.key);
-          if (detail.mediaKey) replacedKeys.push(detail.mediaKey);
-          mediaKey = uploaded.key;
-          mediaUrl = uploaded.url;
-          mediaType = uploaded.type;
-          mediaName = uploaded.name;
-        }
-
-        const row = {
-          offer_id: offerId,
-          title: detail.title.trim() || null,
-          body: detail.body.trim() || null,
-          url_type: detail.url_type,
-          url: detail.url.trim() || null,
-          station_id: detail.station_id || null,
-          sort: detail.sort,
-        };
-
-        if (!mediaStorable) return row;
+        const uploaded = await uploadOfferMedia(detail.file);
+        uploadedKeys.push(uploaded.key);
+        if (detail.mediaKey) replacedKeys.push(detail.mediaKey);
 
         return {
-          ...row,
-          media_key: mediaKey,
-          media_url: mediaUrl,
-          media_type: mediaType,
-          media_name: mediaName,
+          ...detail,
+          file: null,
+          mediaKey: uploaded.key,
+          mediaUrl: uploaded.url,
+          mediaType: uploaded.type,
+          mediaName: uploaded.name,
         };
       }));
     } catch (error) {
@@ -527,6 +535,28 @@ const AdminOffers = () => {
       toast({ title: t.saveError, description: error instanceof Error ? error.message : undefined, variant: "destructive" });
       return;
     }
+
+    const detailRows: DetailInsertRow[] = savedDetails.map((detail) => {
+      const row = {
+        offer_id: offerId,
+        title: detail.title.trim() || null,
+        body: detail.body.trim() || null,
+        url_type: detail.url_type,
+        url: detail.url.trim() || null,
+        station_id: detail.station_id || null,
+        sort: detail.sort,
+      };
+
+      if (!mediaColumnsWritable) return row;
+
+      return {
+        ...row,
+        media_key: detail.mediaKey,
+        media_url: detail.mediaUrl,
+        media_type: detail.mediaType,
+        media_name: detail.mediaName || null,
+      };
+    });
 
     const { data: insertedDetails, error: detailsError } = await (supabase as any)
       .from("offer_details")
@@ -541,6 +571,28 @@ const AdminOffers = () => {
       return;
     }
 
+    const mediaIndex = buildMediaIndex(savedDetails);
+    const insertedDetailIds = (insertedDetails || []).map((row: { id: string }) => row.id);
+
+    try {
+      await saveOfferMediaIndex(offerId, mediaIndex);
+    } catch (error) {
+      // Nothing was replaced yet, so the previous details and their media stay
+      // exactly as they were.
+      if (insertedDetailIds.length > 0) {
+        await (supabase as any).from("offer_details").delete().in("id", insertedDetailIds);
+      }
+      await Promise.allSettled(uploadedKeys.map(deleteOfferMedia));
+      if (!selectedOfferId) await (supabase as any).from("offers").delete().eq("id", offerId);
+      setSaving(false);
+      toast({
+        title: t.mediaStorageTitle,
+        description: error instanceof Error ? error.message : t.mediaStorageBody,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (existingDetailIds.length > 0) {
       const { error: deleteError } = await (supabase as any)
         .from("offer_details")
@@ -548,10 +600,10 @@ const AdminOffers = () => {
         .in("id", existingDetailIds);
 
       if (deleteError) {
-        const insertedDetailIds = (insertedDetails || []).map((row: { id: string }) => row.id);
         if (insertedDetailIds.length > 0) {
           await (supabase as any).from("offer_details").delete().in("id", insertedDetailIds);
         }
+        await saveOfferMediaIndex(offerId, previousMediaIndex).catch(() => undefined);
         await Promise.allSettled(uploadedKeys.map(deleteOfferMedia));
         setSaving(false);
         toast({ title: t.saveError, description: deleteError.message, variant: "destructive" });
@@ -559,19 +611,13 @@ const AdminOffers = () => {
       }
     }
 
-    const retainedKeys = new Set(detailRows.map((detail) => detail.media_key).filter(Boolean));
-    const removedKeys = existingMediaKeys.filter((key) => !retainedKeys.has(key));
-    await Promise.allSettled([...new Set([...replacedKeys, ...removedKeys])].map(deleteOfferMedia));
-    setDetails(detailRows.map((row, index) => ({
-      ...normalizedDetails[index],
+    const retainedKeys = new Set(collectOfferMediaKeys(mediaIndex));
+    const orphanedKeys = [...new Set([...replacedKeys, ...existingMediaKeys])]
+      .filter((key) => !retainedKeys.has(key));
+    await Promise.allSettled(orphanedKeys.map(deleteOfferMedia));
+    setDetails(savedDetails.map((detail, index) => ({
+      ...detail,
       id: insertedDetails?.[index]?.id,
-      // A pending pick is kept when media could not be stored, so the preview
-      // stays on screen and the file is not silently dropped.
-      file: mediaStorable ? null : normalizedDetails[index].file,
-      mediaKey: row.media_key ?? null,
-      mediaUrl: row.media_url ?? null,
-      mediaType: row.media_type ?? null,
-      mediaName: row.media_name || "",
     })));
     setSaving(false);
 
@@ -583,6 +629,7 @@ const AdminOffers = () => {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
+    const mediaIndex = await fetchOfferMediaIndex(deleteTarget.id);
     const { data: mediaRows } = await (supabase as any)
       .from("offer_details")
       .select("media_key")
@@ -595,12 +642,17 @@ const AdminOffers = () => {
       return;
     }
 
-    await Promise.allSettled(
-      (mediaRows || [])
+    const mediaKeys = new Set([
+      ...collectOfferMediaKeys(mediaIndex),
+      ...(mediaRows || [])
         .map((row: { media_key?: string | null }) => row.media_key)
-        .filter((key: string | null | undefined): key is string => Boolean(key))
-        .map(deleteOfferMedia),
-    );
+        .filter((key: string | null | undefined): key is string => Boolean(key)),
+    ]);
+
+    await Promise.allSettled([
+      ...[...mediaKeys].map(deleteOfferMedia),
+      deleteOfferMediaIndex(deleteTarget.id),
+    ]);
     toast({ title: t.deleted });
     if (selectedOfferId === deleteTarget.id) resetForm();
     setOffers((current) => current.filter((offer) => offer.id !== deleteTarget.id));
@@ -754,16 +806,6 @@ const AdminOffers = () => {
             <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
               {isSlider ? t.sliderHint : t.singleHint}
             </div>
-
-            {!mediaStorageReady && (
-              <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div className="space-y-1">
-                  <div className="font-semibold">{t.mediaStorageTitle}</div>
-                  <p className="text-destructive/90">{t.mediaStorageBody}</p>
-                </div>
-              </div>
-            )}
 
             <div className="space-y-4 rounded-lg border bg-background p-3">
               <div className="flex items-center justify-between">
