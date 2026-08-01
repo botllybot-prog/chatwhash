@@ -5,6 +5,14 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-08-01] - Offer Media Saving Without a Database Migration
+
+- Fixed offer media saving failing with "media columns are missing from the database", which had blocked every image and video on the admin offers page.
+- Moved offer media metadata into Netlify Blobs next to the uploaded files, so attachments save regardless of the `offer_details` table shape.
+- Added a media metadata endpoint at `/api/offer-media-index/:offerId` with public reads, admin-only writes, and validation that every stored entry points at real image or video media.
+- Kept writing the optional `offer_details` media columns when they exist, and removed the pending-migration warning from the offers page.
+- Cleaned up replaced and removed media, including when an offer is deleted, so unused files are not left behind.
+
 ## [2026-07-31] - Offer Media Delivery Fixes
 
 - Fixed offer media uploads always failing authorization when the site environment does not define the Supabase variables, which had been rejecting every upload with `401 Unauthorized`.
