@@ -1190,6 +1190,8 @@ POST success:
 
 ## Deployment
 
+Netlify site environment variables (required, separate from Supabase Edge Function secrets): the `offer-media` Netlify Edge Function used by Admin Offers needs `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` set under Netlify Site configuration → Environment variables to verify admin uploads. Without them it returns `401 Unauthorized` on every upload/delete because it falls back to using the caller's own session token, which Supabase's API gateway rejects. Redeploy the site after setting or changing these.
+
 Apply database migrations:
 
 ```bash

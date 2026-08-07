@@ -2,6 +2,14 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  # SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are public by design (the
+  # publishable/anon key is safe client-side, protected by RLS) and are
+  # intentionally checked into docs, migrations, and client.ts as a fallback.
+  # Skip them in Netlify's build-output secrets scan to avoid false-positive
+  # build failures.
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY"
+
 [[redirects]]
   from = "/api/v1/offers"
   to = "https://yhklvtzonvgzkodysawu.supabase.co/functions/v1/get-offers"

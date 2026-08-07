@@ -107,6 +107,8 @@ See [CHANGELOG.md](./CHANGELOG.md) for full history.
 
 ## Environment Variables
 
+Supabase Edge Function secrets (set via `supabase secrets set` or the Supabase dashboard):
+
 ```env
 SUPABASE_URL=https://yhklvtzonvgzkodysawu.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
@@ -115,6 +117,15 @@ WHATSAPP_PHONE_ID=...
 VERIFY_TOKEN=...
 ADMIN_PHONE=...
 ```
+
+Netlify site environment variables (Site configuration → Environment variables on the Netlify dashboard) — required separately for the `offer-media` Netlify Edge Function (`netlify/edge-functions/offer-media.ts`) to verify admin uploads in Admin Offers:
+
+```env
+SUPABASE_URL=https://yhklvtzonvgzkodysawu.supabase.co
+SUPABASE_PUBLISHABLE_KEY=<anon key, see src/integrations/supabase/client.ts>
+```
+
+Without these, `offer-media` falls back to using the caller's own session token to authenticate with Supabase's REST API, which fails and returns `401 Unauthorized` on every upload. Redeploy the site after adding or changing these so the edge function picks them up.
 
 ---
 
