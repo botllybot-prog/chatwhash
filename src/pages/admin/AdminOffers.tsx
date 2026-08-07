@@ -912,7 +912,7 @@ const AdminOffers = () => {
                       />
                     </div>
                     <div className="space-y-2 md:col-span-2">
-                      <Label>{t.file}</Label>
+                      <Label>{t.file} ali</Label>
                       <label className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-muted/50">
                         <FileUp className="h-4 w-4" />
                         <span className="truncate">
