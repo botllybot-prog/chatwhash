@@ -3,13 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getCustomerSession, setCustomerSession } from "@/lib/customerSession";
+import { OFFER_CITY_VALUES, adminOffersTexts } from "@/lib/adminOffersTranslations";
+
+const CUSTOMER_CITY_VALUES = OFFER_CITY_VALUES.filter((city) => city !== "All");
+const cityLabels = adminOffersTexts.ar.cities;
 
 type CustomerLoginResponse = {
   success?: boolean;
   requires_name?: boolean;
+  requires_city?: boolean;
   session_token?: string;
   expires_at?: string;
   customer_phone?: string;
@@ -33,20 +39,22 @@ function loadProfileHint() {
     return JSON.parse(localStorage.getItem(PROFILE_HINT_KEY) || "{}") as {
       customerName?: string;
       customerPhone?: string;
+      customerCity?: string;
     };
   } catch {
     return {};
   }
 }
 
-function saveProfileHint(customerName: string, customerPhone: string) {
-  localStorage.setItem(PROFILE_HINT_KEY, JSON.stringify({ customerName, customerPhone }));
+function saveProfileHint(customerName: string, customerPhone: string, customerCity: string) {
+  localStorage.setItem(PROFILE_HINT_KEY, JSON.stringify({ customerName, customerPhone, customerCity }));
 }
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [city, setCity] = useState("");
   const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -60,6 +68,7 @@ export default function CustomerLogin() {
     const hint = loadProfileHint();
     setName(hint.customerName || "");
     setPhone(hint.customerPhone || "");
+    setCity(hint.customerCity || "");
   }, [navigate]);
 
   const startLogin = async () => {
@@ -76,6 +85,7 @@ export default function CustomerLogin() {
       body: {
         customer_phone: normalizedPhone,
         customer_name: trimmedName || undefined,
+        customer_city: city || undefined,
       },
     });
     setSubmitting(false);
@@ -84,6 +94,15 @@ export default function CustomerLogin() {
       toast({
         title: "أدخل الاسم",
         description: "هذا الرقم غير مسجل بعد. اكتب اسمك مرة واحدة ثم اضغط دخول.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (data?.requires_city) {
+      toast({
+        title: "اختر مدينتك",
+        description: "اختر مدينتك لعرض العروض المتاحة عندك، ثم اضغط دخول مرة أخرى.",
         variant: "destructive",
       });
       return;
@@ -108,7 +127,7 @@ export default function CustomerLogin() {
       },
       { persist: remember },
     );
-    saveProfileHint(customerName, data.customer_phone);
+    saveProfileHint(customerName, data.customer_phone, city);
     navigate("/map", { replace: true });
   };
 
@@ -136,6 +155,18 @@ export default function CustomerLogin() {
             inputMode="tel"
             autoComplete="tel"
           />
+          <Select value={city} onValueChange={setCity}>
+            <SelectTrigger>
+              <SelectValue placeholder="اختر مدينتك" />
+            </SelectTrigger>
+            <SelectContent>
+              {CUSTOMER_CITY_VALUES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {cityLabels[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <input

@@ -38,12 +38,13 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const customerPhone = normalizePhone(String(body.customer_phone || "").trim());
     const submittedName = String(body.customer_name || "").trim();
+    const submittedCity = String(body.customer_city || "").trim();
 
     if (!customerPhone) return json({ error: "Missing customer phone" }, 400);
 
     const { data: profile, error: profileError } = await supabase
       .from("customer_profiles")
-      .select("customer_name, is_blocked")
+      .select("customer_name, city, is_blocked")
       .eq("customer_phone", customerPhone)
       .maybeSingle();
 
@@ -64,10 +65,23 @@ Deno.serve(async (req) => {
       });
     }
 
+    const savedCity = String(profile?.city || "").trim();
+    const customerCity = submittedCity || savedCity;
+
+    if (!customerCity) {
+      return json({
+        success: true,
+        requires_city: true,
+        customer_phone: customerPhone,
+        customer_name: customerName,
+      });
+    }
+
     const { error: profileSaveError } = await supabase.from("customer_profiles").upsert(
       {
         customer_phone: customerPhone,
         customer_name: customerName,
+        city: customerCity,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "customer_phone" },

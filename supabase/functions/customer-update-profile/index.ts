@@ -26,8 +26,9 @@ Deno.serve(async (req) => {
     const customerPhone = normalizePhone(String(body.customer_phone || ""));
     const sessionToken = String(body.session_token || "");
     const customerName = String(body.customer_name || "").trim();
+    const customerCity = String(body.customer_city || "").trim();
 
-    if (!customerPhone || !sessionToken || !customerName) {
+    if (!customerPhone || !sessionToken || (!customerName && !customerCity)) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -47,9 +48,13 @@ Deno.serve(async (req) => {
       });
     }
 
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (customerName) updates.customer_name = customerName;
+    if (customerCity) updates.city = customerCity;
+
     const { error } = await supabase
       .from("customer_profiles")
-      .update({ customer_name: customerName, updated_at: new Date().toISOString() })
+      .update(updates)
       .eq("customer_phone", customerPhone);
 
     if (error) {
@@ -59,7 +64,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ success: true, customer_name: customerName }), {
+    return new Response(JSON.stringify({ success: true, customer_name: customerName, customer_city: customerCity }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
