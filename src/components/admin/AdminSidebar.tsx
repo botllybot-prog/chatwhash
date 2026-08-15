@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Store, Wrench, CalendarCheck, Users, FileEdit,
   CreditCard, BarChart3, Settings, MessageCircle, LogOut, Car, LayoutDashboard, UserCheck, Briefcase, Megaphone,
-  Star, Tags, BadgePercent,
+  Star, Tags, BadgePercent, MessagesSquare,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -33,6 +33,7 @@ const sidebarTexts = {
     settings: "الإعدادات",
     employees: "الموظفون",
     broadcast: "رسائل جماعية",
+    chatGroups: "مجموعات المحادثة",
     conversations: "المحادثات",
     logout: "تسجيل الخروج",
   },
@@ -52,6 +53,7 @@ const sidebarTexts = {
     settings: "Settings",
     employees: "Employees",
     broadcast: "Broadcast",
+    chatGroups: "Chat groups",
     conversations: "Conversations",
     logout: "Log out",
   },
@@ -71,6 +73,7 @@ const sidebarTexts = {
     settings: "ڕێکخستنەکان",
     employees: "کارمەندەکان",
     broadcast: "نامەی گشتی",
+    chatGroups: "گرووپەکانی چات",
     conversations: "گفتوگۆکان",
     logout: "چوونەدەرەوە",
   },
@@ -90,6 +93,7 @@ const sidebarTexts = {
     settings: "Ayarlar",
     employees: "Çalışanlar",
     broadcast: "Toplu mesaj",
+    chatGroups: "Sohbet grupları",
     conversations: "Konuşmalar",
     logout: "Çıkış yap",
   },
@@ -120,6 +124,7 @@ export function AdminSidebar() {
     { title: t.settings, url: "/app/admin/settings", icon: Settings, badgeKey: null },
     { title: t.employees, url: "/app/admin/employees", icon: Briefcase, badgeKey: null },
     { title: t.broadcast, url: "/app/admin/broadcast", icon: Megaphone, badgeKey: null },
+    { title: t.chatGroups, url: "/app/admin/chat-groups", icon: MessagesSquare, badgeKey: null },
   ];
 
   const [counts, setCounts] = useState({ bookings: 0, editRequests: 0, notifications: 0 });

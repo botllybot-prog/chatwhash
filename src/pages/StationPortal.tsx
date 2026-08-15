@@ -13,9 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Store, CalendarCheck, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key, CreditCard, AlertTriangle, Wallet, Sparkles, Gift } from "lucide-react";
+import { Store, CalendarCheck, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key, CreditCard, AlertTriangle, Wallet, Sparkles, Gift, MessageCircle, ImagePlus, Send, Loader2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useAppLanguage } from "@/lib/language";
+import { CHAT_MEDIA_ACCEPT, uploadChatMedia } from "@/lib/chatMedia";
 
 const texts = {
   ar: {
@@ -129,6 +130,11 @@ const texts = {
     station: "المحطة",
     subscription: "الاشتراك",
     account: "الحساب",
+    chat: "الرسائل",
+    chatEmpty: "لا توجد محادثات بعد",
+    chatPlaceholder: "اكتب رسالة...",
+    chatSendFailed: "تعذر إرسال الرسالة",
+    chatUploadFailed: "تعذر إرسال الملف",
   },
   en: {
     error: "Error",
@@ -241,6 +247,11 @@ const texts = {
     station: "Station",
     subscription: "Subscription",
     account: "Account",
+    chat: "Messages",
+    chatEmpty: "No conversations yet",
+    chatPlaceholder: "Type a message...",
+    chatSendFailed: "Could not send the message",
+    chatUploadFailed: "Could not send the file",
   },
   ku: {
     error: "هەڵە",
@@ -353,6 +364,11 @@ const texts = {
     station: "وێستگە",
     subscription: "ئابوونە",
     account: "هەژمار",
+    chat: "نامەکان",
+    chatEmpty: "هیچ گفتوگۆیەک نییە",
+    chatPlaceholder: "نامەیەک بنووسە...",
+    chatSendFailed: "نامەکە نەنێردرا",
+    chatUploadFailed: "فایلەکە نەنێردرا",
   },
   tr: {
     error: "Hata",
@@ -465,10 +481,241 @@ const texts = {
     station: "İstasyon",
     subscription: "Abonelik",
     account: "Hesap",
+    chat: "Mesajlar",
+    chatEmpty: "Henüz konuşma yok",
+    chatPlaceholder: "Bir mesaj yazın...",
+    chatSendFailed: "Mesaj gönderilemedi",
+    chatUploadFailed: "Dosya gönderilemedi",
   },
 } as const;
 
 type PortalTexts = typeof texts.ar;
+
+type ChatThreadRow = { id: string; kind: "direct" | "group"; title: string };
+type ChatMessageRow = {
+  id: string;
+  thread_id: string;
+  sender_type: "customer" | "owner" | "admin";
+  sender_id: string;
+  body: string | null;
+  media_url: string | null;
+  media_type: string | null;
+  media_name: string | null;
+  created_at: string;
+  read_at: string | null;
+};
+
+const StationChatTab = ({ t }: { t: PortalTexts }) => {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<ChatThreadRow[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessageRow[]>([]);
+  const [composerText, setComposerText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id || null));
+  }, []);
+
+  // RLS on chat_threads already scopes this to threads the signed-in owner
+  // is a member of (their station's direct thread, plus any admin groups).
+  const loadThreads = useCallback(async () => {
+    const { data } = await supabase
+      .from("chat_threads")
+      .select("id, kind, name, stations(name)")
+      .order("last_message_at", { ascending: false, nullsFirst: false });
+
+    setThreads(
+      (data || []).map((row: any) => ({
+        id: row.id,
+        kind: row.kind,
+        title: row.kind === "direct" ? row.stations?.name || t.chat : row.name || t.chat,
+      })),
+    );
+  }, [t.chat]);
+
+  const loadMessages = useCallback(async (threadId: string) => {
+    const { data } = await supabase
+      .from("chat_messages")
+      .select("*")
+      .eq("thread_id", threadId)
+      .order("created_at", { ascending: true });
+
+    setMessages((data || []) as ChatMessageRow[]);
+
+    const unreadIds = (data || [])
+      .filter((message: any) => message.sender_type === "customer" && !message.read_at)
+      .map((message: any) => message.id);
+    if (unreadIds.length > 0) {
+      await supabase.from("chat_messages").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadThreads();
+    const channel = supabase
+      .channel("owner-chat-threads")
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_threads" }, () => loadThreads())
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_thread_members" }, () => loadThreads())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadThreads]);
+
+  useEffect(() => {
+    if (!activeThreadId) return;
+    loadMessages(activeThreadId);
+    const channel = supabase
+      .channel(`owner-chat-messages-${activeThreadId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "chat_messages", filter: `thread_id=eq.${activeThreadId}` },
+        () => loadMessages(activeThreadId),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeThreadId, loadMessages]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages]);
+
+  const handleSendText = async () => {
+    const trimmed = composerText.trim();
+    if (!trimmed || !activeThreadId || !userId || sending) return;
+
+    setSending(true);
+    const { error } = await supabase.from("chat_messages").insert({
+      thread_id: activeThreadId,
+      sender_type: "owner",
+      sender_id: userId,
+      body: trimmed,
+    });
+    setSending(false);
+
+    if (error) {
+      toast({ title: t.chatSendFailed, description: error.message, variant: "destructive" });
+      return;
+    }
+
+    setComposerText("");
+    await supabase.from("chat_threads").update({ last_message_at: new Date().toISOString() }).eq("id", activeThreadId);
+  };
+
+  const handleFilePick = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !activeThreadId || !userId || uploading) return;
+
+    setUploading(true);
+    try {
+      const uploaded = await uploadChatMedia(activeThreadId, file);
+      const { error } = await supabase.from("chat_messages").insert({
+        thread_id: activeThreadId,
+        sender_type: "owner",
+        sender_id: userId,
+        media_key: uploaded.key,
+        media_url: uploaded.url,
+        media_type: uploaded.type,
+        media_name: uploaded.name,
+      });
+      if (error) throw error;
+      await supabase.from("chat_threads").update({ last_message_at: new Date().toISOString() }).eq("id", activeThreadId);
+    } catch (error) {
+      toast({
+        title: t.chatUploadFailed,
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="grid h-[75vh] min-h-[480px] gap-4 md:grid-cols-[280px_1fr]">
+      <Card className="flex flex-col overflow-hidden">
+        <CardContent className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2 pt-4">
+          {threads.length === 0 ? (
+            <p className="p-4 text-center text-sm text-muted-foreground">{t.chatEmpty}</p>
+          ) : (
+            threads.map((thread) => (
+              <button
+                key={thread.id}
+                onClick={() => setActiveThreadId(thread.id)}
+                className={`w-full rounded-lg px-3 py-2 text-right text-sm transition-colors ${
+                  activeThreadId === thread.id ? "bg-primary/10 font-semibold text-primary" : "hover:bg-muted"
+                }`}
+              >
+                {thread.title}
+              </button>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="flex flex-col overflow-hidden">
+        {!activeThreadId ? (
+          <CardContent className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            {t.chatEmpty}
+          </CardContent>
+        ) : (
+          <>
+            <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+              {messages.map((message) => {
+                const mine = message.sender_type !== "customer";
+                return (
+                  <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                        mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+                      }`}
+                    >
+                      {message.media_url && message.media_type?.startsWith("image/") && (
+                        <img src={message.media_url} alt={message.media_name || ""} className="mb-1 max-h-64 rounded-lg" />
+                      )}
+                      {message.media_url && message.media_type?.startsWith("video/") && (
+                        <video src={message.media_url} controls className="mb-1 max-h-64 rounded-lg" />
+                      )}
+                      {message.body && <p className="whitespace-pre-wrap">{message.body}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2 border-t border-border p-3">
+              <input ref={fileInputRef} type="file" accept={CHAT_MEDIA_ACCEPT} className="hidden" onChange={handleFilePick} />
+              <Button variant="ghost" size="icon" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImagePlus className="h-5 w-5" />}
+              </Button>
+              <Input
+                value={composerText}
+                onChange={(event) => setComposerText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    handleSendText();
+                  }
+                }}
+                placeholder={t.chatPlaceholder}
+                className="flex-1"
+              />
+              <Button size="icon" disabled={sending || !composerText.trim()} onClick={handleSendText}>
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  );
+};
 
 const AccountTab = ({ t }: { t: PortalTexts }) => {
   const [newPassword, setNewPassword] = useState("");
@@ -2025,6 +2272,7 @@ const StationPortal = () => {
             <TabsTrigger value="info" className="gap-1"><Store className="h-4 w-4" />{t.station}</TabsTrigger>
             <TabsTrigger value="services" className="gap-1"><Wrench className="h-4 w-4" />{t.stationServices}</TabsTrigger>
             <TabsTrigger value="bookings" className="gap-1"><CalendarCheck className="h-4 w-4" />{t.bookings}</TabsTrigger>
+            <TabsTrigger value="chat" className="gap-1"><MessageCircle className="h-4 w-4" />{t.chat}</TabsTrigger>
             <TabsTrigger value="subscription" className="gap-1"><CreditCard className="h-4 w-4" />{t.subscription}</TabsTrigger>
             <TabsTrigger value="account" className="gap-1"><Key className="h-4 w-4" />{t.account}</TabsTrigger>
           </TabsList>
@@ -2032,6 +2280,7 @@ const StationPortal = () => {
           <TabsContent value="info"><StationInfoTab stationId={stationId} t={t} /></TabsContent>
           <TabsContent value="services"><StationServicesTab stationId={stationId} t={t} /></TabsContent>
           <TabsContent value="bookings"><StationBookingsTab stationId={stationId} t={t} /></TabsContent>
+          <TabsContent value="chat"><StationChatTab t={t} /></TabsContent>
           <TabsContent value="subscription"><SubscriptionTab stationId={stationId} t={t} locale={locale} language={language as keyof typeof OWNER_PACKAGE_TEXTS} ownerMeta={ownerMeta} /></TabsContent>
           <TabsContent value="account"><AccountTab t={t} /></TabsContent>
         </Tabs>

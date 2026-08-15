@@ -1,13 +1,13 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Home, List, Map, MoreHorizontal } from "lucide-react";
+import { Home, List, Map, MessageCircle, MoreHorizontal } from "lucide-react";
 import { useAppLanguage } from "@/lib/language";
 import { cn } from "@/lib/utils";
 
 const tabTranslations = {
-  ar: { home: "الرئيسية", map: "الخريطة", stations: "المحطات", more: "المزيد" },
-  en: { home: "Home", map: "Map", stations: "Stations", more: "More" },
-  ku: { home: "سەرەکی", map: "نەخشە", stations: "وێستگەکان", more: "زیاتر" },
-  tr: { home: "Ana sayfa", map: "Harita", stations: "İstasyonlar", more: "Daha fazla" },
+  ar: { home: "الرئيسية", map: "الخريطة", stations: "المحطات", chat: "المحادثات", more: "المزيد" },
+  en: { home: "Home", map: "Map", stations: "Stations", chat: "Chat", more: "More" },
+  ku: { home: "سەرەکی", map: "نەخشە", stations: "وێستگەکان", chat: "گفتوگۆ", more: "زیاتر" },
+  tr: { home: "Ana sayfa", map: "Harita", stations: "İstasyonlar", chat: "Sohbet", more: "Daha fazla" },
 } as const;
 
 const MobileLayout = () => {
@@ -20,6 +20,7 @@ const MobileLayout = () => {
     { key: "/", icon: Home, label: labels.home },
     { key: "/map", icon: Map, label: labels.map },
     { key: "/stations-list", icon: List, label: labels.stations },
+    { key: "/chat", icon: MessageCircle, label: labels.chat },
     { key: "/more", icon: MoreHorizontal, label: labels.more },
   ];
 

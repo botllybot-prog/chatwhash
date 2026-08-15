@@ -34,9 +34,11 @@ import AdminCustomers from "./pages/admin/AdminCustomers";
 import AdminEmployees from "./pages/admin/AdminEmployees";
 import AdminBroadcast from "./pages/admin/AdminBroadcast";
 import AdminRatings from "./pages/admin/AdminRatings";
+import AdminChatGroups from "./pages/admin/AdminChatGroups";
 import EmployeeLayout from "./components/EmployeeLayout";
 import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 import CustomerLogin from "./pages/CustomerLogin";
+import CustomerChat from "./pages/CustomerChat";
 import { getCustomerSession } from "@/lib/customerSession";
 
 const queryClient = new QueryClient();
@@ -63,6 +65,7 @@ const ProtectedRoutes = () => (
         <Route path="ratings" element={<AdminRatings />} />
         <Route path="employees" element={<AdminEmployees />} />
         <Route path="broadcast" element={<AdminBroadcast />} />
+        <Route path="chat-groups" element={<AdminChatGroups />} />
       </Route>
       <Route path="/station-portal" element={<RoleGuard allowedRoles={["station_owner"]} fallbackPath="/app/admin/stations"><StationPortal /></RoleGuard>} />
       <Route path="/employee" element={<RoleGuard allowedRoles={["employee"]} fallbackPath="/login"><EmployeeLayout /></RoleGuard>}>
@@ -73,7 +76,9 @@ const ProtectedRoutes = () => (
   </AuthGuard>
 );
 
-const CustomerMapGuard = ({ children }: { children: JSX.Element }) => {
+// Guards any customer-facing route that needs a signed-in phone session
+// (used by both the map and the chat page).
+const CustomerAuthGuard = ({ children }: { children: JSX.Element }) => {
   const session = typeof window !== "undefined" ? getCustomerSession() : null;
   if (!session) return <Navigate to="/customer-login" replace />;
   return children;
@@ -92,7 +97,8 @@ const App = () => (
             <Route element={<MobileLayout />}>
               <Route path="/" element={<LandingPage />} />
               <Route path="/stations-list" element={<StationsList />} />
-              <Route path="/map" element={<CustomerMapGuard><StationsMap /></CustomerMapGuard>} />
+              <Route path="/map" element={<CustomerAuthGuard><StationsMap /></CustomerAuthGuard>} />
+              <Route path="/chat" element={<CustomerAuthGuard><CustomerChat /></CustomerAuthGuard>} />
               <Route path="/more" element={<More />} />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             </Route>
