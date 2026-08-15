@@ -1,6 +1,6 @@
 # Washlly Website API Documentation
 
-Last updated: 2026-07-27
+Last updated: 2026-08-08
 
 ## Overview
 
@@ -328,7 +328,7 @@ The function ignores status updates where the status did not change, and ignores
 
 ### `customer-login-by-phone`
 
-Creates or resumes a direct customer web session by phone number. No OTP is required. On first use, the customer must provide a name; later logins can use the phone number only.
+Creates or resumes a direct customer web session by phone number. No OTP is required. On first use, the customer must provide a name and a city (city powers the city-based offer filtering used by `GET /api/v1/offers`); later logins can use the phone number only, reusing the previously saved name/city.
 
 ```http
 POST /functions/v1/customer-login-by-phone
@@ -339,9 +339,12 @@ Request:
 ```json
 {
   "customer_phone": "07736635435",
-  "customer_name": "Mustafa"
+  "customer_name": "Mustafa",
+  "customer_city": "Erbil"
 }
 ```
+
+`customer_city` must be one of the values in `OFFER_CITY_VALUES` (`src/lib/adminOffersTranslations.ts`), excluding `All` — the same city list used to tag offers in the admin panel.
 
 Success:
 
@@ -357,7 +360,7 @@ Success:
 }
 ```
 
-Success when the phone needs a name:
+Success when the phone needs a name (no `customer_name` submitted and none saved yet):
 
 ```json
 {
@@ -368,21 +371,35 @@ Success when the phone needs a name:
 }
 ```
 
+Success when the phone needs a city (name is resolved, but no `customer_city` submitted and none saved yet):
+
+```json
+{
+  "success": true,
+  "requires_city": true,
+  "customer_phone": "9647736635435",
+  "customer_name": "Mustafa"
+}
+```
+
+City is required on first-time registration; once saved, it is reused on later phone-only logins.
+
 ### `customer-update-profile`
 
-Updates the customer display name for an existing customer session. Phone changes should be handled as a new direct login with the new phone number.
+Updates the customer display name and/or saved city for an existing customer session. Phone changes should be handled as a new direct login with the new phone number.
 
 ```http
 POST /functions/v1/customer-update-profile
 ```
 
-Request:
+Request (at least one of `customer_name` / `customer_city` is required):
 
 ```json
 {
   "customer_phone": "07736635435",
   "session_token": "customer-session-token",
-  "customer_name": "Mustafa Azmi"
+  "customer_name": "Mustafa Azmi",
+  "customer_city": "Baghdad"
 }
 ```
 
@@ -391,7 +408,8 @@ Success:
 ```json
 {
   "success": true,
-  "customer_name": "Mustafa Azmi"
+  "customer_name": "Mustafa Azmi",
+  "customer_city": "Baghdad"
 }
 ```
 
@@ -1071,7 +1089,7 @@ curl "https://yhklvtzonvgzkodysawu.supabase.co/rest/v1/stations?select=id,name,r
 | `station_owners` | Owner phone/user/station link, free quota |
 | `quick_booking_requests` | Parent quick booking request |
 | `quick_booking_targets` | Stations targeted by quick booking |
-| `customer_profiles` | Customer name, phone, blocked status |
+| `customer_profiles` | Customer name, phone, city, blocked status |
 | `customer_login_codes` | Legacy OTP table, not used by the current direct customer login flow |
 | `customer_web_sessions` | Persistent customer web sessions |
 | `customer_notifications` | Customer inbox notifications |
@@ -1240,8 +1258,8 @@ Important: if the remote database already has old migrations manually applied, `
 ## Minimal Mobile Integration Flow
 
 1. Customer opens app.
-2. Call `customer-login-by-phone` with `customer_phone` and, on first use, `customer_name`.
-3. Store `customer_phone`, `customer_name`, and `session_token` locally.
+2. Call `customer-login-by-phone` with `customer_phone` and, on first use, `customer_name` and `customer_city`.
+3. Store `customer_phone`, `customer_name`, `customer_city`, and `session_token` locally.
 4. Use `customer-get-inbox` to render inbox, booking status, notification count, and bell sound trigger.
 5. For regular booking, call `spin-booking-discount`, then `create-map-booking`.
 6. For quick booking, call `create-quick-booking`; it targets the nearest eligible stations within 15 km in deterministic distance order.
