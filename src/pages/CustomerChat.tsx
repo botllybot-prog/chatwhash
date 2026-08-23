@@ -26,6 +26,7 @@ type ChatMessage = {
   thread_id: string;
   sender_type: "customer" | "owner" | "admin";
   sender_id: string;
+  sender_name: string | null;
   body: string | null;
   media_key: string | null;
   media_url: string | null;
@@ -315,7 +316,10 @@ const CustomerChat = () => {
         <>
           <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
             {messages.map((message) => {
-              const mine = message.sender_type === "customer";
+              // sender_id rather than sender_type=="customer" so that, in a
+              // group thread with multiple customers, another customer's
+              // message isn't shown as "mine" just because it's a customer.
+              const mine = message.sender_id === session.customerPhone;
               return (
                 <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                   <div
@@ -323,6 +327,9 @@ const CustomerChat = () => {
                       mine ? "bg-ocean-500 text-white" : "bg-muted text-foreground"
                     }`}
                   >
+                    {!mine && message.sender_name && (
+                      <p className="mb-0.5 text-xs font-semibold opacity-70">{message.sender_name}</p>
+                    )}
                     {message.media_url && message.media_type?.startsWith("image/") && (
                       <img src={message.media_url} alt={message.media_name || ""} className="mb-1 max-h-64 rounded-lg" />
                     )}

@@ -497,6 +497,7 @@ type ChatMessageRow = {
   thread_id: string;
   sender_type: "customer" | "owner" | "admin";
   sender_id: string;
+  sender_name: string | null;
   body: string | null;
   media_url: string | null;
   media_type: string | null;
@@ -507,6 +508,7 @@ type ChatMessageRow = {
 
 const StationChatTab = ({ t }: { t: PortalTexts }) => {
   const [userId, setUserId] = useState<string | null>(null);
+  const [ownerName, setOwnerName] = useState<string | null>(null);
   const [threads, setThreads] = useState<ChatThreadRow[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageRow[]>([]);
@@ -517,7 +519,18 @@ const StationChatTab = ({ t }: { t: PortalTexts }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id || null));
+    supabase.auth.getUser().then(async ({ data }) => {
+      const uid = data.user?.id || null;
+      setUserId(uid);
+      if (!uid) return;
+      const { data: owner } = await supabase
+        .from("station_owners")
+        .select("owner_name")
+        .eq("user_id", uid)
+        .limit(1)
+        .maybeSingle();
+      setOwnerName(owner?.owner_name || null);
+    });
   }, []);
 
   // RLS on chat_threads already scopes this to threads the signed-in owner
@@ -595,6 +608,7 @@ const StationChatTab = ({ t }: { t: PortalTexts }) => {
       thread_id: activeThreadId,
       sender_type: "owner",
       sender_id: userId,
+      sender_name: ownerName,
       body: trimmed,
     });
     setSending(false);
@@ -620,6 +634,7 @@ const StationChatTab = ({ t }: { t: PortalTexts }) => {
         thread_id: activeThreadId,
         sender_type: "owner",
         sender_id: userId,
+        sender_name: ownerName,
         media_key: uploaded.key,
         media_url: uploaded.url,
         media_type: uploaded.type,
@@ -669,7 +684,10 @@ const StationChatTab = ({ t }: { t: PortalTexts }) => {
           <>
             <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
               {messages.map((message) => {
-                const mine = message.sender_type !== "customer";
+                // sender_id rather than sender_type=="customer" so that, in a
+                // group thread with multiple owners/admins, another member's
+                // message isn't shown as "mine" just because it's non-customer.
+                const mine = message.sender_id === userId;
                 return (
                   <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                     <div
@@ -677,6 +695,9 @@ const StationChatTab = ({ t }: { t: PortalTexts }) => {
                         mine ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
                       }`}
                     >
+                      {!mine && message.sender_name && (
+                        <p className="mb-0.5 text-xs font-semibold opacity-70">{message.sender_name}</p>
+                      )}
                       {message.media_url && message.media_type?.startsWith("image/") && (
                         <img src={message.media_url} alt={message.media_name || ""} className="mb-1 max-h-64 rounded-lg" />
                       )}

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "f1f76df9-4c6f-4b5e-9af5-d3fd8de8d889",
     "name": "Washlly Website API - Latest",
-    "description": "Updated: 2026-08-08.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nCustomer access (including required signup city for offer targeting), customer inbox, owner portal booking actions, ratings, quick booking, REST data, WhatsApp utilities, Firebase Cloud Messaging push notifications, and station credit/suspension lifecycle are included.\nStation credit uses station_owners.free_requests_quota as the unified remaining request counter: map booking consumes one request from the selected station, quick booking consumes one request per targeted station, payment-callback tops up quota, and check-subscriptions hides stations with zero quota.\nUse Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
+    "description": "Updated: 2026-08-16.\nSupabase Edge Functions and REST endpoints for Washlly website/customer portal/station portal.\nCustomer access (including required signup city for offer targeting), customer inbox, owner portal booking actions, ratings, quick booking, REST data, WhatsApp utilities, Firebase Cloud Messaging push notifications, customer-owner chat with media, and station credit/suspension lifecycle are included.\nStation credit uses station_owners.free_requests_quota as the unified remaining request counter: map booking consumes one request from the selected station, quick booking consumes one request per targeted station, payment-callback tops up quota, and check-subscriptions hides stations with zero quota.\nUse Supabase Auth separately to fill ownerAccessToken/adminAccessToken for protected owner/admin calls.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -145,6 +145,14 @@
     {
       "key": "customerCity",
       "value": "Erbil"
+    },
+    {
+      "key": "chatThreadId",
+      "value": "PASTE_CHAT_THREAD_ID"
+    },
+    {
+      "key": "chatMediaKey",
+      "value": "PASTE_CHAT_MEDIA_KEY"
     }
   ],
   "item": [
@@ -1501,6 +1509,215 @@
               "raw": "{\n  \"type\": \"UPDATE\",\n  \"record\": {\n    \"id\": \"{{bookingId}}\",\n    \"station_id\": \"{{stationId}}\",\n    \"customer_phone\": \"{{customerPhoneNormalized}}\",\n    \"status\": \"confirmed\"\n  },\n  \"old_record\": {\n    \"status\": \"pending\"\n  }\n}"
             },
             "description": "Database webhook-compatible sample for a booking status change. Notifies the customer for supported statuses."
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Chat",
+      "item": [
+        {
+          "name": "customer-send-chat-message - start a direct thread",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{anonKey}}"
+              }
+            ],
+            "description": "Sends the first message to a station, auto-creating the direct thread and syncing its owner members from station_owners. Use station_id when there is no thread yet; use thread_id (see the next request) to reply in an existing thread.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"session_token\": \"{{customerSessionToken}}\",\n  \"station_id\": \"{{stationId}}\",\n  \"body\": \"هل الخدمة متوفرة اليوم؟\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{functionsBase}}/customer-send-chat-message"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test(\"Message sent successfully\", function () {",
+                  "  pm.expect(data.success).to.eql(true);",
+                  "});",
+                  "if (data.thread_id) pm.collectionVariables.set(\"chatThreadId\", data.thread_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "customer-send-chat-message - reply in existing thread",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{anonKey}}"
+              }
+            ],
+            "description": "Replies in an existing direct or group thread. Returns 403 if the customer is not a member of chatThreadId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"session_token\": \"{{customerSessionToken}}\",\n  \"thread_id\": \"{{chatThreadId}}\",\n  \"body\": \"شكراً لكم\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{functionsBase}}/customer-send-chat-message"
+          }
+        },
+        {
+          "name": "customer-list-chat-threads",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{anonKey}}"
+              }
+            ],
+            "description": "Lists every direct and group thread the customer is a member of, with unread counts.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"session_token\": \"{{customerSessionToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{functionsBase}}/customer-list-chat-threads"
+          }
+        },
+        {
+          "name": "customer-get-chat-messages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{anonKey}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{anonKey}}"
+              }
+            ],
+            "description": "Returns message history for chatThreadId (latest 100, ascending) and marks incoming messages read.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"session_token\": \"{{customerSessionToken}}\",\n  \"thread_id\": \"{{chatThreadId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{functionsBase}}/customer-get-chat-messages"
+          }
+        },
+        {
+          "name": "chat-media - upload (owner/admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerAccessToken}}"
+              },
+              {
+                "key": "X-Thread-Id",
+                "value": "{{chatThreadId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "image/png"
+              },
+              {
+                "key": "X-File-Name",
+                "value": "chat-photo.png"
+              }
+            ],
+            "description": "Uploads an image or video to a chat thread on behalf of an owner/admin. Requires chatThreadId to be a thread the caller is a member of. Customers instead send X-Customer-Phone and X-Customer-Session-Token headers in place of Authorization. Select a file in the Body tab (mode: binary) before sending; set Content-Type to match the file (image/* or video/*, 25MB max).",
+            "body": {
+              "mode": "file",
+              "file": {}
+            },
+            "url": "{{baseUrl}}/api/chat-media"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.key) pm.collectionVariables.set(\"chatMediaKey\", data.key);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "chat-media - get by key (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "description": "Streams back a previously uploaded chat attachment. Public, no auth required.",
+            "url": "{{baseUrl}}/api/chat-media/{{chatMediaKey}}"
+          }
+        },
+        {
+          "name": "chat-media - delete (owner/admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerAccessToken}}"
+              }
+            ],
+            "description": "Deletes a stored chat attachment. Requires membership in the thread id embedded in the key.",
+            "url": "{{baseUrl}}/api/chat-media/{{chatMediaKey}}"
           }
         }
       ]

@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
 
     const { data: session } = await supabase
       .from("customer_web_sessions")
-      .select("customer_phone, expires_at")
+      .select("customer_phone, customer_name, expires_at")
       .eq("session_token", sessionToken)
       .maybeSingle();
 
@@ -136,13 +136,14 @@ Deno.serve(async (req) => {
         thread_id: resolvedThreadId,
         sender_type: "customer",
         sender_id: customerPhone,
+        sender_name: session.customer_name || null,
         body: messageBody || null,
         media_key: mediaKey || null,
         media_url: mediaUrl || null,
         media_type: mediaType || null,
         media_name: mediaName || null,
       })
-      .select("id, thread_id, sender_type, sender_id, body, media_key, media_url, media_type, media_name, created_at")
+      .select("id, thread_id, sender_type, sender_id, sender_name, body, media_key, media_url, media_type, media_name, created_at")
       .single();
 
     if (messageError) return json({ error: messageError.message }, 500);

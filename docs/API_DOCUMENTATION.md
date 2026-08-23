@@ -1,6 +1,6 @@
 # Washlly Website API Documentation
 
-Last updated: 2026-08-08
+Last updated: 2026-08-21
 
 ## Overview
 
@@ -640,6 +640,207 @@ Rules:
 - A booking can be rated only once.
 - The function updates station rating summary and creates an admin notification.
 
+## Chat APIs
+
+Customer↔station-owner chat, plus admin-curated group threads mixing owners and customers. Two thread kinds:
+
+- **`direct`** — auto-created the first time a customer messages a station (no booking required). Members are the customer plus every current `station_owners` row for that station, kept in sync automatically if owners are added or removed later.
+- **`group`** — created and membership-managed only by admins (via the `/app/admin/chat-groups` dashboard page, not a public API). Can mix any station owners and any customers. Full two-way messaging for every member.
+
+Underlying tables: `chat_threads`, `chat_thread_members`, `chat_messages`. Owners/admins read and send messages via direct Supabase queries (RLS-scoped to their memberships) with Realtime `postgres_changes` subscriptions; customers use the functions below with the same session-token pattern as the rest of the customer API, and poll for updates.
+
+### `customer-send-chat-message`
+
+Sends a text and/or media message. Provide either `thread_id` (an existing thread) or `station_id` (creates the direct thread for that station on first use).
+
+```http
+POST /functions/v1/customer-send-chat-message
+```
+
+Request:
+
+```json
+{
+  "customer_phone": "07736635435",
+  "session_token": "customer-session-token",
+  "station_id": "uuid",
+  "body": "هل الخدمة متوفرة اليوم؟"
+}
+```
+
+Or, replying in an existing thread with media (upload via `chat-media` first, see below):
+
+```json
+{
+  "customer_phone": "07736635435",
+  "session_token": "customer-session-token",
+  "thread_id": "uuid",
+  "media_key": "9730c774.../image~jpeg/photo.jpg",
+  "media_url": "https://washlly.com/api/chat-media/9730c774.../image~jpeg/photo.jpg",
+  "media_type": "image/jpeg",
+  "media_name": "photo.jpg"
+}
+```
+
+Success:
+
+```json
+{
+  "success": true,
+  "thread_id": "uuid",
+  "message": {
+    "id": "uuid",
+    "thread_id": "uuid",
+    "sender_type": "customer",
+    "sender_id": "9647736635435",
+    "sender_name": "Mustafa",
+    "body": "هل الخدمة متوفرة اليوم؟",
+    "media_key": null,
+    "media_url": null,
+    "media_type": null,
+    "media_name": null,
+    "created_at": "2026-08-16T12:00:00.000Z"
+  }
+}
+```
+
+Rules:
+
+- Either `body` or media fields are required; message body is capped at 4000 characters.
+- Blocked customers (`customer_profiles.is_blocked`) cannot send messages (`403`).
+- Sending to an existing `thread_id` the customer isn't a member of returns `403`.
+- Inserting a message triggers notifications to every other thread member (owner and/or customer), covered by the same trigger regardless of which side sent the message.
+- `sender_name` is set automatically by the server (the customer's saved `customer_web_sessions.customer_name` for customer messages, the owner's `station_owners.owner_name` for owner messages inserted directly via RLS) — clients don't provide it. Useful for group threads with multiple owners/customers, where `sender_id` alone isn't human-readable.
+
+### `customer-list-chat-threads`
+
+Lists every thread (direct and group) the customer is a member of.
+
+```http
+POST /functions/v1/customer-list-chat-threads
+```
+
+Request:
+
+```json
+{
+  "customer_phone": "07736635435",
+  "session_token": "customer-session-token"
+}
+```
+
+Success:
+
+```json
+{
+  "success": true,
+  "threads": [
+    {
+      "id": "uuid",
+      "kind": "direct",
+      "station_id": "uuid",
+      "title": "Washlly",
+      "last_message_at": "2026-08-16T12:00:00.000Z",
+      "unread_count": 2
+    }
+  ]
+}
+```
+
+`title` is the station name for `direct` threads or the group name for `group` threads. `station_id` is only present for `direct` threads.
+
+### `customer-get-chat-messages`
+
+Returns message history for one thread (most recent 100, ascending order) and marks incoming messages as read.
+
+```http
+POST /functions/v1/customer-get-chat-messages
+```
+
+Request:
+
+```json
+{
+  "customer_phone": "07736635435",
+  "session_token": "customer-session-token",
+  "thread_id": "uuid"
+}
+```
+
+Success:
+
+```json
+{
+  "success": true,
+  "messages": [
+    {
+      "id": "uuid",
+      "thread_id": "uuid",
+      "sender_type": "owner",
+      "sender_id": "auth-user-uuid",
+      "sender_name": "Washlly",
+      "body": "نعم متوفرة",
+      "media_key": null,
+      "media_url": null,
+      "media_type": null,
+      "media_name": null,
+      "created_at": "2026-08-16T12:01:00.000Z",
+      "read_at": "2026-08-16T12:02:00.000Z"
+    }
+  ]
+}
+```
+
+Returns `403` if the customer isn't a member of the thread.
+
+### `chat-media`
+
+Netlify Edge Function for chat attachments (not a Supabase function — served from the website's own origin). Mirrors `offer-media` but with dual authentication and per-thread authorization.
+
+```http
+{{baseUrl}}/api/chat-media
+```
+
+- **Owner/admin side**: `Authorization: Bearer <SUPABASE_JWT>`, checked against `chat_thread_members` for the given thread via RLS.
+- **Customer side**: `X-Customer-Phone` and `X-Customer-Session-Token` headers, checked against `customer_web_sessions` and `chat_thread_members`.
+- Reads (`GET`) are public (content-addressed, unguessable keys); uploads and deletes require the auth above.
+
+#### `POST /api/chat-media` — upload a file
+
+```http
+POST /api/chat-media
+X-Thread-Id: <thread_uuid>
+Content-Type: <image/* or video/*>
+X-File-Name: <url-encoded original file name>
+```
+
+Plus either the owner `Authorization` header or the customer headers above. Body: raw file bytes.
+
+Success (`201 Created`):
+
+```json
+{
+  "key": "9730c774.../image~jpeg/photo.jpg",
+  "url": "https://washlly.com/api/chat-media/9730c774.../image~jpeg/photo.jpg",
+  "name": "photo.jpg",
+  "type": "image/jpeg"
+}
+```
+
+Rules: `image/*`/`video/*` only, **25 MB** max (tighter than `offer-media`'s 100 MB). Returns `401 Unauthorized` if the caller isn't a member of `X-Thread-Id`.
+
+#### `GET /api/chat-media/<key>` — fetch a stored file
+
+Public, no auth required.
+
+#### `DELETE /api/chat-media/<key>` — remove a stored file
+
+Same auth as upload; the thread id embedded in the key is used to check membership.
+
+### `notify-on-chat-message`
+
+Internal only — not called directly by clients. A database trigger (`trg_notify_chat_message_edge_function`, fires on every `chat_messages` insert) calls this function, mirroring `notify-on-booking-change`. It notifies every thread member except the sender: owners get a `notifications` row plus FCM push (`role: "owner"`), customers get a `customer_notifications` row plus FCM push (`role: "customer"`).
+
 ## Booking Creation APIs
 
 ### `spin-booking-discount`
@@ -1105,6 +1306,9 @@ curl "https://yhklvtzonvgzkodysawu.supabase.co/rest/v1/stations?select=id,name,r
 | `offer_types` | Admin-managed offer type names such as Single or Slider |
 | `offers` | Offer header records with comma-separated city targeting |
 | `offer_details` | Ordered offer content, links, and optional station references |
+| `chat_threads` | Direct (customer↔station) and admin-curated group chat threads |
+| `chat_thread_members` | Chat thread membership, one row per owner (`user_id`) or customer (`customer_phone`) |
+| `chat_messages` | Chat text/media messages, per thread |
 
 ## Common REST Examples
 
@@ -1210,6 +1414,8 @@ POST success:
 
 Netlify site environment variables (required, separate from Supabase Edge Function secrets): the `offer-media` Netlify Edge Function used by Admin Offers needs `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` set under Netlify Site configuration → Environment variables to verify admin uploads. Without them it returns `401 Unauthorized` on every upload/delete because it falls back to using the caller's own session token, which Supabase's API gateway rejects. Redeploy the site after setting or changing these.
 
+The `chat-media` Netlify Edge Function additionally needs `SUPABASE_SERVICE_ROLE_KEY` set under the same Netlify site environment variables, so it can validate customer session tokens for the customer-side upload path (customers have no Supabase Auth JWT for RLS to check, unlike owners/admins). Without it, customer-side chat media uploads fail with `401 Unauthorized`.
+
 Apply database migrations:
 
 ```bash
@@ -1233,7 +1439,13 @@ npx supabase functions deploy cancel-map-booking
 npx supabase functions deploy cancel-all-map-bookings
 npx supabase functions deploy spin-booking-discount
 npx supabase functions deploy get-offers
+npx supabase functions deploy customer-send-chat-message
+npx supabase functions deploy customer-list-chat-threads
+npx supabase functions deploy customer-get-chat-messages
+npx supabase functions deploy notify-on-chat-message
 ```
+
+The chat feature also requires the `SUPABASE_SERVICE_ROLE_KEY` Netlify site environment variable (in addition to `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY`) so `chat-media.ts` can validate customer sessions — see the note under "Deployment" above.
 
 Deploy owner/admin/WhatsApp functions:
 

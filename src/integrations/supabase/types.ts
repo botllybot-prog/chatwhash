@@ -278,6 +278,7 @@ export type Database = {
           media_url: string | null
           read_at: string | null
           sender_id: string
+          sender_name: string | null
           sender_type: string
           thread_id: string
         }
@@ -291,6 +292,7 @@ export type Database = {
           media_url?: string | null
           read_at?: string | null
           sender_id: string
+          sender_name?: string | null
           sender_type: string
           thread_id: string
         }
@@ -304,6 +306,7 @@ export type Database = {
           media_url?: string | null
           read_at?: string | null
           sender_id?: string
+          sender_name?: string | null
           sender_type?: string
           thread_id?: string
         }

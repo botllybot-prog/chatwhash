@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
 
     const { data: messages, error: messagesError } = await supabase
       .from("chat_messages")
-      .select("id, thread_id, sender_type, sender_id, body, media_key, media_url, media_type, media_name, created_at, read_at")
+      .select("id, thread_id, sender_type, sender_id, sender_name, body, media_key, media_url, media_type, media_name, created_at, read_at")
       .eq("thread_id", threadId)
       .order("created_at", { ascending: true })
       .limit(MESSAGE_PAGE_SIZE);

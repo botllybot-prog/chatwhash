@@ -5,6 +5,22 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-08-21] - Chat Sender Names and Mobile Media Fix
+
+- Added a `sender_name` field to chat messages, populated automatically from the sender's saved profile (customer name or station owner name) so group threads with multiple owners/customers show who sent each message instead of just a phone number or user id.
+- Fixed the customer and owner chat views only ever showing the current user's own messages as "mine" in group threads, which had mislabeled another member's message as the viewer's own whenever they shared the same sender type.
+- Fixed the mobile app's chat screen never rendering image or video attachments, showing an empty bubble instead — this affected every thread, most visibly noticed in group chats where photos are shared.
+
+## [2026-08-16] - Customer-Owner Chat with Groups and Media
+
+- Added direct chat threads between customers and station owners, created automatically on first message and kept in sync with each station's linked owner accounts.
+- Added admin-curated group threads mixing any station owners and customers, managed from a new `/app/admin/chat-groups` page with searchable member pickers.
+- Added a customer chat page, an owner portal "الرسائل" tab with live updates, and text and media messaging on both sides.
+- Added a Netlify media endpoint for chat attachments with separate owner and customer authorization, a 25 MB size limit, and image/video validation.
+- Added in-app and push notifications for new chat messages, covering messages sent by either side through one database trigger.
+- Fixed a missing row-level security policy on `customer_profiles` that silently blocked admin reads, which had also been affecting the existing bot customers admin page.
+- Fixed the new chat tables never being registered for realtime delivery, which had kept new messages from appearing in the owner portal without a manual reload.
+
 ## [2026-08-01] - Offer Media Saving Without a Database Migration
 
 - Fixed offer media saving failing with "media columns are missing from the database", which had blocked every image and video on the admin offers page.
