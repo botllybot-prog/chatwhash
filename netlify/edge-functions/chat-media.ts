@@ -142,7 +142,23 @@ const isCustomerThreadMember = async (request: Request, threadId: string) => {
   return Array.isArray(rows) && rows.length > 0;
 };
 
+/**
+ * Server-to-server cleanup (the nightly chat-purge cron job) authenticates
+ * with the Supabase service role key directly rather than as a thread
+ * member -- it deletes media across every thread, not just one. The site
+ * already trusts this exact secret for the same purpose (isCustomerThreadMember
+ * requires it as a Netlify env var), so this doesn't introduce a new class
+ * of access, just a second legitimate way to present it.
+ */
+const isServiceRequest = (request: Request) => {
+  const authorization = request.headers.get("authorization");
+  const serviceRoleKey = readEnv("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey || !authorization?.startsWith("Bearer ")) return false;
+  return authorization.slice("Bearer ".length).trim() === serviceRoleKey;
+};
+
 const isAuthorizedForThread = async (request: Request, threadId: string) => {
+  if (isServiceRequest(request)) return true;
   if (!THREAD_ID_PATTERN.test(threadId)) return false;
   if (await isOwnerThreadMember(request, threadId)) return true;
   return await isCustomerThreadMember(request, threadId);
