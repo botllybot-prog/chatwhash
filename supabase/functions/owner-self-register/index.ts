@@ -30,7 +30,7 @@ type RegisterPayload = {
   services?: Array<{
     name?: string;
     price?: number;
-    duration_minutes?: number;
+    service_type_id?: string | null;
     customer_discount?: string | null;
     sort_order?: number;
   }>;
@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
         station_id: createdStationId,
         name: service.name!.trim(),
         price: Number(service.price) || 0,
-        duration_minutes: Number(service.duration_minutes) || 30,
+        service_type_id: service.service_type_id ?? null,
         customer_discount: service.customer_discount ?? null,
         sort_order: Number(service.sort_order) || 0,
         is_active: true,

@@ -21,7 +21,9 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminLayout from "./components/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminStations from "./pages/admin/AdminStations";
+import AdminStationTypes from "./pages/admin/AdminStationTypes";
 import AdminServices from "./pages/admin/AdminServices";
+import AdminServiceTypes from "./pages/admin/AdminServiceTypes";
 import AdminOffers from "./pages/admin/AdminOffers";
 import AdminOfferTypes from "./pages/admin/AdminOfferTypes";
 import AdminBookings from "./pages/admin/AdminBookings";
@@ -52,7 +54,9 @@ const ProtectedRoutes = () => (
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="stations" element={<AdminStations />} />
+        <Route path="station-types" element={<AdminStationTypes />} />
         <Route path="services" element={<AdminServices />} />
+        <Route path="service-types" element={<AdminServiceTypes />} />
         <Route path="offers" element={<AdminOffers />} />
         <Route path="offer-types" element={<AdminOfferTypes />} />
         <Route path="bookings" element={<AdminBookings />} />

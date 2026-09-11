@@ -736,7 +736,7 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"owner_name\": \"Mustafa\",\n  \"owner_phone\": \"{{customerPhone}}\",\n  \"email\": \"optional@example.com\",\n  \"password\": \"123456\",\n  \"free_requests_quota\": 20,\n  \"station\": {\n    \"name\": \"Washlly\",\n    \"address\": \"Erbil\",\n    \"detailed_address\": \"Near main street\",\n    \"working_hours_start\": \"08:00\",\n    \"working_hours_end\": \"22:00\",\n    \"scheduling_type\": \"slots\",\n    \"slot_duration_minutes\": 30,\n    \"latitude\": 36.1911,\n    \"longitude\": 44.0092,\n    \"image_url\": null,\n    \"category\": \"car_wash\"\n  },\n  \"services\": [\n    {\n      \"name\": \"General wash\",\n      \"price\": 8000,\n      \"duration_minutes\": 30,\n      \"customer_discount\": null,\n      \"sort_order\": 0\n    }\n  ]\n}",
+              "raw": "{\n  \"owner_name\": \"Mustafa\",\n  \"owner_phone\": \"{{customerPhone}}\",\n  \"email\": \"optional@example.com\",\n  \"password\": \"123456\",\n  \"free_requests_quota\": 20,\n  \"station\": {\n    \"name\": \"Washlly\",\n    \"address\": \"Erbil\",\n    \"detailed_address\": \"Near main street\",\n    \"working_hours_start\": \"08:00\",\n    \"working_hours_end\": \"22:00\",\n    \"scheduling_type\": \"slots\",\n    \"slot_duration_minutes\": 30,\n    \"latitude\": 36.1911,\n    \"longitude\": 44.0092,\n    \"image_url\": null,\n    \"category\": \"car_wash\"\n  },\n  \"services\": [\n    {\n      \"name\": \"General wash\",\n      \"price\": 8000,\n      \"service_type_id\": null,\n      \"customer_discount\": null,\n      \"sort_order\": 0\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"

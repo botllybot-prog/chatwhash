@@ -1058,41 +1058,66 @@ export type Database = {
           },
         ]
       }
+      service_types: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       services: {
         Row: {
           created_at: string
           customer_discount: string | null
-          duration_minutes: number
           id: string
           is_active: boolean
           name: string
           price: number
+          service_type_id: string | null
           sort_order: number
           station_id: string | null
         }
         Insert: {
           created_at?: string
           customer_discount?: string | null
-          duration_minutes?: number
           id?: string
           is_active?: boolean
           name: string
           price?: number
+          service_type_id?: string | null
           sort_order?: number
           station_id?: string | null
         }
         Update: {
           created_at?: string
           customer_discount?: string | null
-          duration_minutes?: number
           id?: string
           is_active?: boolean
           name?: string
           price?: number
+          service_type_id?: string | null
           sort_order?: number
           station_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "services_service_type_id_fkey"
+            columns: ["service_type_id"]
+            isOneToOne: false
+            referencedRelation: "service_types"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "services_station_id_fkey"
             columns: ["station_id"]
@@ -1152,6 +1177,27 @@ export type Database = {
           },
         ]
       }
+      station_types: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          pin_color: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          pin_color?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          pin_color?: string
+        }
+        Relationships: []
+      }
       stations: {
         Row: {
           address: string | null
@@ -1170,6 +1216,7 @@ export type Database = {
           rating_count: number
           scheduling_type: Database["public"]["Enums"]["scheduling_type"]
           slot_duration_minutes: number
+          station_type_id: string | null
           suspended_at: string | null
           suspension_reason: string | null
           working_hours_end: string
@@ -1192,6 +1239,7 @@ export type Database = {
           rating_count?: number
           scheduling_type?: Database["public"]["Enums"]["scheduling_type"]
           slot_duration_minutes?: number
+          station_type_id?: string | null
           suspended_at?: string | null
           suspension_reason?: string | null
           working_hours_end?: string
@@ -1214,12 +1262,21 @@ export type Database = {
           rating_count?: number
           scheduling_type?: Database["public"]["Enums"]["scheduling_type"]
           slot_duration_minutes?: number
+          station_type_id?: string | null
           suspended_at?: string | null
           suspension_reason?: string | null
           working_hours_end?: string
           working_hours_start?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "stations_station_type_id_fkey"
+            columns: ["station_type_id"]
+            isOneToOne: false
+            referencedRelation: "station_types"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       subscriptions: {
         Row: {
@@ -1356,12 +1413,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1385,11 +1442,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1410,11 +1467,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1435,11 +1492,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1452,11 +1509,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

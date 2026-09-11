@@ -1081,7 +1081,7 @@ Request:
     {
       "name": "General wash",
       "price": 8000,
-      "duration_minutes": 30,
+      "service_type_id": null,
       "customer_discount": null,
       "sort_order": 0
     }
@@ -1285,7 +1285,9 @@ curl "https://yhklvtzonvgzkodysawu.supabase.co/rest/v1/stations?select=id,name,r
 | Table | Purpose |
 | --- | --- |
 | `stations` | Station profile, location, working hours, category, active status, rating summary |
-| `services` | Station services, prices, durations |
+| `services` | Station services, prices, service types |
+| `service_types` | Lookup table categorizing services (id, name) |
+| `station_types` | Lookup table categorizing stations for map pin colors (id, name, pin_color) |
 | `bookings` | Regular and quick booking rows, statuses, ratings |
 | `station_owners` | Owner phone/user/station link, free quota |
 | `quick_booking_requests` | Parent quick booking request |

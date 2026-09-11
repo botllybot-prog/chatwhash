@@ -66,7 +66,7 @@ async function main() {
       {
         name: "غسل سطحي",
         price: 6000,
-        duration_minutes: 30,
+        service_type_id: null,
         customer_discount: null,
         sort_order: 0,
       },

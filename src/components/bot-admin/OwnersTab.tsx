@@ -42,14 +42,16 @@ type SchedulingType = "slots" | "instant" | "daily";
 type ServiceDraft = {
   name: string;
   price: string;
-  duration_minutes: string;
+  service_type_id: string | null;
   customer_discount: string;
 };
+
+const NO_SERVICE_TYPE = "__none";
 
 const emptyService = (): ServiceDraft => ({
   name: "",
   price: "",
-  duration_minutes: "30",
+  service_type_id: null,
   customer_discount: "",
 });
 
@@ -77,6 +79,7 @@ const OwnersTab = () => {
   const [location, setLocation] = useState(DEFAULT_CENTER);
   const [services, setServices] = useState<ServiceDraft[]>([emptyService()]);
   const [categorySettings, setCategorySettings] = useState<Record<string, string>>({});
+  const [serviceTypes, setServiceTypes] = useState<{ id: string; name: string }[]>([]);
   const visibleStationCategories = getVisibleStationCategories(categorySettings);
 
   const [editOpen, setEditOpen] = useState(false);
@@ -172,6 +175,12 @@ const OwnersTab = () => {
       setCategorySettings(map);
     };
     loadCategorySettings();
+
+    const loadServiceTypes = async () => {
+      const { data } = await (supabase as any).from("service_types").select("id, name").order("name");
+      setServiceTypes(data || []);
+    };
+    loadServiceTypes();
   }, []);
 
   const addService = () => setServices((current) => [...current, emptyService()]);
@@ -180,7 +189,7 @@ const OwnersTab = () => {
     setServices((current) => (current.length === 1 ? current : current.filter((_, i) => i !== index)));
   };
 
-  const updateService = (index: number, field: keyof ServiceDraft, value: string) => {
+  const updateService = (index: number, field: keyof ServiceDraft, value: string | null) => {
     setServices((current) => current.map((service, i) => (i === index ? { ...service, [field]: value } : service)));
   };
 
@@ -225,7 +234,7 @@ const OwnersTab = () => {
         services: validServices.map((service, index) => ({
           name: service.name.trim(),
           price: Number(service.price),
-          duration_minutes: Number(service.duration_minutes) || 30,
+          service_type_id: service.service_type_id,
           customer_discount: service.customer_discount.trim() || null,
           sort_order: index,
         })),
@@ -560,8 +569,19 @@ const OwnersTab = () => {
                             <Input type="number" value={service.price} onChange={(event) => updateService(index, "price", event.target.value)} placeholder="10000" />
                           </div>
                           <div className="space-y-2">
-                            <Label>المدة</Label>
-                            <Input type="number" value={service.duration_minutes} onChange={(event) => updateService(index, "duration_minutes", event.target.value)} placeholder="30" />
+                            <Label>نوع الخدمة</Label>
+                            <Select
+                              value={service.service_type_id || NO_SERVICE_TYPE}
+                              onValueChange={(value) => updateService(index, "service_type_id", value === NO_SERVICE_TYPE ? null : value)}
+                            >
+                              <SelectTrigger><SelectValue placeholder="اختر نوع الخدمة" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NO_SERVICE_TYPE}>بدون نوع</SelectItem>
+                                {serviceTypes.map((type) => (
+                                  <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
                         <div className="space-y-2">

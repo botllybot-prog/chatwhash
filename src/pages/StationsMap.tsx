@@ -561,14 +561,16 @@ type Station = {
   is_active: boolean;
   rating_average?: number | null;
   rating_count?: number | null;
+  station_type_id?: string | null;
 };
 
 type Service = {
   id: string;
   name: string;
   price: number;
-  duration_minutes: number;
   station_id: string | null;
+  service_type_id?: string | null;
+  service_types?: { name: string } | null;
 };
 
 type BookingResult = {
@@ -856,7 +858,7 @@ function StationCard({
     const loadServices = async () => {
       const { data, error } = await supabase
         .from("services")
-        .select("id, name, price, duration_minutes, station_id")
+        .select("id, name, price, station_id, service_type_id, service_types(name)")
         .eq("station_id", station.id)
         .eq("is_active", true)
         .order("sort_order");
@@ -1218,9 +1220,9 @@ function StationCard({
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="font-medium">{service.name}</p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {service.duration_minutes} {t.serviceDuration}
-                            </p>
+                            {service.service_types?.name && (
+                              <p className="mt-1 text-xs text-muted-foreground">{service.service_types.name}</p>
+                            )}
                           </div>
                           <Badge variant={isSelected ? "default" : "secondary"}>
                             {formatCurrency(service.price, language)}
@@ -1485,8 +1487,24 @@ const extractFirstUrl = (value?: string | null) => {
   return match?.[0] || "";
 };
 
+const DEFAULT_STATION_PIN_COLOR = "#ea4335";
+
+const buildStationPinIcon = (color: string): google.maps.Icon => ({
+  url:
+    "data:image/svg+xml;charset=UTF-8," +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="27" height="43" viewBox="0 0 27 43">` +
+        `<path d="M13.5 0C6.04 0 0 6.04 0 13.5 0 23.63 13.5 43 13.5 43S27 23.63 27 13.5C27 6.04 20.96 0 13.5 0Z" fill="${color}" stroke="#ffffff" stroke-width="1.5"/>` +
+        `<circle cx="13.5" cy="13.5" r="5" fill="#ffffff"/>` +
+        `</svg>`,
+    ),
+  scaledSize: new google.maps.Size(27, 43),
+  anchor: new google.maps.Point(13.5, 43),
+});
+
 const StationsMap = () => {
   const [stations, setStations] = useState<Station[]>([]);
+  const [stationTypeColors, setStationTypeColors] = useState<Record<string, string>>({});
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [map, setMap] = useState<google.maps.Map | null>(null);
@@ -1775,12 +1793,21 @@ const StationsMap = () => {
           .map(([stationId]) => stationId),
       );
 
-      const { data, error } = await supabase
-        .from("stations")
-        .select("*")
-        .eq("is_active", true)
-        .not("latitude", "is", null)
-        .not("longitude", "is", null);
+      const [{ data, error }, typesResult] = await Promise.all([
+        supabase
+          .from("stations")
+          .select("*")
+          .eq("is_active", true)
+          .not("latitude", "is", null)
+          .not("longitude", "is", null),
+        (supabase as any).from("station_types").select("id, pin_color"),
+      ]);
+
+      setStationTypeColors(
+        Object.fromEntries(
+          ((typesResult.data || []) as { id: string; pin_color: string }[]).map((type) => [type.id, type.pin_color]),
+        ),
+      );
 
       if (error) {
         toast({
@@ -2256,6 +2283,10 @@ const StationsMap = () => {
                         <Marker
                           position={{ lat: station.latitude!, lng: station.longitude! }}
                           onClick={() => handleMarkerClick(station)}
+                          icon={buildStationPinIcon(
+                            (station.station_type_id && stationTypeColors[station.station_type_id]) ||
+                              DEFAULT_STATION_PIN_COLOR,
+                          )}
                         />
                         {hasRating && (
                           <OverlayView

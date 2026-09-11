@@ -19,6 +19,7 @@ const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
 interface StationForm {
   name: string;
   category: StationCategory;
+  station_type_id: string | null;
   address: string;
   detailed_address: string;
   working_hours_start: string;
@@ -34,6 +35,7 @@ interface StationForm {
 const defaultForm: StationForm = {
   name: "",
   category: DEFAULT_STATION_CATEGORY,
+  station_type_id: null,
   address: "",
   detailed_address: "",
   working_hours_start: "08:00",
@@ -49,14 +51,19 @@ const defaultForm: StationForm = {
 const ERBIL_CENTER = { lat: 36.191, lng: 44.009 };
 
 
+const NO_STATION_TYPE = "__none";
+
 const StationsTab = () => {
   const [stations, setStations] = useState<any[]>([]);
+  const [stationTypes, setStationTypes] = useState<{ id: string; name: string; pin_color: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<StationForm>({ ...defaultForm });
   const [uploading, setUploading] = useState(false);
   const [locating, setLocating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const stationTypeById = new Map(stationTypes.map((type) => [type.id, type]));
 
   const { isLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_KEY });
 
@@ -81,8 +88,12 @@ const StationsTab = () => {
   };
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("stations").select("*").order("created_at");
-    if (data) setStations(data);
+    const [stationsResult, typesResult] = await Promise.all([
+      supabase.from("stations").select("*").order("created_at"),
+      (supabase as any).from("station_types").select("id, name, pin_color").order("name"),
+    ]);
+    if (stationsResult.data) setStations(stationsResult.data);
+    if (typesResult.data) setStationTypes(typesResult.data);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -110,6 +121,7 @@ const StationsTab = () => {
     const payload = {
       name: form.name,
       category: sanitizeStationCategory(form.category),
+      station_type_id: form.station_type_id,
       address: form.address,
       detailed_address: form.detailed_address,
       working_hours_start: form.working_hours_start,
@@ -147,6 +159,7 @@ const StationsTab = () => {
     setForm({
       name: s.name,
       category: sanitizeStationCategory(s.category),
+      station_type_id: s.station_type_id || null,
       address: s.address || "",
       detailed_address: s.detailed_address || "",
       working_hours_start: s.working_hours_start,
@@ -189,6 +202,25 @@ const StationsTab = () => {
                     <SelectContent>
                       {STATION_CATEGORY_OPTIONS.map((option) => (
                         <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>نوع المحطة</Label>
+                  <Select
+                    value={form.station_type_id || NO_STATION_TYPE}
+                    onValueChange={(v) => setForm({ ...form, station_type_id: v === NO_STATION_TYPE ? null : v })}
+                  >
+                    <SelectTrigger><SelectValue placeholder="اختر نوع المحطة" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_STATION_TYPE}>بدون نوع</SelectItem>
+                      {stationTypes.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>
+                          <span className="flex items-center gap-2">
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: type.pin_color }} />
+                            {type.name}
+                          </span>
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -306,6 +338,7 @@ const StationsTab = () => {
             <TableHead>الصورة</TableHead>
             <TableHead>المحطة</TableHead>
             <TableHead>التصنيف</TableHead>
+            <TableHead>نوع المحطة</TableHead>
             <TableHead>العنوان</TableHead>
             <TableHead>ساعات العمل</TableHead>
             <TableHead>نوع المواعيد</TableHead>
@@ -328,6 +361,19 @@ const StationsTab = () => {
               <TableCell className="font-medium">{s.name}</TableCell>
               <TableCell><Badge variant="outline">{getStationCategoryLabel(s.category)}</Badge></TableCell>
               <TableCell>
+                {stationTypeById.get(s.station_type_id) ? (
+                  <Badge variant="secondary" className="gap-1.5">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: stationTypeById.get(s.station_type_id)!.pin_color }}
+                    />
+                    {stationTypeById.get(s.station_type_id)!.name}
+                  </Badge>
+                ) : (
+                  <span className="text-xs text-muted-foreground">بدون نوع</span>
+                )}
+              </TableCell>
+              <TableCell>
                 <div className="max-w-48">
                   <span>{s.address || "-"}</span>
                   {s.detailed_address && <p className="text-xs text-muted-foreground truncate">{s.detailed_address}</p>}
@@ -344,7 +390,7 @@ const StationsTab = () => {
               </TableCell>
             </TableRow>
           ))}
-          {stations.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">لا توجد محطات بعد</TableCell></TableRow>}
+          {stations.length === 0 && <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">لا توجد محطات بعد</TableCell></TableRow>}
         </TableBody>
       </Table>
     </div>

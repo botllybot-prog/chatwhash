@@ -7,14 +7,17 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { Clock, Globe, Pencil, Plus, Trash2 } from "lucide-react";
+import { Globe, Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import { useAppLanguage } from "@/lib/language";
+
+const NO_SERVICE_TYPE = "__none";
 
 const emptyForm = {
   name: "",
   price: 0,
-  duration_minutes: 30,
+  service_type_id: null as string | null,
   station_id: null as string | null,
   is_active: true,
   sort_order: 0,
@@ -39,7 +42,9 @@ const texts = {
     sharedForAll: "مشتركة لجميع المحطات",
     serviceName: "اسم الخدمة",
     price: "السعر (د.ع)",
-    duration: "المدة (دقيقة)",
+    serviceType: "نوع الخدمة",
+    chooseServiceType: "اختر نوع الخدمة",
+    noServiceType: "بدون نوع",
     customerDiscount: "خصم العميل",
     activeService: "تفعيل الخدمة",
     update: "تحديث",
@@ -72,7 +77,9 @@ const texts = {
     sharedForAll: "Shared for all stations",
     serviceName: "Service name",
     price: "Price (IQD)",
-    duration: "Duration (minutes)",
+    serviceType: "Service type",
+    chooseServiceType: "Choose service type",
+    noServiceType: "No type",
     customerDiscount: "Customer discount",
     activeService: "Enable service",
     update: "Update",
@@ -105,7 +112,9 @@ const texts = {
     sharedForAll: "هاوبەش بۆ هەموو وێستگەکان",
     serviceName: "ناوی خزمەتگوزاری",
     price: "نرخ (د.ع)",
-    duration: "ماوە (خولەک)",
+    serviceType: "جۆری خزمەتگوزاری",
+    chooseServiceType: "جۆری خزمەتگوزاری هەڵبژێرە",
+    noServiceType: "بێ جۆر",
     customerDiscount: "داشکاندنی کڕیار",
     activeService: "چالاککردنی خزمەتگوزاری",
     update: "نوێکردنەوە",
@@ -138,7 +147,9 @@ const texts = {
     sharedForAll: "Tüm istasyonlar için ortak",
     serviceName: "Hizmet adı",
     price: "Fiyat (IQD)",
-    duration: "Süre (dakika)",
+    serviceType: "Hizmet türü",
+    chooseServiceType: "Hizmet türü seçin",
+    noServiceType: "Türsüz",
     customerDiscount: "Müşteri indirimi",
     activeService: "Hizmeti etkinleştir",
     update: "Güncelle",
@@ -160,18 +171,25 @@ const AdminServices = () => {
   const { language, isRtl } = useAppLanguage();
   const t = texts[language];
   const [services, setServices] = useState<any[]>([]);
+  const [serviceTypes, setServiceTypes] = useState<{ id: string; name: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ ...emptyForm });
 
+  const serviceTypeById = new Map(serviceTypes.map((type) => [type.id, type]));
+
   const load = useCallback(async () => {
-    const { data: svc } = await supabase
-      .from("services")
-      .select("*")
-      .is("station_id", null)
-      .order("sort_order", { ascending: true })
-      .order("name", { ascending: true });
-    if (svc) setServices(svc);
+    const [svcResult, typesResult] = await Promise.all([
+      supabase
+        .from("services")
+        .select("*")
+        .is("station_id", null)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true }),
+      (supabase as any).from("service_types").select("id, name").order("name"),
+    ]);
+    if (svcResult.data) setServices(svcResult.data);
+    if (typesResult.data) setServiceTypes(typesResult.data);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -187,7 +205,7 @@ const AdminServices = () => {
     setForm({
       name: service.name,
       price: 0,
-      duration_minutes: service.duration_minutes,
+      service_type_id: service.service_type_id || null,
       station_id: null,
       is_active: service.is_active,
       sort_order: service.sort_order,
@@ -212,7 +230,7 @@ const AdminServices = () => {
       name: form.name.trim(),
       station_id: null,
       price: 0,
-      duration_minutes: Number(form.duration_minutes),
+      service_type_id: form.service_type_id,
       is_active: form.is_active,
       sort_order: Number(form.sort_order),
       customer_discount: null,
@@ -256,7 +274,9 @@ const AdminServices = () => {
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span>{t.sharedForAll}</span>
-            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{service.duration_minutes}</span>
+            {serviceTypeById.get(service.service_type_id) && (
+              <span className="flex items-center gap-1"><Tags className="h-3 w-3" />{serviceTypeById.get(service.service_type_id)!.name}</span>
+            )}
           </div>
         </div>
       </div>
@@ -319,8 +339,19 @@ const AdminServices = () => {
             </div>
 
             <div>
-              <Label>{t.duration}</Label>
-              <Input type="number" value={form.duration_minutes} onChange={(event) => setForm({ ...form, duration_minutes: Number(event.target.value) })} />
+              <Label>{t.serviceType}</Label>
+              <Select
+                value={form.service_type_id || NO_SERVICE_TYPE}
+                onValueChange={(value) => setForm({ ...form, service_type_id: value === NO_SERVICE_TYPE ? null : value })}
+              >
+                <SelectTrigger><SelectValue placeholder={t.chooseServiceType} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SERVICE_TYPE}>{t.noServiceType}</SelectItem>
+                  {serviceTypes.map((type) => (
+                    <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center justify-between rounded-lg border px-3 py-2">

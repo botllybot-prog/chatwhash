@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Store, Wrench, CalendarCheck, Users, FileEdit,
   CreditCard, BarChart3, Settings, MessageCircle, LogOut, Car, LayoutDashboard, UserCheck, Briefcase, Megaphone,
-  Star, Tags, BadgePercent, MessagesSquare,
+  Star, Tags, BadgePercent, MessagesSquare, MapPin,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -22,7 +22,9 @@ const sidebarTexts = {
     management: "الإدارة",
     dashboard: "لوحة المعلومات",
     stations: "المحطات",
+    stationTypes: "أنواع المحطات",
     services: "الخدمات",
+    serviceTypes: "أنواع الخدمات",
     bookings: "الحجوزات",
     owners: "الحسابات",
     customers: "عملاء البوت",
@@ -42,7 +44,9 @@ const sidebarTexts = {
     management: "Management",
     dashboard: "Dashboard",
     stations: "Stations",
+    stationTypes: "Station types",
     services: "Services",
+    serviceTypes: "Service types",
     bookings: "Bookings",
     owners: "Accounts",
     customers: "Bot customers",
@@ -62,7 +66,9 @@ const sidebarTexts = {
     management: "بەڕێوەبردن",
     dashboard: "داشبۆرد",
     stations: "وێستگەکان",
+    stationTypes: "جۆرەکانی وێستگە",
     services: "خزمەتگوزاریەکان",
+    serviceTypes: "جۆرەکانی خزمەتگوزاری",
     bookings: "حجزەکان",
     owners: "هەژمارەکان",
     customers: "کڕیارانی بۆت",
@@ -82,7 +88,9 @@ const sidebarTexts = {
     management: "Yönetim",
     dashboard: "Panel",
     stations: "İstasyonlar",
+    stationTypes: "İstasyon türleri",
     services: "Hizmetler",
+    serviceTypes: "Hizmet türleri",
     bookings: "Rezervasyonlar",
     owners: "Hesaplar",
     customers: "Bot müşterileri",
@@ -111,7 +119,9 @@ export function AdminSidebar() {
   const items = [
     { title: t.dashboard, url: "/app/admin/dashboard", icon: LayoutDashboard, badgeKey: null },
     { title: t.stations, url: "/app/admin/stations", icon: Store, badgeKey: null },
+    { title: t.stationTypes, url: "/app/admin/station-types", icon: MapPin, badgeKey: null },
     { title: t.services, url: "/app/admin/services", icon: Wrench, badgeKey: null },
+    { title: t.serviceTypes, url: "/app/admin/service-types", icon: Tags, badgeKey: null },
     { title: offersText.offers, url: "/app/admin/offers", icon: BadgePercent, badgeKey: null },
     { title: offersText.offerTypes, url: "/app/admin/offer-types", icon: Tags, badgeKey: null },
     { title: t.bookings, url: "/app/admin/bookings", icon: CalendarCheck, badgeKey: "bookings" as const },

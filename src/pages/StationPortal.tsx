@@ -993,7 +993,7 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
       toast({ title: "أدخل سعراً صحيحاً", variant: "destructive" });
       return null;
     }
-    return { price, duration: Number(catalogService.duration_minutes ?? 30) || 30 };
+    return { price, service_type_id: catalogService.service_type_id ?? null };
   };
 
   const setServiceChecked = async (catalogService: any, checked: boolean) => {
@@ -1007,7 +1007,7 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
           .from("services")
         .update({
             price: values.price,
-            duration_minutes: values.duration,
+            service_type_id: values.service_type_id,
             is_active: checked,
             sort_order: catalogService.sort_order ?? existing.sort_order ?? 0,
           } as any)
@@ -1019,7 +1019,7 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
             station_id: stationId,
             name: catalogService.name,
             price: values.price,
-            duration_minutes: values.duration,
+            service_type_id: values.service_type_id,
             is_active: checked,
             sort_order: catalogService.sort_order ?? 0,
             customer_discount: catalogService.customer_discount ?? null,
@@ -1049,7 +1049,7 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
       .from("services")
       .update({
         price: values.price,
-        duration_minutes: values.duration,
+        service_type_id: values.service_type_id,
         is_active: true,
         sort_order: catalogService.sort_order ?? existing.sort_order ?? 0,
       } as any)

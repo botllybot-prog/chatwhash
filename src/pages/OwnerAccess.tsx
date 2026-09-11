@@ -470,7 +470,7 @@ const OwnerAccess = () => {
     const loadServiceCatalog = async () => {
       const { data, error } = await supabase
         .from("services")
-        .select("id, name, duration_minutes, sort_order")
+        .select("id, name, service_type_id, sort_order")
         .is("station_id", null)
         .eq("is_active", true)
         .order("sort_order", { ascending: true })
@@ -643,7 +643,7 @@ const OwnerAccess = () => {
       services: validServices.map((service, index) => ({
         name: service.name.trim(),
         price: Number(service.price),
-        duration_minutes: Number(serviceCatalog.find((item) => item.name === service.name.trim())?.duration_minutes) || 30,
+        service_type_id: serviceCatalog.find((item) => item.name === service.name.trim())?.service_type_id ?? null,
         customer_discount: null,
         sort_order: index,
       })),

@@ -71,7 +71,7 @@ const StationDetailSheet = ({ station, onClose }: Props) => {
     if (!station) return;
     setLoadingSlots(true);
     const load = async () => {
-      const { data: svc } = await supabase.from("services").select("*").eq("station_id", station.id).eq("is_active", true).order("sort_order");
+      const { data: svc } = await supabase.from("services").select("*, service_types(name)").eq("station_id", station.id).eq("is_active", true).order("sort_order");
       if (svc) setServices(svc);
       if (station.scheduling_type === "slots") {
         const today = new Date().toISOString().split("T")[0];
@@ -119,7 +119,7 @@ const StationDetailSheet = ({ station, onClose }: Props) => {
 
             {station.latitude && station.longitude && <div className="grid grid-cols-2 gap-2"><Button variant="outline" className="gap-2" onClick={openGoogleMaps}><Navigation className="h-4 w-4" />Google Maps</Button><Button variant="outline" className="gap-2" onClick={openWaze}><Navigation className="h-4 w-4" />Waze</Button></div>}
 
-            <Card><CardContent className="pt-4 pb-3"><h3 className="font-semibold text-foreground flex items-center gap-1.5 mb-3"><Wrench className="h-4 w-4 text-primary" />{t.services}</h3>{services.length === 0 ? <p className="text-sm text-muted-foreground">{t.noServices}</p> : <div className="space-y-2">{services.map((s) => <div key={s.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0"><span className="text-sm text-foreground">{s.name}</span><div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">{s.duration_minutes} {t.minutes}</span><Badge variant="secondary" className="text-xs font-bold">{s.price} ?.?</Badge></div></div>)}</div>}</CardContent></Card>
+            <Card><CardContent className="pt-4 pb-3"><h3 className="font-semibold text-foreground flex items-center gap-1.5 mb-3"><Wrench className="h-4 w-4 text-primary" />{t.services}</h3>{services.length === 0 ? <p className="text-sm text-muted-foreground">{t.noServices}</p> : <div className="space-y-2">{services.map((s) => <div key={s.id} className="flex items-center justify-between py-1.5 border-b border-border last:border-0"><span className="text-sm text-foreground">{s.name}</span><div className="flex items-center gap-2">{s.service_types?.name && <span className="text-xs text-muted-foreground">{s.service_types.name}</span>}<Badge variant="secondary" className="text-xs font-bold">{s.price} ?.?</Badge></div></div>)}</div>}</CardContent></Card>
 
             {station.scheduling_type === "slots" && <Card><CardContent className="pt-4 pb-3"><h3 className="font-semibold text-foreground flex items-center gap-1.5 mb-3"><CalendarCheck className="h-4 w-4 text-primary" />{t.availableToday}</h3>{loadingSlots ? <p className="text-sm text-muted-foreground">{t.loading}</p> : availableSlots.length === 0 ? <p className="text-sm text-muted-foreground">{t.noSlots}</p> : <div className="flex flex-wrap gap-2">{availableSlots.map((slot) => <Badge key={slot} variant="outline" className="px-3 py-1.5 text-sm font-mono">{slot}</Badge>)}</div>}</CardContent></Card>}
             {station.scheduling_type === "instant" && <Card><CardContent className="pt-4 pb-3"><h3 className="font-semibold text-foreground flex items-center gap-1.5 mb-3"><CalendarCheck className="h-4 w-4 text-primary" />{t.booking}</h3><p className="text-sm text-muted-foreground">{t.instantText}</p></CardContent></Card>}
