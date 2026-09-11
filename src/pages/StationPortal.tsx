@@ -489,7 +489,7 @@ const texts = {
   },
 } as const;
 
-type PortalTexts = typeof texts.ar;
+type PortalTexts = { [K in keyof typeof texts.ar]: string };
 
 type ChatThreadRow = { id: string; kind: "direct" | "group"; title: string };
 type ChatMessageRow = {
