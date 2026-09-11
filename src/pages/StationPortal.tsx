@@ -987,7 +987,7 @@ const StationServicesTab = ({ stationId, t }: { stationId: string; t: PortalText
     stationServices.find((row) => row.name === catalogService.name);
 
   const validateEdit = (catalogService: any) => {
-    const edit = edits[catalogService.id] || {};
+    const edit: any = edits[catalogService.id] || {};
     const price = Number(edit.price ?? catalogService.price ?? 0);
     if (!Number.isFinite(price) || price < 0) {
       toast({ title: "أدخل سعراً صحيحاً", variant: "destructive" });
