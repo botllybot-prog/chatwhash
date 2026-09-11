@@ -1,3 +1,10 @@
+type StationCategoryOption = {
+  readonly value: string;
+  readonly label: string;
+  readonly alwaysVisible?: boolean;
+  readonly settingKey?: string;
+};
+
 export const STATION_CATEGORY_OPTIONS = [
   { value: "car_wash", label: "\u063a\u0633\u0644 \u0633\u064a\u0627\u0631\u0627\u062a", alwaysVisible: true },
   { value: "delivery_wash", label: "\u063a\u0633\u0644 \u062f\u0644\u0641\u0631\u064a", settingKey: "STATION_CATEGORY_DELIVERY_WASH_ENABLED" },
