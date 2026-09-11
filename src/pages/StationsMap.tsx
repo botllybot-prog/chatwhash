@@ -770,7 +770,7 @@ function StationCard({
   const [bookingResult, setBookingResult] = useState<BookingResult | null>(null);
   const [spinResult, setSpinResult] = useState<SpinResult | null>(null);
   const [spinRotation, setSpinRotation] = useState(0);
-  const [spinHint, setSpinHint] = useState(t.wheelHintDefault);
+  const [spinHint, setSpinHint] = useState<string>(t.wheelHintDefault);
   const [needsRespin, setNeedsRespin] = useState(false);
   const customerSession = getCustomerSession();
 
