@@ -740,11 +740,13 @@ function StepHeader({
 
 function StationCard({
   station,
+  stationTypeName,
   onClose,
   language,
   onBookingCreated,
 }: {
   station: Station;
+  stationTypeName?: string;
   onClose: () => void;
   language: Language;
   onBookingCreated?: (tracked: TrackedBooking, customerPhone: string) => void;
@@ -1177,6 +1179,7 @@ function StationCard({
               {station.working_hours_start.substring(0, 5)} - {station.working_hours_end.substring(0, 5)}
             </Badge>
             <Badge variant="secondary">{t.schedulingLabels[station.scheduling_type]}</Badge>
+            {stationTypeName && <Badge variant="outline">{stationTypeName}</Badge>}
           </div>
 
           {station.latitude && station.longitude && (
@@ -1504,7 +1507,7 @@ const buildStationPinIcon = (color: string): google.maps.Icon => ({
 
 const StationsMap = () => {
   const [stations, setStations] = useState<Station[]>([]);
-  const [stationTypeColors, setStationTypeColors] = useState<Record<string, string>>({});
+  const [stationTypes, setStationTypes] = useState<Record<string, { name: string; pin_color: string }>>({});
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [map, setMap] = useState<google.maps.Map | null>(null);
@@ -1800,12 +1803,15 @@ const StationsMap = () => {
           .eq("is_active", true)
           .not("latitude", "is", null)
           .not("longitude", "is", null),
-        (supabase as any).from("station_types").select("id, pin_color"),
+        (supabase as any).from("station_types").select("id, name, pin_color"),
       ]);
 
-      setStationTypeColors(
+      setStationTypes(
         Object.fromEntries(
-          ((typesResult.data || []) as { id: string; pin_color: string }[]).map((type) => [type.id, type.pin_color]),
+          ((typesResult.data || []) as { id: string; name: string; pin_color: string }[]).map((type) => [
+            type.id,
+            { name: type.name, pin_color: type.pin_color },
+          ]),
         ),
       );
 
@@ -2284,7 +2290,7 @@ const StationsMap = () => {
                           position={{ lat: station.latitude!, lng: station.longitude! }}
                           onClick={() => handleMarkerClick(station)}
                           icon={buildStationPinIcon(
-                            (station.station_type_id && stationTypeColors[station.station_type_id]) ||
+                            (station.station_type_id && stationTypes[station.station_type_id]?.pin_color) ||
                               DEFAULT_STATION_PIN_COLOR,
                           )}
                         />
@@ -2582,6 +2588,7 @@ const StationsMap = () => {
       {selectedStation && (
         <StationCard
           station={selectedStation}
+          stationTypeName={selectedStation.station_type_id ? stationTypes[selectedStation.station_type_id]?.name : undefined}
           onClose={() => setSelectedStation(null)}
           language={language}
           onBookingCreated={(tracked, customerPhone) => {
