@@ -1,6 +1,6 @@
 # Washlly Website API Documentation
 
-Last updated: 2026-08-21
+Last updated: 2026-09-13
 
 ## Overview
 
@@ -645,7 +645,7 @@ Rules:
 Customer↔station-owner chat, plus admin-curated group threads mixing owners and customers. Two thread kinds:
 
 - **`direct`** — auto-created the first time a customer messages a station (no booking required). Members are the customer plus every current `station_owners` row for that station, kept in sync automatically if owners are added or removed later.
-- **`group`** — created and membership-managed only by admins (via the `/app/admin/chat-groups` dashboard page, not a public API). Can mix any station owners and any customers. Full two-way messaging for every member.
+- **`group`** — created and membership-managed only by admins (via the `/app/admin/chat-groups` dashboard page, not a public API). Can mix any station owners and any customers. Full two-way messaging for every member. Every new customer (first `customer_profiles` row, written by `customer-login-by-phone` on first completed login) is auto-joined to every existing group thread by a database trigger; returning customers are left alone since that trigger only fires on insert.
 
 Underlying tables: `chat_threads`, `chat_thread_members`, `chat_messages`. Owners/admins read and send messages via direct Supabase queries (RLS-scoped to their memberships) with Realtime `postgres_changes` subscriptions; customers use the functions below with the same session-token pattern as the rest of the customer API, and poll for updates.
 
@@ -840,6 +840,32 @@ Same auth as upload; the thread id embedded in the key is used to check membersh
 ### `notify-on-chat-message`
 
 Internal only — not called directly by clients. A database trigger (`trg_notify_chat_message_edge_function`, fires on every `chat_messages` insert) calls this function, mirroring `notify-on-booking-change`. It notifies every thread member except the sender: owners get a `notifications` row plus FCM push (`role: "owner"`), customers get a `customer_notifications` row plus FCM push (`role: "customer"`).
+
+### `cleanup-chat-media`
+
+Internal only — not called directly by clients. A `pg_cron` schedule (`cleanup-chat-messages-daily`, `0 21 * * *` UTC = midnight Baghdad time) calls this function nightly to wipe all chat data, keeping the chat system from accumulating data indefinitely.
+
+```http
+POST /functions/v1/cleanup-chat-media
+```
+
+Behavior:
+
+- Reads every `chat_messages.media_key`, then deletes each stored file via `DELETE /api/chat-media/<key>` (chat media lives in Netlify Blobs, not Postgres, so it can't be dropped by a plain SQL delete).
+- Deletes every `chat_messages` row.
+- Resets `chat_threads.last_message_at` to `null` for every thread.
+- Deletes owner-side `notifications` rows with `type = 'chat'` and customer-side `customer_notifications` rows produced by chat messages.
+
+Success:
+
+```json
+{
+  "success": true,
+  "messagesDeleted": 42,
+  "mediaDeleted": 10,
+  "mediaFailed": 0
+}
+```
 
 ## Booking Creation APIs
 
@@ -1445,6 +1471,7 @@ npx supabase functions deploy customer-send-chat-message
 npx supabase functions deploy customer-list-chat-threads
 npx supabase functions deploy customer-get-chat-messages
 npx supabase functions deploy notify-on-chat-message
+npx supabase functions deploy cleanup-chat-media
 ```
 
 The chat feature also requires the `SUPABASE_SERVICE_ROLE_KEY` Netlify site environment variable (in addition to `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY`) so `chat-media.ts` can validate customer sessions — see the note under "Deployment" above.

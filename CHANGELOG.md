@@ -5,6 +5,25 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-09-12] - Station Type Badge on the Map
+
+- Added the station's type as a badge in the station card that opens when a customer taps a map pin, next to the working-hours and scheduling-type badges.
+
+## [2026-09-11] - Station and Service Types
+
+- Added an admin-managed "station types" table with a name and pin color per type, so each station can be assigned a type and its map pin renders in that type's color instead of one fixed color for every station. Managed from a new `/app/admin/station-types` page.
+- Replaced the per-service duration field with an admin-managed "service types" table, so services are now categorized by type (for example wash, maintenance, or oil change) instead of tracked by a duration that was never actually used for scheduling. Managed from a new `/app/admin/service-types` page.
+- Updated every screen that showed service duration — the map booking flow, station detail sheet, owner portal service list, and the owner/employee onboarding forms — to show the service's type instead.
+- New customers are now automatically added to every existing group chat thread the first time they log in.
+
+## [2026-08-28] - Nightly Chat Cleanup
+
+- Added a nightly job, running at midnight Baghdad time, that clears all chat messages, their related notifications, and their uploaded media files, keeping the chat system from accumulating data indefinitely.
+
+## [2026-08-23] - Text Encoding Fixes
+
+- Fixed Arabic, Kurdish, and Turkish text on the admin reports, notifications, and bot customers pages showing as "?" instead of the correct characters, caused by a file encoding issue introduced in an earlier update.
+
 ## [2026-08-21] - Chat Sender Names and Mobile Media Fix
 
 - Added a `sender_name` field to chat messages, populated automatically from the sender's saved profile (customer name or station owner name) so group threads with multiple owners/customers show who sent each message instead of just a phone number or user id.
