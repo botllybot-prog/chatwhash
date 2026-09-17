@@ -1,6 +1,6 @@
 # Washlly Website API Documentation
 
-Last updated: 2026-09-13
+Last updated: 2026-09-15
 
 ## Overview
 
@@ -46,6 +46,7 @@ Authorization: Bearer <USER_ACCESS_TOKEN or SUPABASE_ANON_KEY>
 | `/map` | Customer portal, inbox, quick booking, regular booking, map, install button |
 | `/customer-login` | Direct customer login with name/phone |
 | `/stations-list` | Public station list |
+| `/top-picks` | Top searched/boosted stations and services |
 | `/owner` | Owner registration/login |
 | `/login` | Admin/employee/station owner login |
 | `/app/*` | Protected admin/owner/employee app |
@@ -141,6 +142,96 @@ Example response:
   ]
 }
 ```
+
+## Search Tracking and Top Picks API
+
+Tracks what customers search for (stations and services) and exposes an aggregated "Top Picks" view for a customer-facing discovery page. Since customers have no Supabase Auth session and `search_events` has no public RLS policies, both writes and reads go through Edge Functions using the service role — the same trust boundary as `device_tokens`.
+
+### `log-search-event`
+
+Records one search. Called fire-and-forget by the website whenever a customer's debounced search settles on a match, so it never blocks the search UI.
+
+```http
+POST /functions/v1/log-search-event
+```
+
+Request:
+
+```json
+{
+  "search_type": "station",
+  "query": "erbil",
+  "station_id": "uuid",
+  "service_id": null,
+  "customer_phone": "9647736635435"
+}
+```
+
+- `search_type`: `station` or `service`.
+- `query`: trimmed search text, minimum 2 characters (shorter values return `400`), capped at 100 characters.
+- `station_id` / `service_id`: optional, the matched record for the search (whichever applies to `search_type`).
+- `customer_phone`: optional, the signed-in customer's phone if available.
+
+Success:
+
+```json
+{ "success": true }
+```
+
+### `get-top-picks`
+
+Returns the top stations and services, ranked with boosted items pinned first (by `boost_priority`, admin-controlled), then the rest ordered by search volume over the last 30 days. Proxied on the website as:
+
+```http
+GET /api/v1/top-picks?limit=10
+```
+
+Query parameters:
+
+- `limit` (optional): max items per list, default `10`, max `50`.
+
+Success:
+
+```json
+{
+  "success": true,
+  "stations": [
+    {
+      "id": "uuid",
+      "name": "Washlly",
+      "address": "Erbil",
+      "category": "car_wash",
+      "image_url": null,
+      "rating_average": 4.8,
+      "rating_count": 12,
+      "is_boosted": true,
+      "search_count": 34
+    }
+  ],
+  "services": [
+    {
+      "id": "uuid",
+      "name": "General wash",
+      "price": 8000,
+      "station_id": "uuid",
+      "station_name": "Washlly",
+      "is_boosted": false,
+      "search_count": 21
+    }
+  ]
+}
+```
+
+### Boosting stations and services
+
+Admins can manually feature a station or service so it appears first on the Top Picks page regardless of organic search volume, via `stations.is_boosted` / `stations.boost_priority` and `services.is_boosted` / `services.boost_priority` (covered by the existing admin-only RLS policies on those tables — no separate policy needed).
+
+- **Stations**: `/app/admin/stations` → edit (or add) a station → "محطة مميّزة (Boost)" toggle plus a "أولوية الظهور" priority number once enabled.
+- **Services**: `/app/admin/services` → edit (or add) a service → "Boosted service" toggle plus a "Boost priority" number once enabled.
+
+A boosted row shows an amber "Featured" badge in both the admin tables and the customer-facing Top Picks page. Among boosted items, higher `boost_priority` ranks first; unboosted items fill the remaining slots ordered by `search_count`.
+
+Both `log-search-event` and `get-top-picks` are called by anonymous/unauthenticated customers, so `supabase/config.toml` sets `verify_jwt = false` for both (same as `get-offers`) — without it every call returns `401 UNAUTHORIZED_NO_AUTH_HEADER` since customers carry no Supabase Auth JWT.
 
 ## Push Notifications (FCM)
 
@@ -1310,8 +1401,9 @@ curl "https://yhklvtzonvgzkodysawu.supabase.co/rest/v1/stations?select=id,name,r
 
 | Table | Purpose |
 | --- | --- |
-| `stations` | Station profile, location, working hours, category, active status, rating summary |
-| `services` | Station services, prices, service types |
+| `stations` | Station profile, location, working hours, category, active status, rating summary, boost |
+| `services` | Station services, prices, service types, boost |
+| `search_events` | Logged customer searches (station/service, query, matched record), source data for Top Picks |
 | `service_types` | Lookup table categorizing services (id, name) |
 | `station_types` | Lookup table categorizing stations for map pin colors (id, name, pin_color) |
 | `bookings` | Regular and quick booking rows, statuses, ratings |
@@ -1467,6 +1559,8 @@ npx supabase functions deploy cancel-map-booking
 npx supabase functions deploy cancel-all-map-bookings
 npx supabase functions deploy spin-booking-discount
 npx supabase functions deploy get-offers
+npx supabase functions deploy log-search-event
+npx supabase functions deploy get-top-picks
 npx supabase functions deploy customer-send-chat-message
 npx supabase functions deploy customer-list-chat-threads
 npx supabase functions deploy customer-get-chat-messages

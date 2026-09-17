@@ -1058,6 +1058,51 @@ export type Database = {
           },
         ]
       }
+      search_events: {
+        Row: {
+          created_at: string
+          customer_phone: string | null
+          id: string
+          query: string
+          search_type: string
+          service_id: string | null
+          station_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_phone?: string | null
+          id?: string
+          query: string
+          search_type: string
+          service_id?: string | null
+          station_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_phone?: string | null
+          id?: string
+          query?: string
+          search_type?: string
+          service_id?: string | null
+          station_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "search_events_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "search_events_station_id_fkey"
+            columns: ["station_id"]
+            isOneToOne: false
+            referencedRelation: "stations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_types: {
         Row: {
           created_at: string
@@ -1078,10 +1123,12 @@ export type Database = {
       }
       services: {
         Row: {
+          boost_priority: number
           created_at: string
           customer_discount: string | null
           id: string
           is_active: boolean
+          is_boosted: boolean
           name: string
           price: number
           service_type_id: string | null
@@ -1089,10 +1136,12 @@ export type Database = {
           station_id: string | null
         }
         Insert: {
+          boost_priority?: number
           created_at?: string
           customer_discount?: string | null
           id?: string
           is_active?: boolean
+          is_boosted?: boolean
           name: string
           price?: number
           service_type_id?: string | null
@@ -1100,10 +1149,12 @@ export type Database = {
           station_id?: string | null
         }
         Update: {
+          boost_priority?: number
           created_at?: string
           customer_discount?: string | null
           id?: string
           is_active?: boolean
+          is_boosted?: boolean
           name?: string
           price?: number
           service_type_id?: string | null
@@ -1201,6 +1252,7 @@ export type Database = {
       stations: {
         Row: {
           address: string | null
+          boost_priority: number
           category: string
           commission_rate: number
           created_at: string
@@ -1209,6 +1261,7 @@ export type Database = {
           id: string
           image_url: string | null
           is_active: boolean
+          is_boosted: boolean
           latitude: number | null
           longitude: number | null
           name: string
@@ -1224,6 +1277,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          boost_priority?: number
           category?: string
           commission_rate?: number
           created_at?: string
@@ -1232,6 +1286,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          is_boosted?: boolean
           latitude?: number | null
           longitude?: number | null
           name: string
@@ -1247,6 +1302,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          boost_priority?: number
           category?: string
           commission_rate?: number
           created_at?: string
@@ -1255,6 +1311,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          is_boosted?: boolean
           latitude?: number | null
           longitude?: number | null
           name?: string

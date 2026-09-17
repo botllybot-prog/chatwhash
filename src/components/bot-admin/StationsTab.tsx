@@ -30,6 +30,8 @@ interface StationForm {
   latitude: number | null;
   longitude: number | null;
   image_url: string | null;
+  is_boosted: boolean;
+  boost_priority: number;
 }
 
 const defaultForm: StationForm = {
@@ -46,6 +48,8 @@ const defaultForm: StationForm = {
   latitude: 36.191,
   longitude: 44.009,
   image_url: null,
+  is_boosted: false,
+  boost_priority: 0,
 };
 
 const ERBIL_CENTER = { lat: 36.191, lng: 44.009 };
@@ -61,7 +65,30 @@ const StationsTab = () => {
   const [form, setForm] = useState<StationForm>({ ...defaultForm });
   const [uploading, setUploading] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [stationServices, setStationServices] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadStationServices = useCallback(async (stationId: string) => {
+    const { data } = await supabase
+      .from("services")
+      .select("id, name, is_active, is_boosted, boost_priority")
+      .eq("station_id", stationId)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+    setStationServices(data || []);
+  }, []);
+
+  const toggleServiceBoost = async (serviceId: string, isBoosted: boolean) => {
+    const { error } = await supabase.from("services").update({ is_boosted: isBoosted }).eq("id", serviceId);
+    if (error) { toast({ title: "فشل التحديث", description: error.message, variant: "destructive" }); return; }
+    setStationServices((prev) => prev.map((svc) => (svc.id === serviceId ? { ...svc, is_boosted: isBoosted } : svc)));
+  };
+
+  const setServiceBoostPriority = async (serviceId: string, priority: number) => {
+    setStationServices((prev) => prev.map((svc) => (svc.id === serviceId ? { ...svc, boost_priority: priority } : svc)));
+    const { error } = await supabase.from("services").update({ boost_priority: priority }).eq("id", serviceId);
+    if (error) toast({ title: "فشل التحديث", description: error.message, variant: "destructive" });
+  };
 
   const stationTypeById = new Map(stationTypes.map((type) => [type.id, type]));
 
@@ -132,6 +159,8 @@ const StationsTab = () => {
       latitude: form.latitude,
       longitude: form.longitude,
       image_url: form.image_url,
+      is_boosted: form.is_boosted,
+      boost_priority: Number(form.boost_priority) || 0,
     };
     if (editing) {
       const { error } = await supabase.from("stations").update(payload).eq("id", editing.id);
@@ -170,13 +199,17 @@ const StationsTab = () => {
       latitude: s.latitude || ERBIL_CENTER.lat,
       longitude: s.longitude || ERBIL_CENTER.lng,
       image_url: s.image_url || null,
+      is_boosted: s.is_boosted || false,
+      boost_priority: s.boost_priority || 0,
     });
     setDialogOpen(true);
+    void loadStationServices(s.id);
   };
 
   const resetForm = () => {
     setEditing(null);
     setForm({ ...defaultForm });
+    setStationServices([]);
   };
 
   const schedulingLabels: Record<string, string> = { slots: "فترات ثابتة", instant: "حجز فوري", daily: "يومي" };
@@ -325,6 +358,51 @@ const StationsTab = () => {
                   <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
                   <Label>مفعّلة</Label>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={form.is_boosted} onCheckedChange={(v) => setForm({ ...form, is_boosted: v })} />
+                  <Label>تمييز المحطة (لظهورها في "أفضل المحطات")</Label>
+                </div>
+                {form.is_boosted && (
+                  <div><Label>أولوية ظهور المحطة</Label><Input type="number" value={form.boost_priority} onChange={(e) => setForm({ ...form, boost_priority: Number(e.target.value) })} /></div>
+                )}
+
+                {editing && (
+                  <div className="space-y-2 rounded-lg border border-border p-3">
+                    <Label className="text-sm font-semibold">تمييز خدمات هذه المحطة (Boost)</Label>
+                    <p className="text-xs text-muted-foreground">
+                      لظهور خدمة في "الأكثر بحثاً" بالأولوية، فعّل التمييز على الخدمة نفسها هنا — لا على المحطة.
+                    </p>
+                    {stationServices.length === 0 ? (
+                      <p className="py-2 text-center text-xs text-muted-foreground">لا توجد خدمات لهذه المحطة</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {stationServices.map((svc) => (
+                          <div key={svc.id} className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1.5">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="truncate text-sm">{svc.name}</span>
+                                {!svc.is_active && <Badge variant="outline" className="text-[10px]">معطلة</Badge>}
+                              </div>
+                            </div>
+                            {svc.is_boosted && (
+                              <Input
+                                type="number"
+                                value={svc.boost_priority}
+                                onChange={(e) => setServiceBoostPriority(svc.id, Number(e.target.value))}
+                                className="h-7 w-16 text-xs"
+                              />
+                            )}
+                            <Switch
+                              checked={svc.is_boosted}
+                              onCheckedChange={(v) => toggleServiceBoost(svc.id, v)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <Button onClick={handleSave} className="w-full">{editing ? "تحديث" : "إضافة"}</Button>
               </div>
             </ScrollArea>
@@ -358,7 +436,12 @@ const StationsTab = () => {
                   </div>
                 )}
               </TableCell>
-              <TableCell className="font-medium">{s.name}</TableCell>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-1.5">
+                  {s.name}
+                  {s.is_boosted && <Badge className="bg-amber-500 text-white hover:bg-amber-500">مميّزة</Badge>}
+                </div>
+              </TableCell>
               <TableCell><Badge variant="outline">{getStationCategoryLabel(s.category)}</Badge></TableCell>
               <TableCell>
                 {stationTypeById.get(s.station_type_id) ? (

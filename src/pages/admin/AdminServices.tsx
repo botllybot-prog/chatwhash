@@ -12,8 +12,6 @@ import { toast } from "@/hooks/use-toast";
 import { Globe, Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import { useAppLanguage } from "@/lib/language";
 
-const NO_SERVICE_TYPE = "__none";
-
 const emptyForm = {
   name: "",
   price: 0,
@@ -22,6 +20,8 @@ const emptyForm = {
   is_active: true,
   sort_order: 0,
   customer_discount: "",
+  is_boosted: false,
+  boost_priority: 0,
 };
 
 const texts = {
@@ -44,12 +44,15 @@ const texts = {
     price: "السعر (د.ع)",
     serviceType: "نوع الخدمة",
     chooseServiceType: "اختر نوع الخدمة",
-    noServiceType: "بدون نوع",
     customerDiscount: "خصم العميل",
     activeService: "تفعيل الخدمة",
+    boosted: "خدمة مميّزة (Boost)",
+    boostPriority: "أولوية الظهور",
+    featured: "مميّزة",
     update: "تحديث",
     cancel: "إلغاء",
     serviceRequired: "اسم الخدمة مطلوب",
+    serviceTypeRequired: "نوع الخدمة مطلوب",
     error: "حدث خطأ",
     updated: "تم تحديث الخدمة",
     added: "تمت إضافة الخدمة",
@@ -79,12 +82,15 @@ const texts = {
     price: "Price (IQD)",
     serviceType: "Service type",
     chooseServiceType: "Choose service type",
-    noServiceType: "No type",
     customerDiscount: "Customer discount",
     activeService: "Enable service",
+    boosted: "Boosted service",
+    boostPriority: "Boost priority",
+    featured: "Featured",
     update: "Update",
     cancel: "Cancel",
     serviceRequired: "Service name is required",
+    serviceTypeRequired: "Service type is required",
     error: "An error occurred",
     updated: "Service updated",
     added: "Service added",
@@ -114,12 +120,15 @@ const texts = {
     price: "نرخ (د.ع)",
     serviceType: "جۆری خزمەتگوزاری",
     chooseServiceType: "جۆری خزمەتگوزاری هەڵبژێرە",
-    noServiceType: "بێ جۆر",
     customerDiscount: "داشکاندنی کڕیار",
     activeService: "چالاککردنی خزمەتگوزاری",
+    boosted: "خزمەتگوزاریی تایبەت (Boost)",
+    boostPriority: "پێشینەیی دەرکەوتن",
+    featured: "تایبەت",
     update: "نوێکردنەوە",
     cancel: "هەڵوەشاندنەوە",
     serviceRequired: "ناوی خزمەتگوزاری پێویستە",
+    serviceTypeRequired: "جۆری خزمەتگوزاری پێویستە",
     error: "هەڵەیەک ڕوویدا",
     updated: "خزمەتگوزاری نوێکرایەوە",
     added: "خزمەتگوزاری زیادکرا",
@@ -149,12 +158,15 @@ const texts = {
     price: "Fiyat (IQD)",
     serviceType: "Hizmet türü",
     chooseServiceType: "Hizmet türü seçin",
-    noServiceType: "Türsüz",
     customerDiscount: "Müşteri indirimi",
     activeService: "Hizmeti etkinleştir",
+    boosted: "Öne çıkan hizmet",
+    boostPriority: "Öne çıkarma önceliği",
+    featured: "Öne çıkan",
     update: "Güncelle",
     cancel: "İptal",
     serviceRequired: "Hizmet adı gerekli",
+    serviceTypeRequired: "Hizmet türü gerekli",
     error: "Bir hata oluştu",
     updated: "Hizmet güncellendi",
     added: "Hizmet eklendi",
@@ -210,6 +222,8 @@ const AdminServices = () => {
       is_active: service.is_active,
       sort_order: service.sort_order,
       customer_discount: "",
+      is_boosted: service.is_boosted || false,
+      boost_priority: service.boost_priority || 0,
     });
     setDialogOpen(true);
   };
@@ -226,6 +240,11 @@ const AdminServices = () => {
       return;
     }
 
+    if (!form.service_type_id) {
+      toast({ title: t.serviceTypeRequired, variant: "destructive" });
+      return;
+    }
+
     const payload = {
       name: form.name.trim(),
       station_id: null,
@@ -234,6 +253,8 @@ const AdminServices = () => {
       is_active: form.is_active,
       sort_order: Number(form.sort_order),
       customer_discount: null,
+      is_boosted: form.is_boosted,
+      boost_priority: Number(form.boost_priority) || 0,
     };
 
     const wasEditing = editing;
@@ -271,6 +292,9 @@ const AdminServices = () => {
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">{service.name}</span>
             {!service.is_active && <Badge variant="outline" className="text-xs">{t.disabled}</Badge>}
+            {service.is_boosted && (
+              <Badge className="bg-amber-500 text-xs text-white hover:bg-amber-500">{t.featured}</Badge>
+            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span>{t.sharedForAll}</span>
@@ -339,14 +363,13 @@ const AdminServices = () => {
             </div>
 
             <div>
-              <Label>{t.serviceType}</Label>
+              <Label>{t.serviceType} <span className="text-destructive">*</span></Label>
               <Select
-                value={form.service_type_id || NO_SERVICE_TYPE}
-                onValueChange={(value) => setForm({ ...form, service_type_id: value === NO_SERVICE_TYPE ? null : value })}
+                value={form.service_type_id || undefined}
+                onValueChange={(value) => setForm({ ...form, service_type_id: value })}
               >
                 <SelectTrigger><SelectValue placeholder={t.chooseServiceType} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_SERVICE_TYPE}>{t.noServiceType}</SelectItem>
                   {serviceTypes.map((type) => (
                     <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
                   ))}
@@ -358,6 +381,22 @@ const AdminServices = () => {
               <Label className="cursor-pointer">{t.activeService}</Label>
               <Switch checked={form.is_active} onCheckedChange={(value) => setForm({ ...form, is_active: value })} />
             </div>
+
+            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+              <Label className="cursor-pointer">{t.boosted}</Label>
+              <Switch checked={form.is_boosted} onCheckedChange={(value) => setForm({ ...form, is_boosted: value })} />
+            </div>
+
+            {form.is_boosted && (
+              <div>
+                <Label>{t.boostPriority}</Label>
+                <Input
+                  type="number"
+                  value={form.boost_priority}
+                  onChange={(event) => setForm({ ...form, boost_priority: Number(event.target.value) })}
+                />
+              </div>
+            )}
 
             <div className="flex gap-2">
               <Button onClick={handleSave} className="flex-1">{editing ? t.update : t.add}</Button>

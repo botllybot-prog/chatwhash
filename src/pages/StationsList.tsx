@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, MapPin, Clock, Car } from "lucide-react";
 import StationDetailSheet from "@/components/StationDetailSheet";
 import { useAppLanguage } from "@/lib/language";
+import { logSearchEvent, useDebouncedValue } from "@/lib/searchLogging";
 
 interface Station {
   id: string;
@@ -19,6 +20,12 @@ interface Station {
   scheduling_type: string;
   slot_duration_minutes: number;
   is_active: boolean;
+}
+
+interface ServiceOption {
+  id: string;
+  name: string;
+  station_id: string | null;
 }
 
 function isStationOpen(station: Station): boolean {
@@ -68,31 +75,57 @@ const StationsList = () => {
   const { language, isRtl } = useAppLanguage();
   const t = texts[language];
   const [stations, setStations] = useState<Station[]>([]);
+  const [services, setServices] = useState<ServiceOption[]>([]);
   const [search, setSearch] = useState("");
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase
-      .from("stations")
-      .select("*")
-      .eq("is_active", true)
-      .then(({ data }) => {
-        if (data) setStations(data as Station[]);
-        setLoading(false);
-      });
+    Promise.all([
+      supabase.from("stations").select("*").eq("is_active", true),
+      supabase.from("services").select("id, name, station_id").eq("is_active", true),
+    ]).then(([stationsResult, servicesResult]) => {
+      if (stationsResult.data) setStations(stationsResult.data as Station[]);
+      if (servicesResult.data) setServices(servicesResult.data as ServiceOption[]);
+      setLoading(false);
+    });
   }, []);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return stations;
     const q = search.trim().toLowerCase();
+    const matchingServiceStationIds = new Set(
+      services.filter((svc) => svc.name.toLowerCase().includes(q) && svc.station_id).map((svc) => svc.station_id),
+    );
     return stations.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.address && s.address.toLowerCase().includes(q)) ||
+        (s.detailed_address && s.detailed_address.toLowerCase().includes(q)) ||
+        matchingServiceStationIds.has(s.id),
+    );
+  }, [search, stations, services]);
+
+  const debouncedSearch = useDebouncedValue(search, 500);
+  useEffect(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return;
+
+    const matchedService = services.find((svc) => svc.name.toLowerCase().includes(q));
+    const matchedStation = stations.find(
       (s) =>
         s.name.toLowerCase().includes(q) ||
         (s.address && s.address.toLowerCase().includes(q)) ||
         (s.detailed_address && s.detailed_address.toLowerCase().includes(q)),
     );
-  }, [search, stations]);
+
+    if (matchedStation) {
+      logSearchEvent({ searchType: "station", query: debouncedSearch, stationId: matchedStation.id });
+    } else if (matchedService) {
+      logSearchEvent({ searchType: "service", query: debouncedSearch, serviceId: matchedService.id });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch]);
 
   return (
     <div className="min-h-screen bg-background" dir={isRtl ? "rtl" : "ltr"}>

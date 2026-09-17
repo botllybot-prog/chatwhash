@@ -60,3 +60,9 @@ verify_jwt = false
 [functions.cleanup-chat-media]
 verify_jwt = false
 
+[functions.log-search-event]
+verify_jwt = false
+
+[functions.get-top-picks]
+verify_jwt = false
+

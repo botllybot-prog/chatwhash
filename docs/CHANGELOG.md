@@ -5,6 +5,18 @@ Format: `## [YYYY-MM-DD] — Title`
 
 ---
 
+## [2026-09-15] - Search Tracking, Top Picks Page & Manual Boost
+
+- Added the `search_events` table to log what customers search for (station or service, query text, matched record), RLS-locked with no client policies — only accessible through the service role inside Edge Functions, the same trust boundary as `device_tokens`.
+- Added `is_boosted` and `boost_priority` columns to `stations` and `services` so admins can manually feature a station or service ahead of organic popularity.
+- Added the `log-search-event` Edge Function: a fire-and-forget write called by the website whenever a customer's debounced search settles on a match, so logging never blocks or affects the search UI.
+- Added the `get-top-picks` Edge Function, proxied as `GET /api/v1/top-picks`, returning the top stations and services ranked with boosted items pinned first (by `boost_priority`), then the rest by 30-day search volume.
+- Set `verify_jwt = false` for both new functions since customers have no Supabase Auth session, matching the existing `get-offers` convention.
+- Extended the station search box on `/stations-list` and `/map` to also match service names offered by each station, logging the search as `station` or `service` depending on which matched.
+- Added the customer-facing `/top-picks` page ("Top Stations" and "Top Services" sections with a "Featured" badge on boosted items), linked from the "More" tab.
+- Added boost controls (toggle + priority number) to the admin station and service editors (`/app/admin/stations`, `/app/admin/services`), with a "Featured" badge in both admin tables.
+- Updated the API documentation with the new endpoints, tables, boost columns, and admin UI locations.
+
 ## [2026-06-14] - Firebase Cloud Messaging Backend
 
 - Added the `device_tokens` table for storing Android/iOS FCM tokens by customer or station owner phone number.

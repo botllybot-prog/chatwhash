@@ -17,6 +17,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/v1/top-picks"
+  to = "https://yhklvtzonvgzkodysawu.supabase.co/functions/v1/get-top-picks"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

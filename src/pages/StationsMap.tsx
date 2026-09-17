@@ -19,6 +19,7 @@ import { toast } from "@/components/ui/use-toast";
 import { useAppLanguage } from "@/lib/language";
 import InstallAppButton from "@/components/InstallAppButton";
 import { clearCustomerSession, getCustomerSession } from "@/lib/customerSession";
+import { logSearchEvent, useDebouncedValue } from "@/lib/searchLogging";
 import {
   Bell,
   CalendarCheck,
@@ -1507,6 +1508,7 @@ const buildStationPinIcon = (color: string): google.maps.Icon => ({
 
 const StationsMap = () => {
   const [stations, setStations] = useState<Station[]>([]);
+  const [allServices, setAllServices] = useState<{ id: string; name: string; station_id: string | null }[]>([]);
   const [stationTypes, setStationTypes] = useState<Record<string, { name: string; pin_color: string }>>({});
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1796,7 +1798,7 @@ const StationsMap = () => {
           .map(([stationId]) => stationId),
       );
 
-      const [{ data, error }, typesResult] = await Promise.all([
+      const [{ data, error }, typesResult, servicesResult] = await Promise.all([
         supabase
           .from("stations")
           .select("*")
@@ -1804,7 +1806,10 @@ const StationsMap = () => {
           .not("latitude", "is", null)
           .not("longitude", "is", null),
         (supabase as any).from("station_types").select("id, name, pin_color"),
+        supabase.from("services").select("id, name, station_id").eq("is_active", true),
       ]);
+
+      if (servicesResult.data) setAllServices(servicesResult.data);
 
       setStationTypes(
         Object.fromEntries(
@@ -1849,12 +1854,19 @@ const StationsMap = () => {
       return { ...station, distance };
     });
 
+    const matchingServiceStationIds = new Set(
+      query
+        ? allServices.filter((svc) => svc.name.toLowerCase().includes(query) && svc.station_id).map((svc) => svc.station_id)
+        : [],
+    );
+
     const matchingStations = query
       ? mappedStations.filter(
           (station) =>
             station.name.toLowerCase().includes(query) ||
             station.address?.toLowerCase().includes(query) ||
-            station.detailed_address?.toLowerCase().includes(query),
+            station.detailed_address?.toLowerCase().includes(query) ||
+            matchingServiceStationIds.has(station.id),
         )
       : mappedStations;
 
@@ -1864,7 +1876,28 @@ const StationsMap = () => {
       if (b.distance == null) return -1;
       return a.distance - b.distance;
     });
-  }, [searchQuery, stations, userLocation]);
+  }, [searchQuery, stations, userLocation, allServices]);
+
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 500);
+  useEffect(() => {
+    const q = debouncedSearchQuery.trim().toLowerCase();
+    if (!q) return;
+
+    const matchedService = allServices.find((svc) => svc.name.toLowerCase().includes(q));
+    const matchedStation = stations.find(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.address?.toLowerCase().includes(q) ||
+        s.detailed_address?.toLowerCase().includes(q),
+    );
+
+    if (matchedStation) {
+      logSearchEvent({ searchType: "station", query: debouncedSearchQuery, stationId: matchedStation.id });
+    } else if (matchedService) {
+      logSearchEvent({ searchType: "service", query: debouncedSearchQuery, serviceId: matchedService.id });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchQuery]);
 
   const handleMarkerClick = (station: Station) => {
     setSelectedStation(station);

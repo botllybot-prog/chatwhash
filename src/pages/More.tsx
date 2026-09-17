@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ChevronLeft, FileText, ShieldCheck, Smartphone } from "lucide-react";
+import { ChevronLeft, FileText, ShieldCheck, Smartphone, Sparkles } from "lucide-react";
 import InstallAppButton from "@/components/InstallAppButton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ const texts = {
     title: "المزيد",
     subtitle: "إعدادات وروابط مهمة لاستخدام واشلي.",
     install: "تثبيت التطبيق",
+    topPicks: "الأكثر بحثاً",
+    topPicksDesc: "أفضل المحطات والخدمات التي يبحث عنها العملاء.",
     privacy: "سياسة الخصوصية",
     privacyDesc: "كيف نحمي بيانات الزبائن وأصحاب المحطات داخل واشلي.",
     appInfo: "عن واشلي",
@@ -20,6 +22,8 @@ const texts = {
     title: "More",
     subtitle: "Important settings and links for using Washlly.",
     install: "Install app",
+    topPicks: "Top Picks",
+    topPicksDesc: "The top stations and services customers search for.",
     privacy: "Privacy Policy",
     privacyDesc: "How Washlly protects customer and station owner data.",
     appInfo: "About Washlly",
@@ -30,6 +34,8 @@ const texts = {
     title: "زیاتر",
     subtitle: "ڕێکخستن و بەستەری گرنگ بۆ بەکارهێنانی واشلی.",
     install: "دامەزراندنی ئەپ",
+    topPicks: "زۆرترین گەڕان",
+    topPicksDesc: "باشترین وێستگە و خزمەتگوزارییەکان کە کڕیاران بۆیان دەگەڕێن.",
     privacy: "سیاسەتی تایبەتمەندی",
     privacyDesc: "چۆن واشلی زانیاری کڕیار و خاوەنی وێستگە دەپارێزێت.",
     appInfo: "دەربارەی واشلی",
@@ -40,6 +46,8 @@ const texts = {
     title: "Daha fazla",
     subtitle: "Washlly kullanımı için önemli ayarlar ve bağlantılar.",
     install: "Uygulamayı yükle",
+    topPicks: "En Çok Aranan",
+    topPicksDesc: "Müşterilerin en çok aradığı istasyonlar ve hizmetler.",
     privacy: "Gizlilik Politikası",
     privacyDesc: "Washlly müşteri ve istasyon sahibi verilerini nasıl korur.",
     appInfo: "Washlly hakkında",
@@ -75,6 +83,25 @@ const More = () => {
               </div>
               <InstallAppButton />
             </div>
+
+            <Link
+              to="/top-picks"
+              className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background p-3 transition-colors hover:bg-blue-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-foreground">{t.topPicks}</h2>
+                  <p className="text-sm text-muted-foreground">{t.topPicksDesc}</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" className="gap-1">
+                {t.open}
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            </Link>
 
             <Link
               to="/privacy-policy"

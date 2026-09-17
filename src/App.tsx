@@ -13,6 +13,7 @@ import StationsList from "./pages/StationsList";
 import Conversations from "./pages/Conversations";
 import StationPortal from "./pages/StationPortal";
 import StationsMap from "./pages/StationsMap";
+import TopPicks from "./pages/TopPicks";
 import Login from "./pages/Login";
 import OwnerAccess from "./pages/OwnerAccess";
 import NotFound from "./pages/NotFound";
@@ -101,6 +102,7 @@ const App = () => (
             <Route element={<MobileLayout />}>
               <Route path="/" element={<LandingPage />} />
               <Route path="/stations-list" element={<StationsList />} />
+              <Route path="/top-picks" element={<TopPicks />} />
               <Route path="/map" element={<CustomerAuthGuard><StationsMap /></CustomerAuthGuard>} />
               <Route path="/chat" element={<CustomerAuthGuard><CustomerChat /></CustomerAuthGuard>} />
               <Route path="/more" element={<More />} />
