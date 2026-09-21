@@ -1493,7 +1493,13 @@ const extractFirstUrl = (value?: string | null) => {
 
 const DEFAULT_STATION_PIN_COLOR = "#ea4335";
 
-const buildStationPinIcon = (color: string): google.maps.Icon => ({
+const PIN_OVERLAP_WIDTH = 30;
+const PIN_OVERLAP_HEIGHT = 45;
+const PIN_SPREAD_ROW_SIZE = 6;
+const PIN_SPREAD_STEP_X = 40;
+const PIN_SPREAD_STEP_Y = 70;
+
+const buildStationPinIcon =(color: string): google.maps.Icon => ({
   url:
     "data:image/svg+xml;charset=UTF-8," +
     encodeURIComponent(
@@ -1513,6 +1519,7 @@ const StationsMap = () => {
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [mapZoom, setMapZoom] = useState<number | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showQuickBooking, setShowQuickBooking] = useState(false);
   const [quickCustomerName, setQuickCustomerName] = useState("");
@@ -1898,6 +1905,67 @@ const StationsMap = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchQuery]);
+
+  useEffect(() => {
+    if (!map) return;
+    const syncZoom = () => setMapZoom(map.getZoom() ?? null);
+    const listeners = [map.addListener("idle", syncZoom), map.addListener("projection_changed", syncZoom)];
+    if (map.getProjection()) syncZoom();
+    return () => listeners.forEach((listener) => listener.remove());
+  }, [map]);
+
+  // Stations whose pins would overlap on screen are fanned out into a row so each one stays clickable.
+  const displayPositions = useMemo(() => {
+    const positions = new Map<string, google.maps.LatLngLiteral>();
+    const projection = map?.getProjection();
+    const withCoords = filteredStations.filter((station) => station.latitude && station.longitude);
+
+    if (!projection || !mapZoom) {
+      withCoords.forEach((station) =>
+        positions.set(station.id, { lat: station.latitude!, lng: station.longitude! }),
+      );
+      return positions;
+    }
+
+    const scale = 2 ** mapZoom;
+    const groups: { anchor: google.maps.Point; members: Station[] }[] = [];
+
+    withCoords.forEach((station) => {
+      const world = projection.fromLatLngToPoint(new google.maps.LatLng(station.latitude!, station.longitude!));
+      if (!world) return;
+      const point = new google.maps.Point(world.x * scale, world.y * scale);
+      const group = groups.find(
+        (candidate) =>
+          Math.abs(candidate.anchor.x - point.x) < PIN_OVERLAP_WIDTH && Math.abs(candidate.anchor.y - point.y) < PIN_OVERLAP_HEIGHT,
+      );
+      if (group) group.members.push(station);
+      else groups.push({ anchor: point, members: [station] });
+    });
+
+    groups.forEach(({ anchor, members }) => {
+      if (members.length === 1) {
+        positions.set(members[0].id, { lat: members[0].latitude!, lng: members[0].longitude! });
+        return;
+      }
+
+      members.forEach((station, index) => {
+        const row = Math.floor(index / PIN_SPREAD_ROW_SIZE);
+        const rowSize = Math.min(PIN_SPREAD_ROW_SIZE, members.length - row * PIN_SPREAD_ROW_SIZE);
+        const column = index % PIN_SPREAD_ROW_SIZE;
+        const dx = (column - (rowSize - 1) / 2) * PIN_SPREAD_STEP_X;
+        const dy = row * PIN_SPREAD_STEP_Y;
+        const latLng = projection.fromPointToLatLng(
+          new google.maps.Point((anchor.x + dx) / scale, (anchor.y + dy) / scale),
+        );
+        positions.set(
+          station.id,
+          latLng ? { lat: latLng.lat(), lng: latLng.lng() } : { lat: station.latitude!, lng: station.longitude! },
+        );
+      });
+    });
+
+    return positions;
+  }, [filteredStations, map, mapZoom]);
 
   const handleMarkerClick = (station: Station) => {
     setSelectedStation(station);
@@ -2316,11 +2384,15 @@ const StationsMap = () => {
                     const ratingAverage = Number(station.rating_average || 0);
                     const ratingCount = Number(station.rating_count || 0);
                     const hasRating = ratingCount > 0 && ratingAverage > 0;
+                    const position = displayPositions.get(station.id) ?? {
+                      lat: station.latitude!,
+                      lng: station.longitude!,
+                    };
 
                     return (
                       <Fragment key={station.id}>
                         <Marker
-                          position={{ lat: station.latitude!, lng: station.longitude! }}
+                          position={position}
                           onClick={() => handleMarkerClick(station)}
                           icon={buildStationPinIcon(
                             (station.station_type_id && stationTypes[station.station_type_id]?.pin_color) ||
@@ -2329,7 +2401,7 @@ const StationsMap = () => {
                         />
                         {hasRating && (
                           <OverlayView
-                            position={{ lat: station.latitude!, lng: station.longitude! }}
+                            position={position}
                             mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
                           >
                             <button
