@@ -1493,11 +1493,30 @@ const extractFirstUrl = (value?: string | null) => {
 
 const DEFAULT_STATION_PIN_COLOR = "#ea4335";
 
-const PIN_OVERLAP_WIDTH = 30;
-const PIN_OVERLAP_HEIGHT = 45;
-const PIN_SPREAD_ROW_SIZE = 6;
-const PIN_SPREAD_STEP_X = 40;
-const PIN_SPREAD_STEP_Y = 70;
+// Stations closer than this on screen (pin plus the rating badge above it) are merged into one cluster marker.
+const CLUSTER_DISTANCE_X = 48;
+const CLUSTER_DISTANCE_Y = 78;
+// At or beyond this zoom a cluster is not zoomed into further; it opens a station picker instead.
+const CLUSTER_MAX_ZOOM = 18;
+
+type StationCluster = {
+  key: string;
+  members: Station[];
+  position: google.maps.LatLngLiteral;
+};
+
+const buildClusterIcon = (count: number): google.maps.Icon => ({
+  url:
+    "data:image/svg+xml;charset=UTF-8," +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">` +
+        `<circle cx="22" cy="22" r="20" fill="#2563eb" stroke="#ffffff" stroke-width="3"/>` +
+        `<text x="22" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff">${count}</text>` +
+        `</svg>`,
+    ),
+  scaledSize: new google.maps.Size(44, 44),
+  anchor: new google.maps.Point(22, 22),
+});
 
 const buildStationPinIcon =(color: string): google.maps.Icon => ({
   url:
@@ -1520,6 +1539,7 @@ const StationsMap = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [mapZoom, setMapZoom] = useState<number | null>(null);
+  const [clusterPicker, setClusterPicker] = useState<StationCluster | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [showQuickBooking, setShowQuickBooking] = useState(false);
   const [quickCustomerName, setQuickCustomerName] = useState("");
@@ -1909,22 +1929,22 @@ const StationsMap = () => {
   useEffect(() => {
     if (!map) return;
     const syncZoom = () => setMapZoom(map.getZoom() ?? null);
-    const listeners = [map.addListener("idle", syncZoom), map.addListener("projection_changed", syncZoom)];
+    const listeners = [
+      map.addListener("idle", syncZoom),
+      map.addListener("projection_changed", syncZoom),
+      map.addListener("zoom_changed", () => setClusterPicker(null)),
+    ];
     if (map.getProjection()) syncZoom();
     return () => listeners.forEach((listener) => listener.remove());
   }, [map]);
 
-  // Stations whose pins would overlap on screen are fanned out into a row so each one stays clickable.
-  const displayPositions = useMemo(() => {
-    const positions = new Map<string, google.maps.LatLngLiteral>();
-    const projection = map?.getProjection();
+  // Stations whose pins would overlap on screen are merged into a single numbered cluster marker.
+  const { singleStations, stationClusters } = useMemo(() => {
     const withCoords = filteredStations.filter((station) => station.latitude && station.longitude);
+    const projection = map?.getProjection();
 
     if (!projection || !mapZoom) {
-      withCoords.forEach((station) =>
-        positions.set(station.id, { lat: station.latitude!, lng: station.longitude! }),
-      );
-      return positions;
+      return { singleStations: withCoords, stationClusters: [] as StationCluster[] };
     }
 
     const scale = 2 ** mapZoom;
@@ -1936,36 +1956,70 @@ const StationsMap = () => {
       const point = new google.maps.Point(world.x * scale, world.y * scale);
       const group = groups.find(
         (candidate) =>
-          Math.abs(candidate.anchor.x - point.x) < PIN_OVERLAP_WIDTH && Math.abs(candidate.anchor.y - point.y) < PIN_OVERLAP_HEIGHT,
+          Math.abs(candidate.anchor.x - point.x) < CLUSTER_DISTANCE_X &&
+          Math.abs(candidate.anchor.y - point.y) < CLUSTER_DISTANCE_Y,
       );
       if (group) group.members.push(station);
       else groups.push({ anchor: point, members: [station] });
     });
 
-    groups.forEach(({ anchor, members }) => {
+    const singles: Station[] = [];
+    const clusters: StationCluster[] = [];
+
+    groups.forEach(({ members }) => {
       if (members.length === 1) {
-        positions.set(members[0].id, { lat: members[0].latitude!, lng: members[0].longitude! });
+        singles.push(members[0]);
         return;
       }
 
-      members.forEach((station, index) => {
-        const row = Math.floor(index / PIN_SPREAD_ROW_SIZE);
-        const rowSize = Math.min(PIN_SPREAD_ROW_SIZE, members.length - row * PIN_SPREAD_ROW_SIZE);
-        const column = index % PIN_SPREAD_ROW_SIZE;
-        const dx = (column - (rowSize - 1) / 2) * PIN_SPREAD_STEP_X;
-        const dy = row * PIN_SPREAD_STEP_Y;
-        const latLng = projection.fromPointToLatLng(
-          new google.maps.Point((anchor.x + dx) / scale, (anchor.y + dy) / scale),
-        );
-        positions.set(
-          station.id,
-          latLng ? { lat: latLng.lat(), lng: latLng.lng() } : { lat: station.latitude!, lng: station.longitude! },
-        );
+      clusters.push({
+        key: members.map((station) => station.id).sort().join("|"),
+        members,
+        position: {
+          lat: members.reduce((sum, station) => sum + station.latitude!, 0) / members.length,
+          lng: members.reduce((sum, station) => sum + station.longitude!, 0) / members.length,
+        },
       });
     });
 
-    return positions;
+    return { singleStations: singles, stationClusters: clusters };
   }, [filteredStations, map, mapZoom]);
+
+  const handleClusterClick = (cluster: StationCluster) => {
+    if (!map) return;
+
+    // Zoom in on the group unless its stations would still overlap at the maximum cluster zoom
+    // (same building / identical coordinates), in which case let the user pick one from a list.
+    const projection = map.getProjection();
+    const maxScale = 2 ** CLUSTER_MAX_ZOOM;
+    const points = projection
+      ? cluster.members.map((station) => {
+          const world = projection.fromLatLngToPoint(new google.maps.LatLng(station.latitude!, station.longitude!));
+          return world ? { x: world.x * maxScale, y: world.y * maxScale } : null;
+        })
+      : [];
+    const first = points[0];
+    const canSeparate =
+      !!first &&
+      points.some(
+        (point) =>
+          !!point && (Math.abs(point.x - first.x) >= CLUSTER_DISTANCE_X || Math.abs(point.y - first.y) >= CLUSTER_DISTANCE_Y),
+      );
+
+    if (!canSeparate || (map.getZoom() ?? 0) >= CLUSTER_MAX_ZOOM) {
+      setClusterPicker(cluster);
+      return;
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+    cluster.members.forEach((station) => bounds.extend({ lat: station.latitude!, lng: station.longitude! }));
+    map.fitBounds(bounds, 80);
+  };
+
+  const handlePickClusterStation = (station: Station) => {
+    setClusterPicker(null);
+    setSelectedStation(station);
+  };
 
   const handleMarkerClick = (station: Station) => {
     setSelectedStation(station);
@@ -2370,6 +2424,7 @@ const StationsMap = () => {
               {isLoaded ? (
                 <GoogleMap
                   onLoad={(instance) => setMap(instance)}
+                  onClick={() => setClusterPicker(null)}
                   mapContainerStyle={{ width: "100%", height: "100%" }}
                   center={userLocation || DEFAULT_CENTER}
                   zoom={userLocation ? 12 : 7}
@@ -2380,14 +2435,11 @@ const StationsMap = () => {
                   }}
                 >
                   {userLocation && <Marker position={userLocation} />}
-                  {filteredStations.map((station) => {
+                  {singleStations.map((station) => {
                     const ratingAverage = Number(station.rating_average || 0);
                     const ratingCount = Number(station.rating_count || 0);
                     const hasRating = ratingCount > 0 && ratingAverage > 0;
-                    const position = displayPositions.get(station.id) ?? {
-                      lat: station.latitude!,
-                      lng: station.longitude!,
-                    };
+                    const position = { lat: station.latitude!, lng: station.longitude! };
 
                     return (
                       <Fragment key={station.id}>
@@ -2418,6 +2470,31 @@ const StationsMap = () => {
                       </Fragment>
                     );
                   })}
+                  {stationClusters.map((cluster) => (
+                    <Marker
+                      key={cluster.key}
+                      position={cluster.position}
+                      onClick={() => handleClusterClick(cluster)}
+                      icon={buildClusterIcon(cluster.members.length)}
+                      zIndex={1000}
+                    />
+                  ))}
+                  {clusterPicker && (
+                    <OverlayView position={clusterPicker.position} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
+                      <div className="-translate-x-1/2 -translate-y-[calc(100%+30px)] w-56 max-h-56 overflow-y-auto rounded-xl border border-blue-100 bg-white p-1 shadow-xl">
+                        {clusterPicker.members.map((station) => (
+                          <button
+                            key={station.id}
+                            type="button"
+                            onClick={() => handlePickClusterStation(station)}
+                            className="block w-full truncate rounded-lg px-3 py-2 text-start text-sm font-medium text-slate-900 hover:bg-blue-50"
+                          >
+                            {station.name}
+                          </button>
+                        ))}
+                      </div>
+                    </OverlayView>
+                  )}
                 </GoogleMap>
               ) : (
                 <div className="flex h-full w-full items-center justify-center">
