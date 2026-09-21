@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { Store, CalendarCheck, Wrench, LogOut, Clock, MapPin, Image, LayoutDashboard, TrendingUp, Hourglass, CheckCircle, Key, CreditCard, AlertTriangle, Wallet, Sparkles, Gift, MessageCircle, ImagePlus, Send, Loader2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useAppLanguage } from "@/lib/language";
+import { getStationCityOptions } from "@/lib/stationCities";
 import { CHAT_MEDIA_ACCEPT, uploadChatMedia } from "@/lib/chatMedia";
 
 const texts = {
@@ -855,6 +856,7 @@ const StatsDashboard = ({ stationId, t, locale, isRtl }: { stationId: string; t:
 };
 
 const StationInfoTab = ({ stationId, t }: { stationId: string; t: PortalTexts }) => {
+  const { language } = useAppLanguage();
   const [station, setStation] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
@@ -900,7 +902,14 @@ const StationInfoTab = ({ stationId, t }: { stationId: string; t: PortalTexts })
           </div>
           <div>
             <Label>{t.address}</Label>
-            <Input value={station.address || ""} onChange={(e) => setStation((prev: any) => ({ ...prev, address: e.target.value }))} />
+            <Select value={station.address || ""} onValueChange={(value) => setStation((prev: any) => ({ ...prev, address: value }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {getStationCityOptions(language, station.address).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>{t.detailedAddress}</Label>

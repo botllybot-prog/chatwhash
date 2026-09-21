@@ -1254,7 +1254,6 @@ export type Database = {
           address: string | null
           boost_priority: number
           category: string
-          city: string | null
           commission_rate: number
           created_at: string
           created_by: string | null
@@ -1280,7 +1279,6 @@ export type Database = {
           address?: string | null
           boost_priority?: number
           category?: string
-          city?: string | null
           commission_rate?: number
           created_at?: string
           created_by?: string | null
@@ -1306,7 +1304,6 @@ export type Database = {
           address?: string | null
           boost_priority?: number
           category?: string
-          city?: string | null
           commission_rate?: number
           created_at?: string
           created_by?: string | null
