@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Upload, MapPin, LocateFixed } from "lucide-react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { OFFER_CITY_VALUES, adminOffersTexts } from "@/lib/adminOffersTranslations";
 import { DEFAULT_STATION_CATEGORY, STATION_CATEGORY_OPTIONS, getStationCategoryLabel, sanitizeStationCategory, type StationCategory } from "@/lib/stationCategories";
 
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
@@ -20,6 +21,7 @@ interface StationForm {
   name: string;
   category: StationCategory;
   station_type_id: string | null;
+  city: string | null;
   address: string;
   detailed_address: string;
   working_hours_start: string;
@@ -38,6 +40,7 @@ const defaultForm: StationForm = {
   name: "",
   category: DEFAULT_STATION_CATEGORY,
   station_type_id: null,
+  city: null,
   address: "",
   detailed_address: "",
   working_hours_start: "08:00",
@@ -56,6 +59,9 @@ const ERBIL_CENTER = { lat: 36.191, lng: 44.009 };
 
 
 const NO_STATION_TYPE = "__none";
+const NO_CITY = "__none";
+const STATION_CITY_VALUES = OFFER_CITY_VALUES.filter((city) => city !== "All");
+const cityLabels = adminOffersTexts.ar.cities as Record<string, string>;
 
 const StationsTab = () => {
   const [stations, setStations] = useState<any[]>([]);
@@ -149,6 +155,7 @@ const StationsTab = () => {
       name: form.name,
       category: sanitizeStationCategory(form.category),
       station_type_id: form.station_type_id,
+      city: form.city,
       address: form.address,
       detailed_address: form.detailed_address,
       working_hours_start: form.working_hours_start,
@@ -189,6 +196,7 @@ const StationsTab = () => {
       name: s.name,
       category: sanitizeStationCategory(s.category),
       station_type_id: s.station_type_id || null,
+      city: s.city || null,
       address: s.address || "",
       detailed_address: s.detailed_address || "",
       working_hours_start: s.working_hours_start,
@@ -254,6 +262,20 @@ const StationsTab = () => {
                             {type.name}
                           </span>
                         </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>المدينة</Label>
+                  <Select
+                    value={form.city || NO_CITY}
+                    onValueChange={(v) => setForm({ ...form, city: v === NO_CITY ? null : v })}
+                  >
+                    <SelectTrigger><SelectValue placeholder="اختر المدينة" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_CITY}>بدون مدينة</SelectItem>
+                      {STATION_CITY_VALUES.map((value) => (
+                        <SelectItem key={value} value={value}>{cityLabels[value]}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -458,7 +480,8 @@ const StationsTab = () => {
               </TableCell>
               <TableCell>
                 <div className="max-w-48">
-                  <span>{s.address || "-"}</span>
+                  {s.city && <Badge variant="outline" className="mb-1">{cityLabels[s.city] || s.city}</Badge>}
+                  <span className="block">{s.address || "-"}</span>
                   {s.detailed_address && <p className="text-xs text-muted-foreground truncate">{s.detailed_address}</p>}
                 </div>
               </TableCell>
