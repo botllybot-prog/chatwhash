@@ -263,7 +263,7 @@ const StationsTab = () => {
                   <Select value={form.address} onValueChange={(v) => setForm({ ...form, address: v })}>
                     <SelectTrigger><SelectValue placeholder="اختر المدينة" /></SelectTrigger>
                     <SelectContent>
-                      {getStationCityOptions("en", form.address).map((option) => (
+                      {getStationCityOptions(form.address).map((option) => (
                         <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                       ))}
                     </SelectContent>
