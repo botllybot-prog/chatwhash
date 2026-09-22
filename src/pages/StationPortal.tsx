@@ -905,7 +905,7 @@ const StationInfoTab = ({ stationId, t }: { stationId: string; t: PortalTexts })
             <Select value={station.address || ""} onValueChange={(value) => setStation((prev: any) => ({ ...prev, address: value }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {getStationCityOptions(language, station.address).map((option) => (
+                {getStationCityOptions("en", station.address).map((option) => (
                   <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectContent>
