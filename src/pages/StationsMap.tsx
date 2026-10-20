@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/use-toast";
+import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { useAppLanguage } from "@/lib/language";
 import InstallAppButton from "@/components/InstallAppButton";
 import { clearCustomerSession, getCustomerSession } from "@/lib/customerSession";
@@ -1736,9 +1737,9 @@ const StationsMap = () => {
 
   useEffect(() => {
     void refreshCustomerInbox(false);
-    const timer = window.setInterval(() => void refreshCustomerInbox(true), 7000);
-    return () => window.clearInterval(timer);
   }, [refreshCustomerInbox]);
+
+  useVisibleInterval(() => void refreshCustomerInbox(true), 30000);
 
   const markCustomerNotificationRead = async (notificationId: string) => {
     const session = getCustomerSession();
@@ -2248,47 +2249,43 @@ const StationsMap = () => {
     }
   };
 
-  useEffect(() => {
-    if (!trackedPhone || trackedBookings.length === 0) return;
+  const hasTrackedBookings = Boolean(trackedPhone) && trackedBookings.some((b) => b.bookingId);
+
+  useVisibleInterval(async () => {
     const ids = trackedBookings.map((b) => b.bookingId).filter(Boolean);
-    if (ids.length === 0) return;
+    if (!trackedPhone || ids.length === 0) return;
+    const { data, error } = await supabase.functions.invoke("get-booking-statuses", {
+      body: {
+        booking_ids: ids,
+        customer_phone: trackedPhone,
+      },
+    });
+    if (error || (data as any)?.error) return;
 
-    const timer = window.setInterval(async () => {
-      const { data, error } = await supabase.functions.invoke("get-booking-statuses", {
-        body: {
-          booking_ids: ids,
-          customer_phone: trackedPhone,
-        },
-      });
-      if (error || (data as any)?.error) return;
-
-      const rows = Array.isArray((data as any)?.bookings) ? (data as any).bookings : [];
-      const terminal = new Set(["confirmed", "cancelled", "completed"]);
-      const nextStatuses: Record<string, string> = {};
-      for (const row of rows) {
-        const id = String(row.id || "");
-        const status = String(row.status || "");
-        if (!id || !status) continue;
-        nextStatuses[id] = status;
-        const prev = trackedStatuses[id];
-        if (prev && prev !== status) {
-          const bookingNo = row.booking_number ? `#${row.booking_number}` : `#${id.slice(0, 8)}`;
-          if (status === "confirmed") {
-            toast({ title: "تم قبول الحجز", description: `${bookingNo} تم قبوله من المحطة.` });
-          } else if (status === "cancelled") {
-            toast({ title: "تم رفض/إلغاء الحجز", description: `${bookingNo} تم إلغاؤه.` });
-          } else if (status === "pending_customer_approval") {
-            toast({ title: "تم تأجيل الموعد", description: `${bookingNo} بانتظار موافقتك على الموعد الجديد.` });
-          }
+    const rows = Array.isArray((data as any)?.bookings) ? (data as any).bookings : [];
+    const terminal = new Set(["confirmed", "cancelled", "completed"]);
+    const nextStatuses: Record<string, string> = {};
+    for (const row of rows) {
+      const id = String(row.id || "");
+      const status = String(row.status || "");
+      if (!id || !status) continue;
+      nextStatuses[id] = status;
+      const prev = trackedStatuses[id];
+      if (prev && prev !== status) {
+        const bookingNo = row.booking_number ? `#${row.booking_number}` : `#${id.slice(0, 8)}`;
+        if (status === "confirmed") {
+          toast({ title: "تم قبول الحجز", description: `${bookingNo} تم قبوله من المحطة.` });
+        } else if (status === "cancelled") {
+          toast({ title: "تم رفض/إلغاء الحجز", description: `${bookingNo} تم إلغاؤه.` });
+        } else if (status === "pending_customer_approval") {
+          toast({ title: "تم تأجيل الموعد", description: `${bookingNo} بانتظار موافقتك على الموعد الجديد.` });
         }
       }
+    }
 
-      setTrackedStatuses((prev) => ({ ...prev, ...nextStatuses }));
-      setTrackedBookings((prev) => prev.filter((item) => !terminal.has(nextStatuses[item.bookingId])));
-    }, 12000);
-
-    return () => window.clearInterval(timer);
-  }, [trackedBookings, trackedPhone, trackedStatuses]);
+    setTrackedStatuses((prev) => ({ ...prev, ...nextStatuses }));
+    setTrackedBookings((prev) => prev.filter((item) => !terminal.has(nextStatuses[item.bookingId])));
+  }, hasTrackedBookings ? 12000 : null);
 
   const uniqueCustomerBookings = useMemo(() => {
     const seen = new Set<string>();

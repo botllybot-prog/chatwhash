@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Home, List, Map, MessageCircle, MoreHorizontal } from "lucide-react";
 import { useAppLanguage } from "@/lib/language";
@@ -32,7 +33,9 @@ const MobileLayout = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20" dir={isRtl ? "rtl" : "ltr"}>
-      <Outlet />
+      <Suspense fallback={<div className="flex justify-center py-16"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>}>
+        <Outlet />
+      </Suspense>
 
       <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-card/95 backdrop-blur-xl safe-area-bottom">
         <div className="mx-auto flex h-16 max-w-lg items-center justify-around px-2">

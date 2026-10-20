@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -9,42 +10,49 @@ import RoleGuard from "@/components/RoleGuard";
 import MobileLayout from "@/components/MobileLayout";
 import { AppLanguageProvider } from "@/lib/language";
 import LandingPage from "./pages/LandingPage";
-import StationsList from "./pages/StationsList";
-import Conversations from "./pages/Conversations";
-import StationPortal from "./pages/StationPortal";
-import StationsMap from "./pages/StationsMap";
-import TopPicks from "./pages/TopPicks";
-import Login from "./pages/Login";
-import OwnerAccess from "./pages/OwnerAccess";
 import NotFound from "./pages/NotFound";
-import More from "./pages/More";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import AdminLayout from "./components/admin/AdminLayout";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminStations from "./pages/admin/AdminStations";
-import AdminStationTypes from "./pages/admin/AdminStationTypes";
-import AdminServices from "./pages/admin/AdminServices";
-import AdminServiceTypes from "./pages/admin/AdminServiceTypes";
-import AdminOffers from "./pages/admin/AdminOffers";
-import AdminOfferTypes from "./pages/admin/AdminOfferTypes";
-import AdminBookings from "./pages/admin/AdminBookings";
-import AdminOwners from "./pages/admin/AdminOwners";
-import AdminEditRequests from "./pages/admin/AdminEditRequests";
-import AdminSubscriptions from "./pages/admin/AdminSubscriptions";
-import AdminReports from "./pages/admin/AdminReports";
-import AdminSettings from "./pages/admin/AdminSettings";
-import AdminCustomers from "./pages/admin/AdminCustomers";
-import AdminEmployees from "./pages/admin/AdminEmployees";
-import AdminBroadcast from "./pages/admin/AdminBroadcast";
-import AdminRatings from "./pages/admin/AdminRatings";
-import AdminChatGroups from "./pages/admin/AdminChatGroups";
-import EmployeeLayout from "./components/EmployeeLayout";
-import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
-import CustomerLogin from "./pages/CustomerLogin";
-import CustomerChat from "./pages/CustomerChat";
 import { getCustomerSession } from "@/lib/customerSession";
 
+const StationsList = lazy(() => import("./pages/StationsList"));
+const Conversations = lazy(() => import("./pages/Conversations"));
+const StationPortal = lazy(() => import("./pages/StationPortal"));
+const StationsMap = lazy(() => import("./pages/StationsMap"));
+const TopPicks = lazy(() => import("./pages/TopPicks"));
+const Login = lazy(() => import("./pages/Login"));
+const OwnerAccess = lazy(() => import("./pages/OwnerAccess"));
+const More = lazy(() => import("./pages/More"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const AdminLayout = lazy(() => import("./components/admin/AdminLayout"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminStations = lazy(() => import("./pages/admin/AdminStations"));
+const AdminStationTypes = lazy(() => import("./pages/admin/AdminStationTypes"));
+const AdminServices = lazy(() => import("./pages/admin/AdminServices"));
+const AdminServiceTypes = lazy(() => import("./pages/admin/AdminServiceTypes"));
+const AdminOffers = lazy(() => import("./pages/admin/AdminOffers"));
+const AdminOfferTypes = lazy(() => import("./pages/admin/AdminOfferTypes"));
+const AdminBookings = lazy(() => import("./pages/admin/AdminBookings"));
+const AdminOwners = lazy(() => import("./pages/admin/AdminOwners"));
+const AdminEditRequests = lazy(() => import("./pages/admin/AdminEditRequests"));
+const AdminSubscriptions = lazy(() => import("./pages/admin/AdminSubscriptions"));
+const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
+const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
+const AdminCustomers = lazy(() => import("./pages/admin/AdminCustomers"));
+const AdminEmployees = lazy(() => import("./pages/admin/AdminEmployees"));
+const AdminBroadcast = lazy(() => import("./pages/admin/AdminBroadcast"));
+const AdminRatings = lazy(() => import("./pages/admin/AdminRatings"));
+const AdminChatGroups = lazy(() => import("./pages/admin/AdminChatGroups"));
+const EmployeeLayout = lazy(() => import("./components/EmployeeLayout"));
+const EmployeeDashboard = lazy(() => import("./pages/employee/EmployeeDashboard"));
+const CustomerLogin = lazy(() => import("./pages/CustomerLogin"));
+const CustomerChat = lazy(() => import("./pages/CustomerChat"));
+
 const queryClient = new QueryClient();
+
+const PageLoader = () => (
+  <div className="flex min-h-screen items-center justify-center">
+    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+  </div>
+);
 
 const ProtectedRoutes = () => (
   <AuthGuard>
@@ -97,6 +105,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <LanguageSwitcher />
+          <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* Public pages with mobile bottom nav */}
             <Route element={<MobileLayout />}>
@@ -114,6 +123,7 @@ const App = () => (
             <Route path="/app/*" element={<ProtectedRoutes />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </BrowserRouter>
       </TooltipProvider>
     </AppLanguageProvider>

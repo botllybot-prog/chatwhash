@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,9 @@ const EmployeeLayout = () => {
         </Button>
       </header>
       <main className="mx-auto max-w-6xl p-6">
-        <Outlet />
+        <Suspense fallback={<div className="flex justify-center py-16"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );

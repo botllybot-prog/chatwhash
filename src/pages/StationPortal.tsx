@@ -18,6 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAppLanguage } from "@/lib/language";
 import { getStationCityOptions } from "@/lib/stationCities";
 import { CHAT_MEDIA_ACCEPT, uploadChatMedia } from "@/lib/chatMedia";
+import { useVisibleInterval } from "@/hooks/use-visible-interval";
 
 const texts = {
   ar: {
@@ -1338,14 +1339,16 @@ const StationBookingsTab = ({ stationId, t }: { stationId: string; t: PortalText
 
   useEffect(() => { load(false); }, [load]);
 
+  // Realtime delivers booking changes; the slow poll is only a safety net in
+  // case the realtime socket drops.
+  useVisibleInterval(() => void load(true), 60000);
+
   useEffect(() => {
-    const interval = window.setInterval(() => void load(true), 8000);
     const channel = supabase
       .channel(`station-bookings-${stationId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "bookings", filter: `station_id=eq.${stationId}` }, () => { void load(true); })
       .subscribe();
     return () => {
-      window.clearInterval(interval);
       supabase.removeChannel(channel);
     };
   }, [stationId, load]);

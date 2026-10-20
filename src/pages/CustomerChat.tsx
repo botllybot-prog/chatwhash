@@ -8,9 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
+import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { useAppLanguage } from "@/lib/language";
 
-const POLL_INTERVAL_MS = 5000;
+// Only polled while the tab is visible (see useVisibleInterval).
+const MESSAGES_POLL_INTERVAL_MS = 5000;
+const THREADS_POLL_INTERVAL_MS = 15000;
 
 type ThreadSummary = {
   id: string;
@@ -131,16 +134,19 @@ const CustomerChat = () => {
   useEffect(() => {
     if (!session) return;
     loadThreads();
-    const interval = setInterval(loadThreads, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
   }, [session, loadThreads]);
+
+  useVisibleInterval(() => void loadThreads(), session ? THREADS_POLL_INTERVAL_MS : null);
 
   useEffect(() => {
     if (!activeThreadId) return;
     loadMessages(activeThreadId);
-    const interval = setInterval(() => loadMessages(activeThreadId), POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
   }, [activeThreadId, loadMessages]);
+
+  useVisibleInterval(
+    () => { if (activeThreadId) void loadMessages(activeThreadId); },
+    activeThreadId ? MESSAGES_POLL_INTERVAL_MS : null,
+  );
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
