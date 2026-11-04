@@ -13,8 +13,8 @@ create index if not exists idx_bookings_confirmed_rating_pending
   on public.bookings(booking_date)
   where status = 'confirmed' and rating_requested = false;
 
--- Every 2 minutes instead of every minute. The quick-booking timeout notice
--- ("no reply within 10 minutes") now arrives at most ~2 minutes late.
+-- Every 5 minutes instead of every minute. The quick-booking timeout notice
+-- ("no reply within 10 minutes") now arrives at most ~5 minutes late.
 do $$
 begin
   perform cron.unschedule('send-booking-reminders');
@@ -25,13 +25,47 @@ end $$;
 
 select cron.schedule(
   'send-booking-reminders',
-  '*/2 * * * *',
+  '*/5 * * * *',
   $$
   select net.http_post(
     url := 'https://yhklvtzonvgzkodysawu.supabase.co/functions/v1/booking-reminders',
     headers := '{"Content-Type": "application/json"}'::jsonb,
     body := '{}'::jsonb
   ) as request_id;
+  $$
+);
+
+-- Subscription checks once a day instead of every 15 minutes, at 06:00 Iraq
+-- time (UTC+3) = 03:00 UTC, so the function's UTC "today" matches Iraq's date.
+do $$
+begin
+  perform cron.unschedule('check-subscriptions-every-15-minutes');
+exception
+  when others then
+    null;
+end $$;
+
+do $$
+begin
+  perform cron.unschedule('check-subscriptions-daily');
+exception
+  when others then
+    null;
+end $$;
+
+select cron.schedule(
+  'check-subscriptions-daily',
+  '0 3 * * *',
+  $$
+  select
+    net.http_post(
+      url := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url') || '/functions/v1/check-subscriptions',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'anon_key')
+      ),
+      body := '{}'::jsonb
+    ) as request_id;
   $$
 );
 
