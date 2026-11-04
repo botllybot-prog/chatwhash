@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { compressImage } from "@/lib/compressImage";
 
 export type UploadedOfferMedia = {
   key: string;
@@ -89,11 +90,14 @@ const getErrorMessage = async (response: Response) => {
   return body?.error || `Media request failed (${response.status})`;
 };
 
-export const uploadOfferMedia = async (file: File): Promise<UploadedOfferMedia> => {
-  const mediaType = resolveOfferMediaType(file);
-  if (!getOfferMediaKind(mediaType, file.name)) {
+export const uploadOfferMedia = async (pickedFile: File): Promise<UploadedOfferMedia> => {
+  const pickedType = resolveOfferMediaType(pickedFile);
+  if (!getOfferMediaKind(pickedType, pickedFile.name)) {
     throw new Error("Only image or video files can be uploaded");
   }
+
+  const file = await compressImage(pickedFile, pickedType);
+  const mediaType = file === pickedFile ? pickedType : file.type;
 
   const accessToken = await getAccessToken();
   const response = await fetch("/api/offer-media", {

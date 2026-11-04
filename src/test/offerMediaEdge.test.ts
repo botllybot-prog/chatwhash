@@ -71,6 +71,47 @@ describe("offer media edge function", () => {
     }
   });
 
+  it("serves media with CDN cache headers and an ETag", async () => {
+    blobMocks.get.mockResolvedValueOnce(new Response("image-binary").body);
+    const key = "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed/image~webp/offer.webp";
+
+    const response = await offerMediaHandler(
+      new Request(`https://preview.example.test/api/offer-media/${key}`),
+      {} as never,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/webp");
+    expect(response.headers.get("Netlify-CDN-Cache-Control")).toContain("immutable");
+    expect(response.headers.get("ETag")).toBe(`"${encodeURIComponent(key)}"`);
+  });
+
+  it("answers a matching If-None-Match with 304 without reading the blob", async () => {
+    const key = "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed/image~webp/offer.webp";
+
+    const response = await offerMediaHandler(
+      new Request(`https://preview.example.test/api/offer-media/${key}`, {
+        headers: { "If-None-Match": `W/"${encodeURIComponent(key)}"` },
+      }),
+      {} as never,
+    );
+
+    expect(response.status).toBe(304);
+    expect(blobMocks.get).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a strong read when a fresh upload has not propagated yet", async () => {
+    blobMocks.get.mockResolvedValueOnce(null).mockResolvedValueOnce(new Response("image-binary").body);
+
+    const response = await offerMediaHandler(
+      new Request("https://preview.example.test/api/offer-media/1b9d6bcd/image~png/offer.png"),
+      {} as never,
+    );
+
+    expect(response.status).toBe(200);
+    expect(blobMocks.get).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects uploads that are neither image nor video", async () => {
     const request = new Request("https://preview.example.test/api/offer-media", {
       method: "POST",

@@ -174,7 +174,7 @@ const StationsList = () => {
                 <div className="flex">
                   <div className="h-28 w-24 flex-shrink-0 overflow-hidden bg-ocean-100">
                     {station.image_url ? (
-                      <img src={station.image_url} alt={station.name} className="h-full w-full object-cover" />
+                      <img src={station.image_url} alt={station.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center">
                         <Car className="h-8 w-8 text-ocean-300" />

@@ -1,10 +1,19 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { cachedJson, memoize } from "../_shared/http-cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-customer-session-token",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-customer-session-token, if-none-match",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Expose-Headers": "ETag",
 };
+
+// Offers change rarely (only when an admin edits them), so the full catalog is
+// kept in the warm isolate briefly instead of being rebuilt on every request.
+const CATALOG_TTL_MS = 60_000;
+// The response is filtered by the caller's city, so only the caller may cache
+// it. Clients reuse it for a minute, then revalidate with the ETag (cheap 304).
+const RESPONSE_CACHE_CONTROL = "private, max-age=60, stale-while-revalidate=300";
 
 type OfferRow = {
   id: string;
@@ -101,87 +110,94 @@ async function getCustomerCity(req: Request, supabase: ReturnType<typeof createC
   return typeof metadataCity === "string" && metadataCity.trim() ? metadataCity.trim() : null;
 }
 
+class QueryError extends Error {}
+
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+);
+
+/** Builds every offer with its type, details and stations, before city filtering. */
+const loadCatalog = memoize(CATALOG_TTL_MS, async () => {
+  const { data: offers, error: offersError } = await supabase
+    .from("offers")
+    .select("id, title, type, cities")
+    .order("title", { ascending: true });
+
+  if (offersError) throw new QueryError(offersError.message);
+
+  const visibleOffers = (offers || []) as OfferRow[];
+  const offerIds = visibleOffers.map((offer) => offer.id);
+  const typeIds = [...new Set(visibleOffers.map((offer) => offer.type).filter(Boolean))];
+
+  const [typesResult, detailsResult] = await Promise.all([
+    typeIds.length
+      ? supabase.from("offer_types").select("id, name").in("id", typeIds)
+      : Promise.resolve({ data: [], error: null }),
+    offerIds.length
+      ? supabase
+          .from("offer_details")
+          .select("id, offer_id, title, body, url_type, url, station_id, sort, media_key, media_url, media_type, media_name")
+          .in("offer_id", offerIds)
+          .order("sort", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (typesResult.error) throw new QueryError(typesResult.error.message);
+  if (detailsResult.error) throw new QueryError(detailsResult.error.message);
+
+  const details = (detailsResult.data || []) as OfferDetailRow[];
+  const stationIds = [...new Set(details.map((detail) => detail.station_id).filter(Boolean))] as string[];
+  const stationsResult = stationIds.length
+    ? await supabase.from("stations").select("id, name").in("id", stationIds)
+    : { data: [], error: null };
+
+  if (stationsResult.error) throw new QueryError(stationsResult.error.message);
+
+  const typeById = new Map((typesResult.data || []).map((row: OfferTypeRow) => [row.id, row]));
+  const stationById = new Map((stationsResult.data || []).map((row: StationRow) => [row.id, row]));
+  const detailsByOfferId = new Map<string, OfferDetailRow[]>();
+
+  for (const detail of details) {
+    const current = detailsByOfferId.get(detail.offer_id) || [];
+    current.push(detail);
+    detailsByOfferId.set(detail.offer_id, current);
+  }
+
+  return visibleOffers.map((offer) => ({
+    id: offer.id,
+    title: offer.title,
+    type: typeById.get(offer.type) || { id: offer.type, name: null },
+    cities: parseCities(offer.cities),
+    details: (detailsByOfferId.get(offer.id) || []).map((detail) => ({
+      id: detail.id,
+      title: detail.title,
+      body: detail.body,
+      url_type: detail.url_type,
+      url: detail.url,
+      station: detail.station_id ? stationById.get(detail.station_id) || null : null,
+      sort: detail.sort,
+      media: detail.media_url
+        ? {
+            url: detail.media_url,
+            type: detail.media_type,
+            name: detail.media_name,
+          }
+        : null,
+    })),
+  }));
+});
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "GET") return json({ success: false, error: "Method not allowed" }, 405);
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    // The caller's city and the catalog don't depend on each other.
+    const [customerCity, catalog] = await Promise.all([getCustomerCity(req, supabase), loadCatalog()]);
+    const data = catalog.filter((offer) => citiesMatch(offer.cities, customerCity));
 
-    const customerCity = await getCustomerCity(req, supabase);
-    const { data: offers, error: offersError } = await supabase
-      .from("offers")
-      .select("id, title, type, cities")
-      .order("title", { ascending: true });
-
-    if (offersError) return json({ success: false, error: offersError.message }, 500);
-
-    const typedOffers = (offers || []) as OfferRow[];
-    const visibleOffers = typedOffers.filter((offer) => citiesMatch(parseCities(offer.cities), customerCity));
-    const offerIds = visibleOffers.map((offer) => offer.id);
-    const typeIds = [...new Set(visibleOffers.map((offer) => offer.type).filter(Boolean))];
-
-    const [typesResult, detailsResult] = await Promise.all([
-      typeIds.length
-        ? supabase.from("offer_types").select("id, name").in("id", typeIds)
-        : Promise.resolve({ data: [], error: null }),
-      offerIds.length
-        ? supabase
-            .from("offer_details")
-            .select("id, offer_id, title, body, url_type, url, station_id, sort, media_key, media_url, media_type, media_name")
-            .in("offer_id", offerIds)
-            .order("sort", { ascending: true })
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-
-    if (typesResult.error) return json({ success: false, error: typesResult.error.message }, 500);
-    if (detailsResult.error) return json({ success: false, error: detailsResult.error.message }, 500);
-
-    const details = (detailsResult.data || []) as OfferDetailRow[];
-    const stationIds = [...new Set(details.map((detail) => detail.station_id).filter(Boolean))] as string[];
-    const stationsResult = stationIds.length
-      ? await supabase.from("stations").select("id, name").in("id", stationIds)
-      : { data: [], error: null };
-
-    if (stationsResult.error) return json({ success: false, error: stationsResult.error.message }, 500);
-
-    const typeById = new Map((typesResult.data || []).map((row: OfferTypeRow) => [row.id, row]));
-    const stationById = new Map((stationsResult.data || []).map((row: StationRow) => [row.id, row]));
-    const detailsByOfferId = new Map<string, OfferDetailRow[]>();
-
-    for (const detail of details) {
-      const current = detailsByOfferId.get(detail.offer_id) || [];
-      current.push(detail);
-      detailsByOfferId.set(detail.offer_id, current);
-    }
-
-    const data = visibleOffers.map((offer) => ({
-      id: offer.id,
-      title: offer.title,
-      type: typeById.get(offer.type) || { id: offer.type, name: null },
-      cities: parseCities(offer.cities),
-      details: (detailsByOfferId.get(offer.id) || []).map((detail) => ({
-        id: detail.id,
-        title: detail.title,
-        body: detail.body,
-        url_type: detail.url_type,
-        url: detail.url,
-        station: detail.station_id ? stationById.get(detail.station_id) || null : null,
-        sort: detail.sort,
-        media: detail.media_url
-          ? {
-              url: detail.media_url,
-              type: detail.media_type,
-              name: detail.media_name,
-            }
-          : null,
-      })),
-    }));
-
-    return json({ success: true, data });
+    return await cachedJson(req, { success: true, data }, corsHeaders, RESPONSE_CACHE_CONTROL);
   } catch (error) {
     return json({ success: false, error: error instanceof Error ? error.message : "Internal error" }, 500);
   }

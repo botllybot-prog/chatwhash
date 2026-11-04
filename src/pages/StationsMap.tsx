@@ -1157,7 +1157,7 @@ function StationCard({
 
           {station.image_url ? (
             <div className="overflow-hidden rounded-2xl border border-border">
-              <img src={station.image_url} alt={station.name} className="h-44 w-full object-cover" />
+              <img src={station.image_url} alt={station.name} decoding="async" className="h-44 w-full object-cover" />
             </div>
           ) : (
             <div className="flex h-36 items-center justify-center rounded-2xl bg-sky-50">

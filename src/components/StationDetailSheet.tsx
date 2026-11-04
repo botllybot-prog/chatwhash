@@ -106,7 +106,7 @@ const StationDetailSheet = ({ station, onClose }: Props) => {
               <div className="flex items-center justify-between"><SheetTitle className="text-lg font-bold">{station.name}</SheetTitle><Badge variant={open ? "default" : "destructive"} className="text-xs">{open ? t.open : t.closed}</Badge></div>
             </SheetHeader>
 
-            {station.image_url ? <div className="rounded-2xl overflow-hidden border border-border"><img src={station.image_url} alt={station.name} className="w-full h-44 object-cover" /></div> : <div className="rounded-2xl bg-ocean-100 h-32 flex items-center justify-center"><Car className="h-12 w-12 text-ocean-300" /></div>}
+            {station.image_url ? <div className="rounded-2xl overflow-hidden border border-border"><img src={station.image_url} alt={station.name} decoding="async" className="w-full h-44 object-cover" /></div> : <div className="rounded-2xl bg-ocean-100 h-32 flex items-center justify-center"><Car className="h-12 w-12 text-ocean-300" /></div>}
 
             {station.address && <p className="text-sm text-muted-foreground flex items-center gap-1.5"><MapPin className="h-4 w-4 text-ocean-500 flex-shrink-0" />{station.address}</p>}
 

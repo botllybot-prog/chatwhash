@@ -171,12 +171,29 @@ export default async (request: Request, _context: Context) => {
   if (request.method === "GET") {
     if (!key) return json({ error: "Media key is required" }, 400);
 
-    const media = await store.get(key, { type: "stream" });
+    // Keys are fresh UUIDs and never overwritten, so a repeat request carrying
+    // the ETag is answered without reading the blob. The CDN is deliberately
+    // not asked to keep chat files: a deleted attachment must stop being served.
+    const etag = `"${encodeURIComponent(key)}"`;
+    const ifNoneMatch = request.headers.get("if-none-match") || "";
+    if (ifNoneMatch.split(",").some((tag) => tag.trim().replace(/^W\//, "") === etag)) {
+      return new Response(null, {
+        status: 304,
+        headers: { "Cache-Control": "public, max-age=31536000, immutable", ETag: etag },
+      });
+    }
+
+    const media =
+      (await getStore({ name: STORE_NAME, consistency: "eventual" })
+        .get(key, { type: "stream" })
+        .catch(() => null)) ||
+      (await store.get(key, { type: "stream" }));
     if (!media) return json({ error: "Media not found" }, 404);
 
     return new Response(media, {
       headers: {
         "Cache-Control": "public, max-age=31536000, immutable",
+        ETag: etag,
         "Content-Type": getContentType(key),
         // Media is user-uploaded, so scripting is blocked for formats that can
         // carry it (such as SVG) when the file is opened directly.

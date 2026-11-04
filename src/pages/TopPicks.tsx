@@ -138,7 +138,7 @@ const TopPicks = () => {
                       <div className="flex items-center gap-3">
                         <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-ocean-100">
                           {station.image_url ? (
-                            <img src={station.image_url} alt={station.name} className="h-full w-full object-cover" />
+                            <img src={station.image_url} alt={station.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                           ) : (
                             <Car className="h-6 w-6 text-ocean-300" />
                           )}

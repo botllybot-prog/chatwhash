@@ -23,6 +23,45 @@ export default defineConfig(({ mode }) => ({
         navigateFallbackDenylist: [/^\/~oauth/],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // Images are kept on the phone after the first view, so returning to a
+        // page shows them instantly and without data, even on a weak signal.
+        runtimeCaching: [
+          {
+            // Offer and chat media: keys are unique and never overwritten.
+            urlPattern: ({ url, request }) =>
+              request.destination === "image" &&
+              (url.pathname.startsWith("/api/offer-media/") || url.pathname.startsWith("/api/chat-media/")),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "media-images",
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 60, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
+            // Station photos in Supabase Storage (public bucket URLs).
+            urlPattern: ({ url, request }) =>
+              request.destination === "image" && url.pathname.includes("/storage/v1/object/public/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "storage-images",
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
+              // 0 covers opaque cross-origin responses from <img> without CORS.
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Google Maps tiles and marker images.
+            urlPattern: ({ url, request }) =>
+              request.destination === "image" && /(^|\.)(googleapis|gstatic)\.com$/.test(url.hostname),
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "map-images",
+              expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 7, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
       manifest: {
         name: "واشلي — حجز غسيل السيارات",

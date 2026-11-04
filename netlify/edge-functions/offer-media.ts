@@ -225,12 +225,36 @@ export default async (request: Request, _context: Context) => {
   if (request.method === "GET") {
     if (!key) return json({ error: "Media key is required" }, 400);
 
-    const media = await store.get(key, { type: "stream" });
+    // Every key starts with a fresh UUID and is never overwritten, so the
+    // bytes behind a key never change. A repeat request carrying the ETag is
+    // answered without touching the blob store at all.
+    const etag = `"${encodeURIComponent(key)}"`;
+    const cacheHeaders = {
+      "Cache-Control": "public, max-age=31536000, immutable",
+      // Keeps the file in Netlify's CDN, so phones are served from the nearest
+      // edge instead of running this function and reading Blobs every time.
+      "Netlify-CDN-Cache-Control": "public, max-age=31536000, immutable",
+      ETag: etag,
+    };
+
+    const ifNoneMatch = request.headers.get("if-none-match") || "";
+    if (ifNoneMatch.split(",").some((tag) => tag.trim().replace(/^W\//, "") === etag)) {
+      return new Response(null, { status: 304, headers: cacheHeaders });
+    }
+
+    // Eventual reads come from the nearest region and are much faster. A file
+    // uploaded moments ago may not have propagated yet, so a miss falls back
+    // to a strong read before answering 404.
+    const media =
+      (await getStore({ name: STORE_NAME, consistency: "eventual" })
+        .get(key, { type: "stream" })
+        .catch(() => null)) ||
+      (await store.get(key, { type: "stream" }));
     if (!media) return json({ error: "Media not found" }, 404);
 
     return new Response(media, {
       headers: {
-        "Cache-Control": "public, max-age=31536000, immutable",
+        ...cacheHeaders,
         "Content-Type": getContentType(key),
         // Media is user-uploaded, so scripting is blocked for formats that can
         // carry it (such as SVG) when the file is opened directly.
@@ -286,5 +310,8 @@ export default async (request: Request, _context: Context) => {
 };
 
 export const config: Config = {
+  // Only responses that opt in (media GETs, via Netlify-CDN-Cache-Control)
+  // are cached at the CDN; JSON and error responses send no-store.
+  cache: "manual",
   path: [ROUTE_PREFIX, `${ROUTE_PREFIX}/*`, INDEX_ROUTE_PREFIX, `${INDEX_ROUTE_PREFIX}/*`],
 };

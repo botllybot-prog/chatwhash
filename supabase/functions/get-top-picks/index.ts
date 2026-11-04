@@ -1,14 +1,24 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { cachedJson, memoize } from "../_shared/http-cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, if-none-match",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Expose-Headers": "ETag",
 };
 
 const SEARCH_WINDOW_DAYS = 30;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
+
+// Rankings are the same for every caller and only drift as searches accumulate,
+// so they are rebuilt at most once a minute per warm isolate, and phones and
+// shared caches may reuse a response for a few minutes.
+const RANKING_TTL_MS = 60_000;
+const RESPONSE_CACHE_CONTROL = "public, max-age=120, s-maxage=300, stale-while-revalidate=600";
+
+class QueryError extends Error {}
 
 type StationRow = {
   id: string;
@@ -65,6 +75,55 @@ function rank<T extends { is_boosted: boolean; boost_priority: number }>(
     .map((row) => ({ ...row, search_count: countById.get(idOf(row)) || 0 }));
 }
 
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+);
+
+const loadRankings = memoize(RANKING_TTL_MS, async (limitKey) => {
+  const limit = Number(limitKey);
+  const since = new Date(Date.now() - SEARCH_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  const [stationsResult, servicesResult, eventsResult] = await Promise.all([
+    supabase
+      .from("stations")
+      .select(
+        "id, name, address, detailed_address, category, image_url, latitude, longitude, working_hours_start, working_hours_end, scheduling_type, slot_duration_minutes, rating_average, rating_count, is_boosted, boost_priority",
+      )
+      .eq("is_active", true),
+    supabase
+      .from("services")
+      .select("id, name, price, station_id, is_boosted, boost_priority")
+      .eq("is_active", true),
+    supabase
+      .from("search_events")
+      .select("station_id, service_id")
+      .gte("created_at", since),
+  ]);
+
+  if (stationsResult.error) throw new QueryError(stationsResult.error.message);
+  if (servicesResult.error) throw new QueryError(servicesResult.error.message);
+  if (eventsResult.error) throw new QueryError(eventsResult.error.message);
+
+  const stationCounts = new Map<string, number>();
+  const serviceCounts = new Map<string, number>();
+  for (const event of eventsResult.data || []) {
+    if (event.station_id) stationCounts.set(event.station_id, (stationCounts.get(event.station_id) || 0) + 1);
+    if (event.service_id) serviceCounts.set(event.service_id, (serviceCounts.get(event.service_id) || 0) + 1);
+  }
+
+  const stations = rank(stationsResult.data as StationRow[], stationCounts, (s) => s.id, limit);
+
+  const stationNameById = new Map((stationsResult.data as StationRow[]).map((s) => [s.id, s.name]));
+  const servicesWithStation = (servicesResult.data as ServiceRow[]).map((service) => ({
+    ...service,
+    station_name: service.station_id ? stationNameById.get(service.station_id) || null : null,
+  }));
+  const services = rank(servicesWithStation, serviceCounts, (s) => s.id, limit);
+
+  return { stations, services };
+});
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "GET") return json({ success: false, error: "Method not allowed" }, 405);
@@ -76,51 +135,8 @@ Deno.serve(async (req) => {
       ? Math.min(Math.floor(requestedLimit), MAX_LIMIT)
       : DEFAULT_LIMIT;
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    const since = new Date(Date.now() - SEARCH_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-
-    const [stationsResult, servicesResult, eventsResult] = await Promise.all([
-      supabase
-        .from("stations")
-        .select(
-          "id, name, address, detailed_address, category, image_url, latitude, longitude, working_hours_start, working_hours_end, scheduling_type, slot_duration_minutes, rating_average, rating_count, is_boosted, boost_priority",
-        )
-        .eq("is_active", true),
-      supabase
-        .from("services")
-        .select("id, name, price, station_id, is_boosted, boost_priority")
-        .eq("is_active", true),
-      supabase
-        .from("search_events")
-        .select("station_id, service_id")
-        .gte("created_at", since),
-    ]);
-
-    if (stationsResult.error) return json({ success: false, error: stationsResult.error.message }, 500);
-    if (servicesResult.error) return json({ success: false, error: servicesResult.error.message }, 500);
-    if (eventsResult.error) return json({ success: false, error: eventsResult.error.message }, 500);
-
-    const stationCounts = new Map<string, number>();
-    const serviceCounts = new Map<string, number>();
-    for (const event of eventsResult.data || []) {
-      if (event.station_id) stationCounts.set(event.station_id, (stationCounts.get(event.station_id) || 0) + 1);
-      if (event.service_id) serviceCounts.set(event.service_id, (serviceCounts.get(event.service_id) || 0) + 1);
-    }
-
-    const stations = rank(stationsResult.data as StationRow[], stationCounts, (s) => s.id, limit);
-
-    const stationNameById = new Map((stationsResult.data as StationRow[]).map((s) => [s.id, s.name]));
-    const servicesWithStation = (servicesResult.data as ServiceRow[]).map((service) => ({
-      ...service,
-      station_name: service.station_id ? stationNameById.get(service.station_id) || null : null,
-    }));
-    const services = rank(servicesWithStation, serviceCounts, (s) => s.id, limit);
-
-    return json({ success: true, stations, services });
+    const data = await loadRankings(String(limit));
+    return await cachedJson(req, { success: true, ...data }, corsHeaders, RESPONSE_CACHE_CONTROL);
   } catch (error) {
     return json({ success: false, error: error instanceof Error ? error.message : "Internal error" }, 500);
   }

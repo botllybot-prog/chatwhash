@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Upload, MapPin, LocateFixed } from "lucide-react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { getStationCityOptions } from "@/lib/stationCities";
+import { compressImage } from "@/lib/compressImage";
 import { DEFAULT_STATION_CATEGORY, STATION_CATEGORY_OPTIONS, getStationCategoryLabel, sanitizeStationCategory, type StationCategory } from "@/lib/stationCategories";
 
 const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string;
@@ -127,12 +128,17 @@ const StationsTab = () => {
   useEffect(() => { load(); }, [load]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const picked = e.target.files?.[0];
+    if (!picked) return;
     setUploading(true);
+    const file = await compressImage(picked);
     const ext = file.name.split(".").pop();
     const fileName = `station-${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("station-images").upload(fileName, file, { upsert: true });
+    // Each upload gets a new file name, so the public URL can be cached for a
+    // year by phones and the storage CDN instead of the default hour.
+    const { error } = await supabase.storage
+      .from("station-images")
+      .upload(fileName, file, { upsert: true, cacheControl: "31536000", contentType: file.type || undefined });
     if (error) {
       toast({ title: "فشل رفع الصورة", variant: "destructive" });
       setUploading(false);
